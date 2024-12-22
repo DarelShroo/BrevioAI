@@ -1,0 +1,4 @@
+python-dotenv
+openai-whisper==20240930
+openai==1.57.2
+ffmpeg

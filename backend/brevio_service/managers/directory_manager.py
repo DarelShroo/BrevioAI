@@ -1,0 +1,103 @@
+import os
+import shutil
+from ..constants.directory_messages import DirectoryMessages
+from ..constants.summary_messages import SummaryMessages
+from ..models.config_model import ConfigModel as Config
+from ..models.response_model import FolderResponse
+class DirectoryManager:
+    def __init__(self, config: Config):
+        self._config = config
+
+    def createFolder(self, path=None):
+        path = path or self._config.dest_folder
+        try:
+            if os.path.exists(path):
+                return FolderResponse(
+                    False, 
+                    DirectoryMessages.ERROR_FOLDER_ALREADY_EXISTS.format(path),
+                )
+            else:
+                os.mkdir(path)
+                return FolderResponse(
+                    True, 
+                    DirectoryMessages.SUCCESS_FOLDER_CREATED.format(path)
+                )
+        except OSError as e:
+            return FolderResponse(
+                False, 
+                DirectoryMessages.ERROR_FAILED_TO_CREATE_FOLDER.format(path, e)
+            )
+
+    def deleteFolder(self):
+        folder = self._config.dest_folder
+        try:
+            if not os.path.exists(folder):
+                return FolderResponse(
+                    False, 
+                    DirectoryMessages.ERROR_FOLDER_NOT_FOUND.format(folder)
+                )
+            else:
+                shutil.rmtree(folder)
+                return FolderResponse(
+                    True, 
+                    DirectoryMessages.SUCCES_DELETION.format(folder)
+                )
+        except OSError as e:
+            return FolderResponse(
+                False, 
+                DirectoryMessages.ERROR_DELETION_FAILED.format(folder, e)
+            )
+
+    def deleteFile(self, file_path):
+        try:
+            if not os.path.exists(file_path):
+                return FolderResponse(
+                    False, 
+                    DirectoryMessages.ERROR_FILE_NOT_FOUND.format(file_path)
+                )
+            else:
+                os.remove(file_path)
+                return FolderResponse(
+                    True, 
+                    DirectoryMessages.SUCCESS_FILE_DELETED.format(file_path)
+                )
+        except PermissionError:
+            return FolderResponse(
+                False, 
+                DirectoryMessages.ERROR_PERMISSION_DENIED.format(file_path)
+            )
+        except OSError as e:
+            return FolderResponse(
+                False, 
+                DirectoryMessages.ERROR_DELETION_FAILED.format(file_path, e)
+            )
+
+    def validate_paths(self, transcription_path):
+        if not os.path.exists(transcription_path):
+            return FolderResponse(
+                False, 
+                SummaryMessages.ERROR_READING_TRANSCRIPTION.format(transcription_path)
+            )
+
+    def read_transcription(self, transcription_path):
+        try:
+            with open(transcription_path, "r") as file:
+                transcription = file.read()
+
+            if not transcription.strip():  # Check if transcription is empty
+                return FolderResponse(
+                    False, 
+                    SummaryMessages.ERROR_EMPTY_TRANSCRIPTION  # Assuming this is a string error message
+                )
+
+            return transcription
+
+        except Exception as e:
+            return FolderResponse(
+                False, 
+                f"Error reading transcription: {str(e)}"
+            )
+
+    def write_summary(self, summary, summary_path):
+        with open(summary_path, "w") as file:
+            file.write(summary)
