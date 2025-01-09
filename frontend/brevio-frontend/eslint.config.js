@@ -22,4 +22,11 @@ export default [
     files: ['src/**/__tests__/*'],
   },
   skipFormatting,
+  {
+    name: 'app/custom-rules',
+    files: ['**/*.{ts,tsx,vue}'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off', // Desactiva la regla globalmente
+    },
+  },
 ]

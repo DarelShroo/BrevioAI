@@ -1,7 +1,7 @@
 services:
   backend:
     build:
-      context: backend/
+      context: ./backend
       dockerfile: Dockerfile
     volumes:
       - ./backend:/app
@@ -9,10 +9,19 @@ services:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
-  frontend:
-    build: frontend/
-    dockerfile: Dockerfile
-    volumes:
-      - ./frontend:/app
-    ports:
-      - "8080:8080"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+#  frontend:
+#    build: 
+#      context: ./frontend
+#      dockerfile: Dockerfile
+#    volumes:
+#      - ./frontend:/app
+#    ports:
+#      - "8080:8080"

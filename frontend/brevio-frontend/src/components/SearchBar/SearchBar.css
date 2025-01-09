@@ -1,0 +1,21 @@
+.padding {
+  padding: 20px;
+}
+
+:where(.css-dev-only-do-not-override-1p3hq3p)[class^='ant-input'] [class^='ant-input'],
+:where(.css-dev-only-do-not-override-1p3hq3p)[class*=' ant-input'] [class^='ant-input'],
+:where(.css-dev-only-do-not-override-1p3hq3p)[class^='ant-input'] [class*=' ant-input'],
+:where(.css-dev-only-do-not-override-1p3hq3p)[class*=' ant-input'] [class*=' ant-input'] {
+  width: 100px !important;
+  background-color: red;
+}
+
+:where(.css-dev-only-do-not-override-1p3hq3p).ant-input-search .ant-input:hover,
+:where(.css-dev-only-do-not-override-1p3hq3p).ant-input-search .ant-input:focus {
+  border-color: #70b3b2;
+}
+
+:where(.css-dev-only-do-not-override-1p3hq3p).ant-menu-dark:not(.ant-menu-horizontal)
+  .ant-menu-submenu-title:active {
+  background-color: #70b3b2;
+}

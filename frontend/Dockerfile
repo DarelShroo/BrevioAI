@@ -2,7 +2,7 @@ FROM alpine:latest
 
 WORKDIR /app
 
-COPY brevio_service/ /app
+COPY brevio-frontend/ /app
 
 RUN apk update && \
     apk upgrade && \

@@ -2,3 +2,7 @@ python-dotenv
 openai-whisper==20240930
 openai==1.57.2
 ffmpeg
+fastapi[standard]
+python-docx
+beautifulsoup4
+markdown

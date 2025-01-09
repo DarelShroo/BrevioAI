@@ -3,7 +3,7 @@ import vue from '@vitejs/plugin-vue';
 import Components from 'unplugin-vue-components/vite';
 import { AntDesignVueResolver } from 'unplugin-vue-components/resolvers';
 import { fileURLToPath, URL } from 'url';
-//import vueDevTools from 'vite-plugin-vue-devtools';
+import vueDevTools from 'vite-plugin-vue-devtools';
 export default defineConfig({
   plugins: [
     vue(),
@@ -14,12 +14,13 @@ export default defineConfig({
         }),
       ],
     }),
-    //vueDevTools(),
+    vueDevTools(),
   ],
   
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
+    extensions: ['.ts', '.js', '.vue'],
   },
 });

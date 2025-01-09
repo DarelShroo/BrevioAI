@@ -4,9 +4,9 @@ export const useMenuBravioStore = defineStore('menuBravio', {
   state: () => ({
     openKeys: ['text-tool-box'] as string[],
     selectedKeys: {
-      textToolBox: 'text-tool-box-to-summary',
-      configuration: 'configuration-language', 
-    },
+      textToolBox: TextToolBoxKeys.textToolBoxToSummary,
+      configuration: ConfigurationKeys.configurationLanguage,
+    } as Record<MenuBravioKeys, string>,
   }), 
   actions: {
     toggleOpenKey(key: string) {
@@ -16,7 +16,7 @@ export const useMenuBravioStore = defineStore('menuBravio', {
         this.openKeys.push(key);
       }
     },
-    toggleSelectKey(key: string, category: 'textToolBox' | 'configuration') {
+    toggleSelectKey(key: string, category: MenuBravioKeys.textToolBox| MenuBravioKeys.configuration) {
       this.selectedKeys[category] = key;
     },
   },
@@ -28,3 +28,24 @@ export const useMenuBravioStore = defineStore('menuBravio', {
     getOpenKeys: (state) => state.openKeys,
   },
 });
+
+export enum MenuBravioKeys {
+  textToolBox = 'textToolBox',
+  configuration = 'configuration',
+}
+
+export enum TextToolBoxKeys { 
+  textToolBoxToSummary = 'text-tool-box-to-summary',
+  textToolBoxToTranscription = 'text-tool-box-to-speech',
+  textToolBoxToDocFile = 'text-tool-box-to-summary-doc-file',
+}
+ export enum ConfigurationKeys {
+  configurationLanguage = 'configuration-language',
+  configurationModel = 'configuration-gpt-model',
+ }
+
+ export const selectedKeysNames = {
+  [TextToolBoxKeys.textToolBoxToSummary]: 'Audio Summary',
+  [TextToolBoxKeys.textToolBoxToTranscription]: 'Audio Transcription',
+  [TextToolBoxKeys.textToolBoxToDocFile]: 'To Doc File',
+ } as Record<string, string>;

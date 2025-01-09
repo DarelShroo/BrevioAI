@@ -1,8 +1,6 @@
-// src/stores/useStoreDeviceType.ts
-import { defineStore } from 'pinia';
 import { ref } from 'vue';
 
-export const useStoreDeviceType = defineStore('deviceType', () => {
+export const useStoreDeviceType = () => {
   const isMobile = ref(false);
 
   const updateDeviceType = () => {
@@ -15,4 +13,4 @@ export const useStoreDeviceType = defineStore('deviceType', () => {
   updateDeviceType();
 
   return { isMobile, updateDeviceType };
-});
+};
