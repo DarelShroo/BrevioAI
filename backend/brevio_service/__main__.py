@@ -16,7 +16,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 def main(argv):
     try:
-        url = argv[0] if len(argv) > 0 else "https://www.youtube.com/watch?v=WghoDJG1fFw&list=PLqRCtm0kbeHCyy97BXcArtR0UAQKGmkDk"
+        url = argv[0] if len(argv) > 0 else ""
         language_str = argv[1] if len(argv) > 1 else LanguageType.SPANISH.name
 
         content = argv[2] if len(argv) > 2 else Constants.CONTENT

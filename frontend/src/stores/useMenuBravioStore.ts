@@ -19,6 +19,7 @@ export const useMenuBravioStore = defineStore('menuBravio', {
     toggleSelectKey(key: string, category: MenuBravioKeys.textToolBox| MenuBravioKeys.configuration) {
       this.selectedKeys[category] = key;
     },
+
   },
   getters: {
     combinedSelectedKeys: (state) => [

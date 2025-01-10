@@ -71,8 +71,8 @@ class Generate:
                 summary_response=summaries_response,
                 error_message=str(e)
             )
-        finally:
-            self.directory_manager.deleteFolder()
+        #finally:
+            #self.directory_manager.deleteFolder()
 
     def create_folder(self):
         if not path.exists(self._config.dest_folder):

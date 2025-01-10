@@ -1,5 +1,5 @@
 import './assets/main.css'
-
+import {api} from './utils/api'
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 
@@ -13,5 +13,6 @@ const app = createApp(App)
 app.use(createPinia())
 app.use(router)
 app.use(Antd)
+app.use(api)
 
 app.mount('#app')

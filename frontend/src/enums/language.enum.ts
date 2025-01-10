@@ -1,4 +1,4 @@
-enum LanguageType {
+export enum LanguageType {
     AFRIKAANS = "af",
     ALBANIAN = "sq",
     AMHARIC = "am",

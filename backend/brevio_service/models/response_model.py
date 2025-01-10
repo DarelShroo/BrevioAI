@@ -89,3 +89,16 @@ class GenerateResponse:
     def __str__(self):
         return json.dumps(self.to_dict(), indent=4)
 
+
+from ..enums.language import LanguageType
+from typing import List, Dict
+class LanguageResponse:
+    def __str__(self):
+        response: Dict[str, str] = {language.name: language.value for language in LanguageType}
+        return json.dumps(response,indent=4)
+    
+from ..enums.model import ModelType
+class ModelResponse:
+    def __str__(self):
+        response: Dict[str, str] = {model.name: model.value for model in ModelType}
+        return json.dumps(response,indent=4)

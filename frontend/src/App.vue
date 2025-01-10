@@ -35,6 +35,7 @@ import HomeView from './views/HomeView.vue'
 .container-bravio ul {
   background-color: #272429 !important;
   font-size: 1.15rem;
+  min-width: 270px;
 }
 
 .container-bravio ul ul li {

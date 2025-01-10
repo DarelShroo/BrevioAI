@@ -1,0 +1,97 @@
+.a-layout-content {
+  margin-top: 64px;
+}
+
+.content-wrapper {
+  min-height: calc(100vh - 128px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;
+  background: linear-gradient(135deg, #252429, #8cf0f5, #1f1a1c, #c1fbf8);
+  background-size: 400% 100%;
+  animation: gradientAnimation 50s ease infinite;
+  margin: 0;
+}
+
+.container-bravio {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  min-height: 20rem;
+  width: 50rem;
+  padding: 5px;
+  background-size: cover;
+  background-repeat: no-repeat;
+  position: relative;
+  border-radius: 10px;
+}
+
+.container-config {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.mt-20 {
+  margin-top: 20px;
+}
+
+.config-element-selected {
+  color: white;
+  font-weight: 600;
+  font-size: 16px;
+  display: flex;
+  align-content: flex-start;
+  align-items: start;
+  width: 100%;
+}
+
+.config-element-selected div {
+  width: 60%;
+  padding: 5px 20px;
+  background-color: #1f1a1c;
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+}
+
+.search-bar,
+.config-box {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.config-box {
+  align-items: center;
+  padding: 0 5px;
+}
+
+@keyframes gradientAnimation {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@media (max-width: 768px) {
+  .container-bravio {
+    width: 100%;
+  }
+
+  .container-config {
+    padding: 0;
+  }
+}
+
+
+@media (max-width: 560px) {
+  .config-element-selected div {
+    width:80% !important;
+  }
+}

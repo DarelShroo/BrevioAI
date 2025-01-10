@@ -2,10 +2,10 @@
   <a-space direction="vertical" style="width: 100%">
     <div>
       <a-input-search
-        v-model:value="value"
         placeholder="Your url here"
         enter-button
         @search="onSearch"
+        v-model:value="searchValue"
       />
     </div>
   </a-space>

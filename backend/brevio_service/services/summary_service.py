@@ -103,8 +103,6 @@ class Summary:
             docx_path = self.summary_path.replace('.md', '.docx')
             self.markdown_to_docx(self.summary_path, docx_path)
 
-            print(summary)
-
             return SummaryResponse(
                 success=True, 
                 summary=str(summary),

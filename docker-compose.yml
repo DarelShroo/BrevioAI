@@ -16,12 +16,11 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-
-#  frontend:
-#    build: 
-#      context: ./frontend
-#      dockerfile: Dockerfile
-#    volumes:
-#      - ./frontend:/app
-#    ports:
-#      - "8080:8080"
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "8080:8080"
