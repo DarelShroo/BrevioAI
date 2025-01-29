@@ -1,39 +1,20 @@
-from datetime import datetime, timedelta, timezone
-from fastapi import HTTPException
-from fastapi.security import OAuth2PasswordBearer
-import jwt
+from datetime import timedelta
 from passlib.context import CryptContext
 from dotenv import load_dotenv
 from os import getenv
+
+from pydantic import EmailStr
 from repositories.user_repository import UserRepository
 from ..utils.email_utils import isEmail
 from ..models.user.user import User
 from ..models.user.user_login import UserLogin
+from ..models.user.user_register import UserRegister
+
+from .token_service import TokenService
+
 class AuthService:
     def __init(self):
         self.pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        self.oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-        self.algorithm = getenv("ALGORITHM")
-        self.secret_key = getenv("SECRET_KEY")
-
-    def create_access_token(self, data: dict, expires_delta: timedelta | None = None):
-        to_encode = data.copy()
-        if expires_delta:
-            expire = datetime.now(timezone.utc) + expires_delta
-        else:
-            expire = datetime.now(timezone.utc) + timedelta(minutes=15)
-        to_encode.update({"exp": expire})
-        encoded_jwt = jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
-        return encoded_jwt
-    
-    def validate_access_token(self, token: str) -> dict:
-        try:
-            payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
-            return payload
-        except jwt.ExpiredSignatureError:
-            raise HTTPException(status_code=401, detail="Token expirado")
-        except jwt.InvalidTokenError:
-            raise HTTPException(status_code=401, detail="Token inválido")
     
     def login(self, identity: str, password):
         user_login: UserLogin = UserLogin(identity, password)
@@ -49,9 +30,33 @@ class AuthService:
         if not self.pwd_context.verify(user_login.password, user_login_hashed_password):
             return 
         
-        #refresh token
+        token = TokenService().create_access_token({
+            "username": user.username,
+            "email": user.email,
+        }, timedelta(hours=1))
 
-        return "token"
+        return token
+    
+    def register(self, username: str, email: EmailStr, password):
+        user_register: UserRegister = UserRegister(email, username, password)
+        existUserEmail: User = UserRepository().get_user_by_email(user_register.email)
+        if(existUserEmail):
+            return "Ya existe este email"
+        existUserName: User = UserRepository().get_user_by_username(user_register.username)
+        
+        if (existUserName):
+            return "Ya existe este nombre de usuario"
+            
+        user_register_hashed_password = self.pwd_context.encrypt(user_login.password)
+        
+        #Guardo el usuario en la BD
+        
+        token = TokenService().create_access_token({
+            "username": user.username,
+            "email": user.email,
+        }, timedelta(hours=1))
+
+        return token
 
 
 

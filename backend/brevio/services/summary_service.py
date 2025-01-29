@@ -26,6 +26,9 @@ class Summary:
         self.client = OpenAI(api_key=self.api_key)
         self.model = self.config.model.value
 
+    def chunk_text(self, text, chunk_size):
+        return [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
+
     def generate_summary_chunk(self, total_tokens_used, chunk):
         if total_tokens_used + int(self.max_tokens) > int(self.tokens_per_minute):
             print(SummaryMessages.WAITING)
@@ -44,9 +47,7 @@ class Summary:
 
         summary = response.choices[0].message.content.strip()
         total_tokens_used += int(self.max_tokens)
-        print(summary)
         return summary, total_tokens_used
-
     def markdown_to_docx(self, md_file_path, docx_file_path):
         try:
             with open(md_file_path, 'r', encoding='utf-8') as md_file:
@@ -86,11 +87,7 @@ class Summary:
             directory_manager.validate_paths(self.transcription_path)
             
             transcription = directory_manager.read_transcription(self.transcription_path)
-
-            chunks = [
-                transcription[i:i + int(self.max_tokens)] 
-                for i in range(0, len(transcription), int(self.max_tokens))
-            ]
+            chunks = self.chunk_text(transcription, int(self.max_tokens))
 
             summary = ""
             total_tokens_used = 0
