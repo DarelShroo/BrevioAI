@@ -1,22 +1,17 @@
-FROM alpine:latest
+FROM node:18-alpine
 
 WORKDIR /app
-
-COPY package*.json ./
 
 COPY . /app
 
 RUN apk update && \
-    apk upgrade && \
-    apk add --no-cache nodejs npm
+    apk upgrade 
 
-RUN npm install && \
-    npm run build && \
-    npm install -g http-server \
-    npm run build
+RUN npm install
+RUN npm run build
 
+RUN npm install -g http-server 
 
 EXPOSE 8080
 
-CMD [ "http-server", "dist" ]
-#CMD ["tail", "-f", "/dev/null"]
+CMD [ "http-server", "dist", "-p", "8080"]

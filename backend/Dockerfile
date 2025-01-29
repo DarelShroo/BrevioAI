@@ -11,10 +11,12 @@ RUN apt-get update && \
     libglib2.0-0 \
     yt-dlp
 
-RUN pip3 install torch --index-url https://download.pytorch.org/whl/cu118 --break-system-packages
-RUN pip3 install --no-cache-dir -r brevio_service/requirements.txt --break-system-packages
+
+RUN source .venv/bin/activate   
+
+RUN pip3 install torch --index-url https://download.pytorch.org/whl/cu118
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 EXPOSE 8000
 
-#CMD ["fastapi", "dev", "__main__.py"]
 CMD ["fastapi", "run", "__main__.py", "--port", "8000"]

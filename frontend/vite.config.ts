@@ -10,13 +10,13 @@ export default defineConfig({
     Components({
       resolvers: [
         AntDesignVueResolver({
-          importStyle: false, 
+          importStyle: false,
         }),
       ],
     }),
     vueDevTools(),
   ],
-  
+
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

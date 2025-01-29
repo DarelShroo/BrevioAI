@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./backend:/app
+      - db_data:/db
     ports:
       - "8000:8000"
     environment:
@@ -16,11 +17,37 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    networks:
+      - app_network
+
   frontend:
-    build: 
+    build:
       context: ./frontend
       dockerfile: Dockerfile
     volumes:
       - ./frontend:/app
     ports:
       - "8080:8080"
+    networks:
+      - app_network
+
+  database:
+    build:
+      context: ./database
+      dockerfile: Dockerfile
+    volumes:
+      - db_data:/data/db 
+    ports:
+      - "27017:27017"
+    networks:
+      - app_network
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+
+volumes:
+  db_data:
+
+networks:
+  app_network:
+    driver: bridge

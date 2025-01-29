@@ -16,17 +16,10 @@ declare module 'vue' {
     ALayoutHeader: typeof import('ant-design-vue/es')['LayoutHeader']
     AMenu: typeof import('ant-design-vue/es')['Menu']
     AMenuItem: typeof import('ant-design-vue/es')['MenuItem']
-    AProgress: typeof import('ant-design-vue/es')['Progress']
     ASelect: typeof import('ant-design-vue/es')['Select']
     ASpace: typeof import('ant-design-vue/es')['Space']
     ASpin: typeof import('ant-design-vue/es')['Spin']
-    ConfigBox: typeof import('./src/components/ConfigBox/ConfigBox.vue')['default']
-    ContentHome: typeof import('./src/components/ContentHome/ContentHome.vue')['default']
-    FooterBar: typeof import('./src/components/FooterBar/FooterBar.vue')['default']
-    MenuBar: typeof import('./src/components/MenuBar/MenuBar.vue')['default']
-    NavBar: typeof import('./src/components/NavBar/NavBar.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
-    SearchBar: typeof import('./src/components/SearchBar/SearchBar.vue')['default']
   }
 }

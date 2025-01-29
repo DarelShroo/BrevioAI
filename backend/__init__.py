@@ -1,5 +1,8 @@
-from .brevio_service import __main__ as BrevioMain
-
+from .brevio import __main__ as Brevio
+from .brevio import services, models, managers
 __all__ = [
-    "BrevioMain"
+    "Brevio",
+    "services",
+    "models",
+    "managers",
 ]

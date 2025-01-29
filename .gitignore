@@ -42,4 +42,26 @@ __pypackages__/
 *.tar.gz
 *.zip
 
-#
+# Archivos de video
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.flv
+*.webm
+*.mpg
+*.mpeg
+*.wmv
+
+# Archivos de audio
+*.mp3
+*.wav
+*.ogg
+*.flac
+*.aac
+*.m4a
+
+# Archivos de entorno virtual de Python (venv)
+venv/
+ENV/
+env/
