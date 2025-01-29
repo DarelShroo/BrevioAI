@@ -11,7 +11,7 @@ RUN apt-get update && \
     libglib2.0-0 \
     yt-dlp
 
-
+RUN python3 -m venv .venv
 RUN source .venv/bin/activate   
 
 RUN pip3 install torch --index-url https://download.pytorch.org/whl/cu118
