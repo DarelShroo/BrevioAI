@@ -28,7 +28,7 @@ class YTService:
         except subprocess.CalledProcessError as e:
             return DownloadMessages.ERROR_DOWNLOADING.format(e)
 
-    def count_videos_in_yt_playlist(url: str):
+    def count_media_in_yt_playlist(url: str):
         command = ["yt-dlp", "--get-id", "--flat-playlist", url]
         try:
             result = subprocess.run(
@@ -39,7 +39,7 @@ class YTService:
             print("Error al ejecutar yt-dlp:", e)
             return 0
 
-    def get_videos_duration(url: str):
+    def get_media_duration(url: str):
         command = ["yt-dlp", "--get-duration", "--skip-download", url]
         try:
             result = subprocess.run(

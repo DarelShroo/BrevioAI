@@ -9,7 +9,7 @@ from ..models.user.register_user import RegisterUser
 from ..utils.db import DB
 from .token_service import TokenService
 from ..repositories.user_repository import UserRepository
-
+from ..services.email_service import EmailService
 
 class AuthService:
     def __init__(self):
@@ -55,8 +55,10 @@ class AuthService:
         user_db = UserRepository().create_user(user_register)
 
         token = TokenService().create_access_token({
-            "id": user_db.inserted_id,
+            "id": str(user_db.inserted_id),
         }, timedelta(hours=1))
+        
+        EmailService("cls18drl@gmail.com", "usuario registrado en brevio").send_email()
 
         return {"username": user_register.username, "token": token}
 

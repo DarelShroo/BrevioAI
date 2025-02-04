@@ -25,5 +25,6 @@ class AuthRoutes:
                 return AuthService().register(user_register)
             except Exception as e:
                 raise e
+            
         
 auth_router = AuthRoutes().router
