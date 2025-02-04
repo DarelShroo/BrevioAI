@@ -93,12 +93,20 @@ class GenerateResponse:
 from ..enums.language import LanguageType
 from typing import List, Dict
 class LanguageResponse:
+    def __init__(self):
+        self.response: Dict[str, str] = {language.name: language.value for language in LanguageType}
+    def get_languages(self):
+        return self.response
     def __str__(self):
-        response: Dict[str, str] = {language.name: language.value for language in LanguageType}
-        return json.dumps(response,indent=4)
+        return json.dumps(self.response,indent=4)
     
 from ..enums.model import ModelType
 class ModelResponse:
+    def __init__(self):
+        self.response: Dict[str, str] = {model.name: model.value for model in ModelType}
+
+    def get_models(self):
+        return self.response
+
     def __str__(self):
-        response: Dict[str, str] = {model.name: model.value for model in ModelType}
-        return json.dumps(response,indent=4)
+        return json.dumps(self.response,indent=4)

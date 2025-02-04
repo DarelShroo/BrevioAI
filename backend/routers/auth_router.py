@@ -18,13 +18,11 @@ class AuthRoutes:
             except Exception as e:
                 raise e
 
-
         @self.router.post("/register")
-        async def register(user_register: RegisterUser):
+        async def register(register_user: RegisterUser):
             try: 
-                return AuthService().register(user_register)
+                return AuthService().register(register_user)
             except Exception as e:
-                raise e
-            
+                raise e           
         
 auth_router = AuthRoutes().router

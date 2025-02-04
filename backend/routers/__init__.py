@@ -1,4 +1,4 @@
-from .auth_routes import AuthRoutes
+from .auth_router import AuthRoutes
 __all__ = [
     "AuthRoutes",
 ]

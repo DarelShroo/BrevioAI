@@ -1,13 +1,16 @@
 from fastapi import FastAPI
 
-from .models.brevio import BrevioYT, LoginUser, UrlYT
+from .models.brevio import BrevioYT
 from .brevio import __main__ as Brevio
 from .brevio.models.response_model import LanguageResponse
 from .brevio.models.response_model import ModelResponse
 import sys
 import os
 from fastapi.middleware.cors import CORSMiddleware
-from .routers.auth_routes import auth_router
+from .routers.auth_router import auth_router
+from .routers.brevio_router import brevio_router
+from .routers.user_router import user_router
+
 from dotenv import load_dotenv
 app = FastAPI()
 
@@ -22,6 +25,8 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(brevio_router)
+app.include_router(user_router)
 
 sys.path.append(os.path.abspath(os.path.join(
     os.path.dirname(__file__), 'brevio')))
@@ -29,19 +34,5 @@ sys.path.append(os.path.abspath(os.path.join(
 @app.post("/brevio")
 async def brevio(request: BrevioYT):
     return Brevio.main([request.url])
-    
-@app.get("/brevio/languages")
-async def languages():
-    return LanguageResponse().__str__()
 
-@app.post("/brevio/count-yt-videos")
-async def count_videos_in_yt_playlist(request: UrlYT):
-    return Brevio.YTService.count_videos_in_yt_playlist(request.url)
 
-@app.post("/brevio/count-time-yt-video")
-async def get_video_duration(request: UrlYT):
-    return { Brevio.YTService.get_videos_duration(request.url)}
-
-@app.get("/brevio/models")
-async def models():
-    return ModelResponse().__str__()
