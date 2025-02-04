@@ -5,33 +5,29 @@ class Constants:
     ALL_SUMMARIES = "all_summaries.md"
     DESTINATION_FOLDER = "audios"
     CONTENT = """
-            Genera un resumen muy breve y preciso en formato Markdown del siguiente texto. El resumen debe cumplir con las siguientes directrices:
+Genera un resumen detallado en formato Markdown del siguiente texto, con un enfoque técnico preciso, siguiendo estas directrices:
 
-            - **Limitarse únicamente a las ideas esenciales.** No incluir detalles secundarios, explicaciones largas ni redundancias.
-            - **Excluir completamente contenido promocional**, como:
-              - Enlaces a sitios web o menciones de productos.
-              - Llamadas a la acción, recomendaciones o recursos adicionales.
-              - Comentarios sobre contenido educativo o instrucciones para usuarios.
-            - Utilizar un tono técnico, profesional y adecuado para una audiencia académica.
-            - Emplear títulos jerárquicos (#, ##, ###) y listas con viñetas para organizar la información de forma clara.
-            - **Resaltar términos clave** en **negrita** o *cursiva* solo si es estrictamente necesario.
-            - Evitar incluir ejemplos de código salvo en casos esenciales para ilustrar un concepto técnico.
-            - **El resumen debe ser lo más breve posible**, omitiendo cualquier detalle innecesario.
-            - Organizar el contenido con un formato visual limpio, sin caracteres de salto de línea `\n` en el texto.
+    Mantén un balance entre concisión y profundidad, explicando los conceptos técnicos esenciales sin extenderse innecesariamente.
+    Excluye contenido promocional, enlaces, recomendaciones o recursos externos.
+    Utiliza una estructura clara con títulos jerárquicos (#, ##, ###) y listas.
+    Explica términos técnicos cuando sea necesario sin caer en redundancias.
+    Incluye ejemplos de código solo si son esenciales.
+    Evita explicaciones innecesarias.
 
-            **Texto original:**
-            [Texto del contenido a resumir.]
+Formato:
 
-            **Texto transformado:**
+## Título Principal
 
-            ## Título Principal
+Explicación técnica clara y precisa del tema.
 
-            [Un resumen conciso de las ideas principales, sin detalles superfluos.]
+### Características clave
 
-            ### Características principales
+    **Concepto 1**: Explicación técnica breve.
+    **Concepto 2**: Profundización técnica si es necesario.
 
-            - **Punto clave 1**
-            - **Punto clave 2**
-            - [Agregar otros puntos clave, si los hay.]
+### Detalles técnicos
 
-            [El contenido debe ser claro, directo y contener solo lo fundamental, presentado en formato Markdown correctamente estructurado.]"""
+    **Aspecto relevante**: Explicación técnica sin redundancias.
+    **Ejemplo de código (si es necesario)**:
+    ```js // Código relevante ```
+"""

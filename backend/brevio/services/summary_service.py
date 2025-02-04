@@ -93,7 +93,8 @@ class Summary:
             total_tokens_used = 0
             for chunk in chunks:
                 chunk_summary, total_tokens_used = self.generate_summary_chunk(total_tokens_used, chunk)
-                summary += chunk_summary
+                summary += chunk_summary if chunk_summary[0:2] != '\n' else chunk_summary[2:]
+                summary += "\n"
 
             directory_manager.write_summary(summary, self.summary_path)
 

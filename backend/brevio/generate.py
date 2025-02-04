@@ -24,7 +24,6 @@ class Generate:
 
         try:
             folder_response = self.create_folder()
-
             download_response = self.download()
 
             if path.exists(self._config.dest_folder):

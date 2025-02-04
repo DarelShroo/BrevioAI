@@ -1,13 +1,11 @@
 from datetime import datetime, timedelta, timezone
 from os import getenv
 from fastapi.security import OAuth2PasswordBearer
-from passlib.context import CryptContext
 from fastapi import HTTPException
 import jwt
 
 class TokenService:
     def __init__(self):
-        self.pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
         self.oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
         self.algorithm = getenv("ALGORITHM")
         self.secret_key = getenv("SECRET_KEY")

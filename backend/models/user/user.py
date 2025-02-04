@@ -1,9 +1,13 @@
-from pydantic import EmailStr
+from pydantic import BaseModel, Field, EmailStr
+from typing import Optional
+from bson import ObjectId
 
-class User:
+class User(BaseModel):
+    id: Optional[str] = Field(default=None, alias="_id")  # _id will be treated as id
     username: str
     email: EmailStr
-    hashed_password: str
-    token: str
+    password: str
 
-
+    class Config:
+        populate_by_name = True
+        json_encoders = {ObjectId: str}  # Automatically convert ObjectId to string

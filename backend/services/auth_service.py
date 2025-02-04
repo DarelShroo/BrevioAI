@@ -1,64 +1,64 @@
 from datetime import timedelta
+from passlib.hash import bcrypt
 from passlib.context import CryptContext
-from dotenv import load_dotenv
-from os import getenv
-
-from pydantic import EmailStr
-from repositories.user_repository import UserRepository
+from ..repositories.user_repository import UserRepository
 from ..utils.email_utils import isEmail
 from ..models.user.user import User
-from ..models.user.user_login import UserLogin
-from ..models.user.user_register import UserRegister
-
+from ..models.user.login_user import LoginUser
+from ..models.user.register_user import RegisterUser
+from ..utils.db import DB
 from .token_service import TokenService
+from ..repositories.user_repository import UserRepository
+
 
 class AuthService:
-    def __init(self):
+    def __init__(self):
+        self.users_db = DB().database()['users']
         self.pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    
-    def login(self, identity: str, password):
-        user_login: UserLogin = UserLogin(identity, password)
-        user: User = None
+
+    def login(self, user_login: LoginUser):
+        user_db: dict = None
         if isEmail(user_login.identity):
-            user = UserRepository.get_user_by_email(user_login.identity)
+            user_db = UserRepository().get_user_by_email(user_login.identity)
+        else:
+            user_db = UserRepository().get_user_by_username(user_login.identity)
 
-        if(not user):
-            return 
-            
-        user_login_hashed_password = self.pwd_context.encrypt(user_login.password)
+        if (not user_db):
+            return "NO existe"
 
-        if not self.pwd_context.verify(user_login.password, user_login_hashed_password):
-            return 
-        
+        if not self.pwd_context.verify(user_login.password, user_db["password"]):
+            return "password inválido"
+
+        if "_id" in user_db:
+            user_db["_id"] = str(user_db["_id"])
+
+        user: User = User(**user_db)
+
         token = TokenService().create_access_token({
-            "username": user.username,
-            "email": user.email,
+            "id": str(user.id),
         }, timedelta(hours=1))
 
-        return token
-    
-    def register(self, username: str, email: EmailStr, password):
-        user_register: UserRegister = UserRegister(email, username, password)
+        return {"username": user.username, "token": token}
+
+    def register(self, user_register: RegisterUser):
         existUserEmail: User = UserRepository().get_user_by_email(user_register.email)
-        if(existUserEmail):
+        if (existUserEmail):
             return "Ya existe este email"
+
         existUserName: User = UserRepository().get_user_by_username(user_register.username)
-        
         if (existUserName):
             return "Ya existe este nombre de usuario"
-            
-        user_register_hashed_password = self.pwd_context.encrypt(user_login.password)
-        
-        #Guardo el usuario en la BD
-        
+
+        user_register.password = self.hash_password(
+            user_register.password)
+
+        user_db = UserRepository().create_user(user_register)
+
         token = TokenService().create_access_token({
-            "username": user.username,
-            "email": user.email,
+            "id": user_db.inserted_id,
         }, timedelta(hours=1))
 
-        return token
+        return {"username": user_register.username, "token": token}
 
-
-
-    
-    
+    def hash_password(self, password: str):
+        return self.pwd_context.hash(password)

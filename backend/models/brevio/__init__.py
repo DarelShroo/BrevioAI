@@ -1,11 +1,11 @@
 from .brevio_yt import BrevioYT
-from ..user.user_login import UserLogin
+from ..user.login_user import LoginUser
 from .url_yt import UrlYT
-from ..user.user_register  import UserRegister
+from ..user.register_user  import RegisterUser
 
 __all__ = [
     "BrevioYT",
-    "UserLogin",
+    "LoginUser",
     "UrlYT",
-    "UserRegister"
+    "RegisterUser"
 ]
