@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-
+from fastapi.security import APIKeyHeader
 from .models.brevio import BrevioYT
 from .brevio import __main__ as Brevio
 from .brevio.models.response_model import LanguageResponse
@@ -28,11 +28,9 @@ app.include_router(auth_router)
 app.include_router(brevio_router)
 app.include_router(user_router)
 
-sys.path.append(os.path.abspath(os.path.join(
-    os.path.dirname(__file__), 'brevio')))
+# sys.path.append(os.path.abspath(os.path.join(
+#    os.path.dirname(__file__), 'brevio')))
 
-@app.post("/brevio")
-async def brevio(request: BrevioYT):
-    return Brevio.main([request.url])
-
-
+# @app.post("/brevio")
+# async def brevio(request: BrevioYT):
+#    return Brevio.main([request.url])

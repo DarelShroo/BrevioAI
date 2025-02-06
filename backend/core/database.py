@@ -3,19 +3,19 @@ from pymongo.database import Database
 from pymongo.errors import ConnectionFailure, OperationFailure
 import os
 from pymongo.read_preferences import ReadPreference
+from ..models.errors.connection_error import ConnectionError
+from ..models.errors.authentication_error import AuthenticationError
 
 _PRIMARY_PREFERRED = ReadPreference.PRIMARY_PREFERRED
 
 
 class DB:
     def __init__(self, uri: str = None):
-        self.uri = uri or os.getenv(
-            "MONGODB_URI", "mongodb://appUser:appPassword@localhost:27017/brevio?authSource=brevio")
         self.client = MongoClient(
-            self.uri,
-            serverSelectionTimeoutMS=5000,
-            connectTimeoutMS=30000,
-            socketTimeoutMS=30000
+            os.getenv("MONGODB_URI"),
+            serverSelectionTimeoutMS=os.getenv("SERVER_SELECTION_TIMEOUT_MS"),
+            connectTimeoutMS=os.getenv("CONNECT_TIMEOUT_MS"),
+            socketTimeoutMS=os.getenv("SOCKET_TIMEOUT_MS")
         )
         self._verify_connection()
 
@@ -42,13 +42,3 @@ class DB:
         except OperationFailure as e:
             raise PermissionError(f"Sin permisos para acceder a la base de datos {
                                   database}") from None
-
-# Clases personalizadas para manejo de errores
-
-
-class ConnectionError(Exception):
-    pass
-
-
-class AuthenticationError(Exception):
-    pass

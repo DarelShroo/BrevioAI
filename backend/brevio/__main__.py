@@ -9,7 +9,6 @@ from .services.yt_service import YTService
 import sys
 import os
 
-# Añadir el directorio de 'brevio_service' al sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 
@@ -24,14 +23,17 @@ def main(argv):
         try:
             language = LanguageType[language_str.upper()]
         except KeyError:
-            raise ValueError(f"{TypeMessages.ERROR_INVALID_INPUT} ({TypeMessages.AVAILABLE_LANGUAGES} {[e.name for e in LanguageType]}")
+            raise ValueError(f"{TypeMessages.ERROR_INVALID_INPUT} ({
+                             TypeMessages.AVAILABLE_LANGUAGES} {[e.name for e in LanguageType]}")
 
         try:
             model = ModelType[model_str.upper()]
         except KeyError:
-            raise ValueError(f"{TypeMessages.ERROR_INVALID_INPUT} ({TypeMessages.AVAILABLE_MODELS} {[e.name for e in ModelType]})")
+            raise ValueError(f"{TypeMessages.ERROR_INVALID_INPUT} ({
+                             TypeMessages.AVAILABLE_MODELS} {[e.name for e in ModelType]})")
 
-        config = Config(url=url, content=content, model=model, language=language)
+        config = Config(url=url, content=content,
+                        model=model, language=language)
         generate = Generate(config)
 
         response_dict = generate.organize_audio_files_into_folders()
@@ -44,8 +46,10 @@ def main(argv):
         print(f"{TypeMessages.ERROR_UNEXPECTED}: {e}")
         sys.exit(1)
 
+
 def count_yt_videos(url: str):
     return YTService.count_videos_in_yt_playlist(url)
+
 
 if __name__ == "__main__":
     main(sys.argv[1:])
