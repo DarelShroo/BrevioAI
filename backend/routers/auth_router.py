@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends
+
+from backend.models.user.recovery_password_otp import RecoveryPasswordOtp
 from ..models.user.login_user import LoginUser
 from ..models.user.register_user import RegisterUser
 from ..services.auth_service import AuthService
 from ..dependencies.auth_service_dependency import get_auth_service
-
+from ..models.user.user_identity import UserIdentity
 class AuthRoutes:
     def __init__(self):
         self.router = APIRouter(
@@ -26,6 +28,20 @@ class AuthRoutes:
             auth_service: AuthService = Depends(get_auth_service)
         ):
             return await auth_service.register(register_user)
+        
+        @self.router.post('/password-recovery-handshake')
+        async def password_send_otp_recovery(
+            identity: UserIdentity,
+            auth_service: AuthService = Depends(get_auth_service)
+        ):
+            return await auth_service.password_recovery_handshake(identity)
 
+        @self.router.post('/password-recovery-verify')
+        async def password_send_otp_recovery(
+            recovery_password_otp: RecoveryPasswordOtp,
+            auth_service: AuthService = Depends(get_auth_service)
+        ):
+            
+            return await auth_service.change_password(recovery_password_otp)
 
 auth_router = AuthRoutes().router

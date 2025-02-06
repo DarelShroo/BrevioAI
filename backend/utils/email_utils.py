@@ -1,8 +1,11 @@
-from pydantic import EmailStr, ValidationError
+from pydantic import BaseModel, EmailStr, ValidationError
+
+class EmailValidator(BaseModel):
+    email: EmailStr
 
 def isEmail(email: str) -> bool:
     try:
-        isValidEmail: EmailStr = email
+        EmailValidator(email=email)
         return True
     except ValidationError:
         return False

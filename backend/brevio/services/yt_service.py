@@ -51,16 +51,20 @@ class YTService:
             if result.returncode != 0:
                 print("El comando falló.")
                 return None
+
             duration = result.stdout.strip()
-            total_time = timedelta()
-            durations = duration.split("\n")
+            parts = list(map(int, duration.split(":")))
 
-            parsed_durations = map(parse_duration, durations)
-            total_time = sum(parsed_durations, timedelta())
+            if len(parts) == 3:
+                hours, minutes, seconds = parts
+            elif len(parts) == 2:
+                hours = 0
+                minutes, seconds = parts
+            else:
+                print("Formato de duración inesperado:", duration)
+                return None
 
-            return float(f"{total_time.total_seconds() / 3600:.2f}")
+            return hours * 60 + minutes + (seconds / 60)
         except Exception as e:
             print("Error:", e)
             return None
-
-

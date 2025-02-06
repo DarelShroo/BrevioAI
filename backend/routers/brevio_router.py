@@ -24,11 +24,11 @@ class BrevioRoutes:
 
         @self.router.post("/count-yt-videos")
         async def count_videos_in_yt_playlist(request: UrlYT, verify_api_key: str = Depends(verify_api_key)):
-            return Brevio.YTService.count_videos_in_yt_playlist(request.url)
+            return Brevio.YTService.count_media_in_yt_playlist(request.url)
 
         @self.router.post("/count-time-yt-video")
         async def get_video_duration(request: UrlYT, verify_api_key: str = Depends(verify_api_key)):
-            return {Brevio.YTService.get_videos_duration(request.url)}
+            return {Brevio.YTService.get_media_duration(request.url)}
 
 
 brevio_router = BrevioRoutes().router
