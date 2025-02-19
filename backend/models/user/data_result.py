@@ -4,6 +4,7 @@ from bson import ObjectId
 
 class DataResult(BaseModel):
     id: ObjectId = Field(default_factory=ObjectId)
+    index: Optional[int] = None
     url: Optional[str] = None
     download_location: Optional[str] = None
     name: Optional[str] = None

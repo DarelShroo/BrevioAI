@@ -4,7 +4,6 @@ openai==1.57.2
 ffmpeg
 fastapi[standard]
 python-docx
-beautifulsoup4
 markdown
 pytest
 pymongo
@@ -12,3 +11,4 @@ dnspython
 pyjwt
 passlib[bcrypt]
 yt-dlp
+python-multipart

@@ -12,6 +12,8 @@ from backend.brevio.models.summary_config_model import SummaryConfig
 from backend.models.brevio.brevio_generate import BrevioGenerate, DurationEntry
 from backend.models.user.data_result import DataResult
 from backend.models.user.folder_entry import FolderEntry
+from backend.models.user.user import User
+from backend.models.user.user_folder import UserFolder
 from .services.transcription_service import TranscriptionService
 from .services.summary_service import SummaryService
 from .services.yt_service import YTService as YTDownload
@@ -46,15 +48,16 @@ class Generate:
     async def _process_local_audio_files(self) -> dict:
         # Implementar procesamiento
         pass
-    async def _process_online_audio_data(self, data: BrevioGenerate, _user_id: str, _create_data_result, folder_entry: FolderEntry) -> dict:
-        data_result = DataResult()
-        entry_id = data_result.id
+    async def _process_online_audio_data(self, data: BrevioGenerate, _create_data_result, current_folder_entry: FolderEntry, _user_folder: UserFolder) -> dict:
+        folder_id = _user_folder.id
+        entry_id = current_folder_entry.id
         transcription_sem = asyncio.Semaphore(5)
         summary_sem = asyncio.Semaphore(5)
         
         async def process_video(index: int, video: DurationEntry):
             try:
-                destination_path = f"audios/{_user_id}/{entry_id}/{index}"
+                data_result = DataResult()
+                destination_path = f"audios/{folder_id}/{entry_id}/{index}"
                 audio_filename = f"{index}.mp3"
                 audio_path = path.join(destination_path, audio_filename)
                 transcription_path = path.join(
@@ -64,7 +67,7 @@ class Generate:
 
                 self._directory_manager.createFolder(destination_path)
 
-                await asyncio.to_thread(self._yt_service.download, video.url, destination_path, str(index))
+                await self._yt_service.download(video.url, destination_path, str(index))
 
 
                 if not await self._verify_file_exists(audio_path):
@@ -90,11 +93,14 @@ class Generate:
 
                 data_result.url = video.url
                 data_result.download_location = destination_path
-                data_result.name = audio_filename
-                data_result.duration = float(self._yt_service.get_media_duration(video.url)["durations"][0]["duration"])
+                data_result.index = index
+                
+                info = await self._yt_service.get_media_info(video.url)
 
+                data_result.name = info["title"]
+                data_result.duration = float(info["duration"]) if info["duration"] is not None else 0.0
 
-                _create_data_result(_user_id,  folder_entry, data_result)
+                _create_data_result(folder_id, current_folder_entry, data_result)
 
                 return {
                     "transcription": TranscriptionResponse(success=True).__str__(),

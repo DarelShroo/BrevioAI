@@ -24,9 +24,12 @@ Explicación técnica clara y precisa del tema.
 
 **Aspecto relevante**: Explicación técnica sin redundancias.  
 **Ejemplo de código (si es necesario)**:
+
 ```js
 // Código relevante
 ```
+
+Es importante asegurarse de que los términos técnicos utilizados sean correctos y estén basados en conceptos reales, evitando la creación de términos o definiciones no existentes.
 
 Traducción:  
 Traduce completamente todo el resumen al idioma [{}] (o al idioma que se especifique), asegurándote de que todas las secciones y detalles se presenten en dicho idioma.
@@ -60,6 +63,7 @@ Explicación clara y precisa del tema científico.
 ```math
 // Ecuación relevante
 ```
+Es importante asegurarse de que los términos técnicos utilizados sean correctos y estén basados en conceptos reales, evitando la creación de términos o definiciones no existentes.
 
 Traducción:  
 Traduce completamente todo el resumen al idioma [{}] (o al idioma que se especifique), asegurándote de que todas las secciones y detalles se presenten en dicho idioma.
@@ -90,6 +94,8 @@ Resumen estratégico del tema empresarial.
 
 **KPI relevante**: Datos importantes sin redundancias.
 
+Es importante asegurarse de que los términos técnicos utilizados sean correctos y estén basados en conceptos reales, evitando la creación de términos o definiciones no existentes.
+
 Traducción:  
 Traduce completamente todo el resumen al idioma [{}] (o al idioma que se especifique), asegurándote de que todas las secciones y detalles se presenten en dicho idioma.
 """
@@ -117,6 +123,8 @@ Explicación clara y accesible del tema educativo.
 ### Ejemplos Prácticos
 
 **Ejemplo 1**: Ilustración práctica del concepto.
+
+Es importante asegurarse de que los términos técnicos utilizados sean correctos y estén basados en conceptos reales, evitando la creación de términos o definiciones no existentes.
 
 Traducción:  
 Traduce completamente todo el resumen al idioma [{}] (o al idioma que se especifique), asegurándote de que todas las secciones y detalles se presenten en dicho idioma.
@@ -146,6 +154,8 @@ Resumen cultural e histórico del tema.
 
 **Aspecto cultural relevante**: Explicación sin redundancias.
 
+Es importante asegurarse de que los términos técnicos utilizados sean correctos y estén basados en conceptos reales, evitando la creación de términos o definiciones no existentes.
+
 Traducción:  
 Traduce completamente todo el resumen al idioma [{}] (o al idioma que se especifique), asegurándote de que todas las secciones y detalles se presenten en dicho idioma.
 """
@@ -169,6 +179,8 @@ Resumen del evento o tema deportivo.
 **Dato clave 1**: Información relevante.  
 **Dato clave 2**: Más detalles si es necesario.
 
+Es importante asegurarse de que los términos técnicos utilizados sean correctos y estén basados en conceptos reales, evitando la creación de términos o definiciones no existentes.
+
 Traducción:  
 Traduce completamente todo el resumen al idioma [{}] (o al idioma que se especifique), asegurándote de que todas las secciones y detalles se presenten en dicho idioma.
 """
@@ -190,6 +202,8 @@ Resumen analítico del tema político.
 
 **Aspecto 1**: Descripción objetiva y precisa.  
 **Aspecto 2**: Más detalles si es necesario.
+
+Es importante asegurarse de que los términos técnicos utilizados sean correctos y estén basados en conceptos reales, evitando la creación de términos o definiciones no existentes.
 
 Traducción:  
 Traduce completamente todo el resumen al idioma [{}] (o al idioma que se especifique), asegurándote de que todas las secciones y detalles se presenten en dicho idioma.
@@ -213,6 +227,8 @@ Resumen del contenido legal.
 **Norma/Artículo**: Descripción breve y precisa.  
 **Interpretación**: Explicación técnica sin redundancias.
 
+Es importante asegurarse de que los términos técnicos utilizados sean correctos y estén basados en conceptos reales, evitando la creación de términos o definiciones no existentes.
+
 Traducción:  
 Traduce completamente todo el resumen al idioma [{}] (o al idioma que se especifique), asegurándote de que todas las secciones y detalles se presenten en dicho idioma.
 """
@@ -235,6 +251,8 @@ Resumen del tema de salud.
 **Condición/Terapia**: Descripción breve y técnica.  
 **Datos relevantes**: Estadísticas o resultados si es necesario.
 
+Es importante asegurarse de que los términos técnicos utilizados sean correctos y estén basados en conceptos reales, evitando la creación de términos o definiciones no existentes.
+
 Traducción:  
 Traduce completamente todo el resumen al idioma [{}] (o al idioma que se especifique), asegurándote de que todas las secciones y detalles se presenten en dicho idioma.
 """
@@ -256,6 +274,8 @@ Resumen del tema de entretenimiento.
 
 **Elemento 1**: Descripción breve y concisa.  
 **Elemento 2**: Más detalles si es necesario.
+
+Es importante asegurarse de que los términos técnicos utilizados sean correctos y estén basados en conceptos reales, evitando la creación de términos o definiciones no existentes.
 
 Traducción:  
 Traduce completamente todo el resumen al idioma [{}] (o al idioma que se especifique), asegurándote de que todas las secciones y detalles se presenten en dicho idioma.

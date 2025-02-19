@@ -5,6 +5,8 @@ from typing import Dict, List
 from backend.brevio.enums.content import ContentType
 from backend.models.brevio.brevio_generate import BrevioGenerate
 from backend.models.user.folder_entry import FolderEntry
+from backend.models.user.user import User
+from backend.models.user.user_folder import UserFolder
 from .models.config_model import ConfigModel as Config
 from .generate import Generate
 from .constants.constants import Constants
@@ -48,8 +50,8 @@ def main(argv):
 def count_media_in_yt_playlist(url: str):
     return YTService().count_media_in_yt_playlist(url)
 
-def get_media_duration(url: str):
-    return YTService().get_media_duration(url)
+async def get_media_duration(url: str):
+    return await YTService().get_media_duration(url)
 
 def get_languages():
     return list(LanguageType)
@@ -57,10 +59,9 @@ def get_languages():
 def get_models():
     return list(ModelType)
 
-async def generate(data: BrevioGenerate, _user_id: str, _create_data_result, folder_entry: FolderEntry) -> Dict:
+async def generate(data: BrevioGenerate, _create_data_result, current_folder_entry: FolderEntry, _user_folder: UserFolder) -> Dict:
     generate = Generate()
-    result = generate._process_online_audio_data(data, _user_id, _create_data_result, folder_entry) 
-    return await result
+    return await generate._process_online_audio_data(data, _create_data_result, current_folder_entry, _user_folder) 
 
 if __name__ == "__main__":
     main(sys.argv[1:])

@@ -38,7 +38,7 @@ class TranscriptionService:
             logger.info("Whisper model loaded successfully.")
 
             logger.info(f"Transcribing audio file: {audio_path}.")
-            result = model.transcribe(audio_path, language=str(language.value))
+            result = model.transcribe(audio_path)
             transcription_text = result.get("text", "")
             logger.info(f"Transcription completed. Transcribed text length: {len(transcription_text)} characters.")
 
