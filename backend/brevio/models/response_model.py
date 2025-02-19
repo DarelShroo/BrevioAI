@@ -74,8 +74,7 @@ class GenerateResponse:
         self.summary_response = summary_response if isinstance(summary_response, list) else [summary_response]
         self.error_message = error_message 
 
-    def to_dict(self):
-
+    def to_dict(self):        
         response = {
             "download_result": self.download_response,
             "transcription_result": self.transcription_response,

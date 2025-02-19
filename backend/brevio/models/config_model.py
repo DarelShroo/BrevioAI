@@ -4,18 +4,18 @@ from ..enums.language import LanguageType
 from ..enums.model import ModelType
 from dotenv import load_dotenv
 from os import path, getenv
-import uuid
 class ConfigModel:
-    def __init__(self, url: str, content: str, model: ModelType, language: LanguageType):
+    def __init__(self, url: str = None, content: str = None, model: ModelType = None, language: LanguageType= None):
         self._url = url
         self._language = language
-        self._dest_folder = path.join(".", Constants.DESTINATION_FOLDER, str(uuid.uuid4()))
+        self._content = content
+        self._model = model
+        
         self._transcription_file = Constants.TRANSCRIPTION_FILE
         self._summary_file = Constants.SUMMARY_FILE
         self._all_transcriptions = Constants.ALL_TRANSCRIPTIONS
         self._all_summaries = Constants.ALL_SUMMARIES
-        self._content = content
-        self._model = model
+        self._dest_folder = Constants.DESTINATION_FOLDER
 
         load_dotenv()
 
@@ -51,15 +51,6 @@ class ConfigModel:
     @temperature.setter
     def temperature(self, value):
         self._temperature = value
-
-
-    @property
-    def model(self):
-        return self._model
-    
-    @model.setter
-    def model(self, value):
-        self._model = value
 
     @property
     def content(self):
@@ -104,4 +95,3 @@ class ConfigModel:
     @property
     def all_summaries(self):
         return self._all_summaries
-

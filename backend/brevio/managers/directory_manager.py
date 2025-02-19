@@ -4,12 +4,12 @@ from ..constants.directory_messages import DirectoryMessages
 from ..constants.summary_messages import SummaryMessages
 from ..models.config_model import ConfigModel as Config
 from ..models.response_model import FolderResponse
+
 class DirectoryManager:
-    def __init__(self, config: Config):
-        self._config = config
+    def __init__(self, config: Config = None):
+        self._config = config if config else None
 
     def createFolder(self, path=None):
-        path = path or self._config.dest_folder
         try:
             if os.path.exists(path):
                 return FolderResponse(
@@ -17,17 +17,21 @@ class DirectoryManager:
                     DirectoryMessages.ERROR_FOLDER_ALREADY_EXISTS.format(path),
                 )
             else:
-                os.mkdir(path)
-                return FolderResponse(
-                    True, 
-                    DirectoryMessages.SUCCESS_FOLDER_CREATED.format(path)
-                )
+                os.makedirs(path, exist_ok=True)
+                if os.path.exists(path):
+                    return FolderResponse(
+                        True, 
+                        DirectoryMessages.SUCCESS_FOLDER_CREATED.format(path)
+                    )
+                    
+                print("No se ha creado la carpeta, revisa si la ruta es válida.")
+                raise Exception("La carpeta no se creó, la ruta puede ser incorrecta.")
         except OSError as e:
             return FolderResponse(
                 False, 
                 DirectoryMessages.ERROR_FAILED_TO_CREATE_FOLDER.format(path, e)
-            )
-
+            
+        )
     def deleteFolder(self):
         folder = self._config.dest_folder
         try:
@@ -84,10 +88,10 @@ class DirectoryManager:
             with open(transcription_path, "r") as file:
                 transcription = file.read()
 
-            if not transcription.strip():  # Check if transcription is empty
+            if not transcription.strip():
                 return FolderResponse(
                     False, 
-                    SummaryMessages.ERROR_EMPTY_TRANSCRIPTION  # Assuming this is a string error message
+                    SummaryMessages.ERROR_EMPTY_TRANSCRIPTION
                 )
 
             return transcription

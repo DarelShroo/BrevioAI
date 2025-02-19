@@ -1,94 +1,132 @@
-from os import rename, path, listdir
-from .constants.constants import Constants
-from .constants.download_messages import DownloadMessages
-from .constants.directory_messages import DirectoryMessages
-from .constants.transcription_messages import TranscriptionMessages
-from .enums.extension import ExtensionType
-from .services.transcription_service import Transcription
-from .services.summary_service import Summary
+import asyncio
+import uuid
+import logging
+from os import path
+from typing import Union, overload
+from bson import ObjectId
+import torch
+from os import environ
+from backend.brevio.enums.content import ContentType
+from backend.brevio.enums.language import LanguageType
+from backend.brevio.models.summary_config_model import SummaryConfig
+from backend.models.brevio.brevio_generate import BrevioGenerate, DurationEntry
+from backend.models.user.data_result import DataResult
+from backend.models.user.folder_entry import FolderEntry
+from .services.transcription_service import TranscriptionService
+from .services.summary_service import SummaryService
 from .services.yt_service import YTService as YTDownload
 from .managers.directory_manager import DirectoryManager
-from .models.config_model import ConfigModel as Config
-from .models.response_model import SummaryResponse, GenerateResponse, TranscriptionResponse
+from .models.response_model import SummaryResponse, TranscriptionResponse
+from .constants.constants import Constants
+from .constants.contents import Contents
+
+logger = logging.getLogger(__name__)
+
+environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 class Generate:
-    def __init__(self, config: Config):
-        self._config = config
-        self.directory_manager = DirectoryManager(config)
+    def __init__(self):
+        self._directory_manager = DirectoryManager()
+        self._summary_service = SummaryService()
+        self._transcription_service = TranscriptionService()
+        self._yt_service = YTDownload()
 
-    def organize_audio_files_into_folders(self):
-        folder_response = None
-        download_response = None
-        transcriptions_response = []
-        summaries_response = []
+    @overload
+    async def organize_audio_files_into_folders(self) -> dict: ...
 
-        try:
-            folder_response = self.create_folder()
-            download_response = self.download()
+    @overload
+    async def organize_audio_files_into_folders(
+        self, data: list[dict]) -> dict: ...
 
-            if path.exists(self._config.dest_folder):
-                audio_files = [f for f in listdir(self._config.dest_folder) if path.isfile(path.join(self._config.dest_folder, f)) and f.lower().endswith(f".{str(ExtensionType.MP3.value)}")]
-                audio_files.sort()
-                count = 1
+    async def organize_audio_files_into_folders(self, data: Union[None, list[dict]] = None) -> dict:
+        if data is None:
+            return await self._process_local_audio_files()
+        return await self._process_online_audio_data(data)
 
-                for audio_file in audio_files:
-                    source_path = path.join(self._config.dest_folder, audio_file)
-                    destination_path = path.join(self._config.dest_folder, str(count))
-                    transcription_path = path.join(destination_path, self._config.transcription_file)
-                    summary_path = path.join(destination_path, self._config.summary_file)
-                    audio_path = path.join(destination_path, audio_file)
-                    destination_audio_path = path.join(destination_path, audio_file)
+    async def _process_local_audio_files(self) -> dict:
+        # Implementar procesamiento
+        pass
+    async def _process_online_audio_data(self, data: BrevioGenerate, _user_id: str, _create_data_result, folder_entry: FolderEntry) -> dict:
+        data_result = DataResult()
+        entry_id = data_result.id
+        transcription_sem = asyncio.Semaphore(5)
+        summary_sem = asyncio.Semaphore(5)
+        
+        async def process_video(index: int, video: DurationEntry):
+            try:
+                destination_path = f"audios/{_user_id}/{entry_id}/{index}"
+                audio_filename = f"{index}.mp3"
+                audio_path = path.join(destination_path, audio_filename)
+                transcription_path = path.join(
+                    destination_path, Constants.TRANSCRIPTION_FILE)
+                summary_path = path.join(
+                    destination_path, Constants.SUMMARY_FILE)
 
-                    self.directory_manager.createFolder(destination_path)
+                self._directory_manager.createFolder(destination_path)
+
+                await asyncio.to_thread(self._yt_service.download, video.url, destination_path, str(index))
+
+
+                if not await self._verify_file_exists(audio_path):
+                    raise FileNotFoundError(
+                        f"Error: No se encontró el archivo descargado {audio_path}")
+
+                async with transcription_sem:
+                    transcription_result = await asyncio.to_thread(
+                        self._transcription_service.generate_transcription,
+                        audio_path, destination_path, LanguageType[data.language]
+                    )
+
+                torch.cuda.empty_cache()
+
+                async with summary_sem:
+                    summary_config = SummaryConfig(
+                    transcription_path, summary_path, ContentType[data.content], LanguageType[data.language], data.model)
+
+                    summary_result = await asyncio.to_thread(
+                        self._summary_service.generate_summary, summary_config)
                     
-                    if not path.exists(destination_audio_path):
-                        rename(source_path, destination_audio_path)
+                torch.cuda.empty_cache()
 
-                    transcription_response = self.transcription(audio_path, self._config.language, destination_path, self._config.transcription_file, self._config)
-                    transcriptions_response.append(transcription_response)
+                data_result.url = video.url
+                data_result.download_location = destination_path
+                data_result.name = audio_filename
+                data_result.duration = float(self._yt_service.get_media_duration(video.url)["durations"][0]["duration"])
 
-                    self.directory_manager.deleteFile(audio_path)
 
-                    summary_response = self.summary(transcription_path, summary_path, Constants.CONTENT, self._config)
-                    summaries_response.append(summary_response)
+                _create_data_result(_user_id,  folder_entry, data_result)
 
-                    count += 1
+                return {
+                    "transcription": TranscriptionResponse(success=True).__str__(),
+                    "summary": SummaryResponse(success=True).__str__()
+                }
+            
+            except Exception as e:
+                logger.error(f"Error procesando video {index}: {str(e)}")
+                return {
+                    "transcription": TranscriptionResponse(success=False, error_message=str(e)).__str__(),
+                    "summary": SummaryResponse(success=False, error_message=str(e)).__str__()
+                }
 
-            return GenerateResponse(
-                folder_response=folder_response,
-                download_response=download_response,
-                transcription_response=[str(t) for t in transcriptions_response if t is not None],
-                summary_response=[str(s) for s in summaries_response if s is not None]
-            )
+        tasks = [process_video(index, video)
+                 for index, video in enumerate(data.data)]
+        
+        results = await asyncio.gather(*tasks)
 
-        except Exception as e:
-            return GenerateResponse(
-                folder_response=folder_response,
-                download_response=download_response,
-                transcription_response=transcriptions_response,
-                summary_response=summaries_response,
-                error_message=str(e)
-            )
-        #finally:
-            #self.directory_manager.deleteFolder()
+        return {
+            "folder_response": {"success": True, "message": "Directorios creados correctamente"},
+            "download_response": {"success": True, "message": "Descargas completadas exitosamente"},
+            "transcription_response": [r["transcription"] for r in results],
+            "summary_response": [r["summary"] for r in results]
+        }
 
-    def create_folder(self):
-        if not path.exists(self._config.dest_folder):
-            self.directory_manager.createFolder()
-        return self.directory_manager.createFolder()
-
-    def download(self):
-        _download = YTDownload(self._config.url, self._config.dest_folder)
-        return _download.download()
-
-    def transcription(self, audio_path, language, destination_path, transcription_file, config: Config):
-        try:
-            return str(Transcription(audio_path, language, destination_path, transcription_file, config).generateTranscription())
-        except Exception as e:
-            return TranscriptionResponse(success=False, error_message=str(e))
-
-    def summary(self,transcription_path, summary_path, content, config: Config):
-        try:
-            return str(Summary(transcription_path, summary_path, content, config).generate_summary())
-        except Exception as e:
-            return SummaryResponse(success=False, error_message=str(e))
+    async def _verify_file_exists(self, file_path: str, max_attempts: int = 10) -> bool:
+        for attempt in range(max_attempts):
+            if path.exists(file_path):
+                logger.debug(
+                    f"Archivo encontrado: {file_path} en el intento {attempt+1}")
+                return True
+            await asyncio.sleep(0.5)
+        logger.error(
+            f"Archivo no encontrado después de {max_attempts} intentos: {file_path}")
+        return False

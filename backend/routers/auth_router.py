@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from backend.models.user.recovery_password_otp import RecoveryPasswordOtp
 from ..models.user.login_user import LoginUser
@@ -27,8 +27,14 @@ class AuthRoutes:
             register_user: RegisterUser,
             auth_service: AuthService = Depends(get_auth_service)
         ):
-            return await auth_service.register(register_user)
-        
+            try:
+                response = await auth_service.register(register_user)
+                return response
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Internal Server Error")
+            
         @self.router.post('/password-recovery-handshake')
         async def password_send_otp_recovery(
             identity: UserIdentity,
@@ -37,11 +43,19 @@ class AuthRoutes:
             return await auth_service.password_recovery_handshake(identity)
 
         @self.router.post('/password-recovery-verify')
-        async def password_send_otp_recovery(
+        async def password_recovery_verify(
             recovery_password_otp: RecoveryPasswordOtp,
             auth_service: AuthService = Depends(get_auth_service)
         ):
             
             return await auth_service.change_password(recovery_password_otp)
+        
+        @self.router.post('/prueba')
+        async def prueba(
+            auth_service: AuthService = Depends(get_auth_service),
+        ):
+            
+            return True
+
 
 auth_router = AuthRoutes().router

@@ -1,66 +1,68 @@
-import subprocess
-from os import path, rename
-
+import logging
+import whisper
+from os import path
+from backend.brevio.constants.constants import Constants
 from ..constants.transcription_messages import TranscriptionMessages
-from ..enums.extension import ExtensionType
 from ..enums.language import LanguageType
 from ..models.response_model import TranscriptionResponse
 from ..managers.directory_manager import DirectoryManager
-from ..models.config_model import ConfigModel as Config
-class Transcription:
-    def __init__(self, audio_path, language: LanguageType, destination_path, transcription_file, config: Config):
-        self._audio_path = audio_path
-        self._language = str(language.value)
-        self._destination_path = destination_path
-        self._transcription_file = transcription_file
-        self.config = config
-    
-    def generateTranscription(self):
-        command = [
-            "whisper", self._audio_path, 
-            "--language", self._language, 
-            "--output_format", str(ExtensionType.TXT.value), 
-            "--output_dir", self._destination_path 
-        ]
-        
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+
+class TranscriptionService:
+    _instance = None 
+    def __new__(cls, *args, **kwargs):
+        if not cls._instance:
+            cls._instance = super(TranscriptionService, cls).__new__(cls)
+            logger.info("Creating new instance of TranscriptionService.")
+        else:
+            logger.info("Using existing instance of TranscriptionService.")
+        return cls._instance
+
+    def __init__(self):
+        if not hasattr(self, '_directory_manager'):
+            self._directory_manager = DirectoryManager()
+            logger.info("DirectoryManager initialized.")
+
+    def generate_transcription(self, audio_path, destination_path, language: LanguageType):
+        logger.info(f"Starting transcription process for audio file: {audio_path} with language: {language.value}.")
         try:
-            subprocess.run(command, check=True)
-            
-            generated_file = path.join(self._destination_path, f"{path.basename(self._audio_path)[:-4]}.{str(ExtensionType.TXT.value)}")
-            
-            transcription_path = path.join(self._destination_path, self._transcription_file)
-            transcription = DirectoryManager(self.config).read_transcription(transcription_path)
+            logger.info("Loading Whisper model 'tiny'.")
+            model = whisper.load_model("tiny")
+            logger.info("Whisper model loaded successfully.")
 
+            logger.info(f"Transcribing audio file: {audio_path}.")
+            result = model.transcribe(audio_path, language=str(language.value))
+            transcription_text = result.get("text", "")
+            logger.info(f"Transcription completed. Transcribed text length: {len(transcription_text)} characters.")
 
-            if path.exists(generated_file):
-                rename(generated_file, transcription_path)
-                transcription = DirectoryManager(self.config).read_transcription(transcription_path)
-                return TranscriptionResponse(
-                    True, 
-                    str(transcription), 
-                    str(TranscriptionMessages.SUCCESS_TRANSCRIPTION_FILE_GENERATED.format(transcription_path))
-                    )
-            else:
-                return TranscriptionResponse(
-                    False, 
-                    "", 
-                    TranscriptionMessages.ERROR_TRANSCRIPTION_FILE_NOT_FOUND.format(generated_file)
-                )
+            transcription_path = path.join(destination_path, Constants.TRANSCRIPTION_FILE)
+            logger.info(f"Writing transcription to file: {transcription_path}.")
 
-        except subprocess.CalledProcessError as e:
-            print(e)
+            with open(transcription_path, "w", encoding="utf-8") as file:
+                file.write(transcription_text)
+            logger.info("Transcription file written successfully.")
+
+            transcription = self._directory_manager.read_transcription(transcription_path)
+            logger.info("Transcription read successfully from file.")
+
+            response_message = TranscriptionMessages.SUCCESS_TRANSCRIPTION_FILE_GENERATED.format(transcription_path)
+            logger.info(f"Transcription process completed successfully. {response_message}")
             return TranscriptionResponse(
-                    False, 
-                    "", 
-                    TranscriptionMessages.ERROR_ON_EXECUTING_WHISPER.format(e)
-                )
-
+                True,
+                str(transcription),
+                response_message
+            )
         except Exception as e:
-            print(e)
-
+            logger.error(f"Error during transcription process: {e}", exc_info=True)
             return TranscriptionResponse(
-                    False, 
-                    "", 
-                    "Error inesperado: {e}"
-                )
-            
+                False,
+                "",
+                f"Error inesperado: {e}"
+            )
