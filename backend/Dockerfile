@@ -1,8 +1,10 @@
 FROM nvidia/cuda:12.6.3-runtime-ubuntu24.04
 
-WORKDIR /app
+WORKDIR /backend
 
-COPY . /app
+ 
+
+COPY . /backend
 
 RUN apt-get update && \
     apt-get install -y python3.12 python3-pip libglib2.0-0 yt-dlp && \

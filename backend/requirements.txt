@@ -12,3 +12,5 @@ pyjwt
 passlib[bcrypt]
 yt-dlp
 python-multipart
+beautifulsoup4
+PyPDF2

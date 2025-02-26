@@ -1,50 +1,45 @@
 from datetime import datetime, timedelta, timezone
 import jwt
 from fastapi import HTTPException
+from os import getenv
 
 class TokenService:
+    __secret_key: str
+    __algorithm: str
+    __expire_minutes: int
+
     def __init__(self):
-        self.secret_key = "8f3e5d1c7a2b9f4e3d1c6a8e7f5b9d3c2a1e0f7d6b8c4a3f9e7d5c1b2a6e8f3d1"
-        self.algorithm = "HS256"
+        self.__secret_key = getenv("SECRET_TOKEN_KEY")
+        self.__algorithm = getenv("TOKEN_ALGORITHM")
+        self.__expire_minutes = int(getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 15))
+
+        if not self.__secret_key or not self.__algorithm:
+            raise ValueError("Faltan configuraciones del token en variables de entorno")
+
+    def __create_token(self, data: dict, expires_delta: timedelta | None = None) -> str:
+        to_encode = data.copy()
+        expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=self.__expire_minutes))
+        to_encode.update({"exp": expire.timestamp()})
+        encoded_jwt = jwt.encode(to_encode, self.__secret_key, algorithm=self.__algorithm)
+        return encoded_jwt
 
     def create_access_token(self, data: dict, expires_delta: timedelta | None = None) -> str:
-        to_encode = data.copy()
-        if expires_delta:
-            expire = datetime.now(timezone.utc) + expires_delta
-        else:
-            # 75 minutos de expiración
-            expire = datetime.now(timezone.utc) + timedelta(minutes=75)
-        to_encode.update({"exp": int(expire.timestamp())})
-        encoded_jwt = jwt.encode(
-            to_encode, self.secret_key, algorithm=self.algorithm)
-        return encoded_jwt
+        return self.__create_token(data, expires_delta)
 
     def validate_access_token(self, token: str) -> dict:
         try:
-            payload = jwt.decode(token, self.secret_key,
-                                 algorithms=[self.algorithm])
-
-            if int(datetime.now(timezone.utc).timestamp()) > payload["exp"]:
-                raise HTTPException(status_code=401, detail="Token expirado")
-
+            payload = jwt.decode(token, self.__secret_key, algorithms=[self.__algorithm])
             return payload
         except jwt.ExpiredSignatureError:
             raise HTTPException(status_code=401, detail="Token expirado")
         except jwt.InvalidTokenError:
             raise HTTPException(status_code=401, detail="Token inválido")
 
-    def refresh_token(self, refresh_token: str) -> str:
+    def refresh_token(self, refresh_token: str, expires_delta: timedelta | None = None) -> str:
         try:
-            payload = jwt.decode(
-                refresh_token, self.secret_key, algorithms=[self.algorithm])
-
-            new_payload = payload.copy()
-            new_payload["exp"] = int(datetime.now(
-                timezone.utc).timestamp()) + 3600
-
-            new_token = jwt.encode(
-                new_payload, self.secret_key, algorithm=self.algorithm)
-            return new_token
+            payload = jwt.decode(refresh_token, self.__secret_key, algorithms=[self.__algorithm])
+            if 'exp' not in payload:
+                raise HTTPException(status_code=401, detail="Refresh token inválido")
+            return self.__create_token(payload, expires_delta)
         except jwt.InvalidTokenError:
-            raise HTTPException(
-                status_code=401, detail="Refresh token inválido")
+            raise HTTPException(status_code=401, detail="Refresh token inválido")

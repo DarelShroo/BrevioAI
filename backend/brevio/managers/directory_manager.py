@@ -1,5 +1,9 @@
 import os
 import shutil
+
+from docx import Document
+
+from backend.brevio.services.pdf_service import PdfService
 from ..constants.directory_messages import DirectoryMessages
 from ..constants.summary_messages import SummaryMessages
 from ..models.config_model import ConfigModel as Config
@@ -8,6 +12,7 @@ from ..models.response_model import FolderResponse
 class DirectoryManager:
     def __init__(self, config: Config = None):
         self._config = config if config else None
+        self._pdf_service = PdfService()
 
     def createFolder(self, path=None):
         try:
@@ -101,7 +106,31 @@ class DirectoryManager:
                 False, 
                 f"Error reading transcription: {str(e)}"
             )
+    def read_pdf(self, pdf_path):
+        return self._pdf_service.read_pdf_in_pieces(pdf_path)
+    
+    def read_docx(self, docx_path):
+        return self.read_docx_in_pieces(docx_path)
+    
+    def read_docx_in_pieces(self, docx_path, paragraphs_per_chunk=50):
+        try:
+            doc = Document(docx_path)
+            paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
+            total_paragraphs = len(paragraphs)
+
+            for i in range(0, total_paragraphs, paragraphs_per_chunk):
+                chunk_text = "\n".join(paragraphs[i:i + paragraphs_per_chunk])
+                yield chunk_text
+        except Exception as e:
+            #logger.error(f"Error reading DOCX in pieces: {e}", exc_info=True)
+            raise
 
     def write_summary(self, summary, summary_path):
-        with open(summary_path, "w") as file:
-            file.write(summary)
+        try:
+            with open(summary_path, "a", encoding="utf-8") as file:
+                file.write(summary)
+                file.write("\n")
+        except Exception as e:
+            #logger.error(f"Error writing summary to {summary_path}: {e}", exc_info=True)
+            raise
+

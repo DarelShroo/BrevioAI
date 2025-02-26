@@ -35,12 +35,27 @@ class TranscriptionService:
         try:
             logger.info("Loading Whisper model 'tiny'.")
             model = whisper.load_model("tiny")
+            print(whisper.available_models())
             logger.info("Whisper model loaded successfully.")
 
             logger.info(f"Transcribing audio file: {audio_path}.")
             result = model.transcribe(audio_path)
-            transcription_text = result.get("text", "")
-            logger.info(f"Transcription completed. Transcribed text length: {len(transcription_text)} characters.")
+            logger.info("Transcription completed.")
+
+            # Definir la función para formatear el tiempo
+            def format_time(seconds):
+                hours = int(seconds // 3600)
+                minutes = int((seconds % 3600) // 60)
+                seconds = int(seconds % 60)
+                return f"[{hours:02d}:{minutes:02d}:{seconds:02d}]"
+
+            # Construir el texto con timestamps
+            segments = result.get("segments", [])
+            transcription_text = ""
+            for segment in segments:
+                start_time = format_time(segment["start"])
+                text = segment["text"]
+                transcription_text += f"{start_time} {text}\n"
 
             transcription_path = path.join(destination_path, Constants.TRANSCRIPTION_FILE)
             logger.info(f"Writing transcription to file: {transcription_path}.")

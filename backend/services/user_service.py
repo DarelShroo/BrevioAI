@@ -79,11 +79,11 @@ class UserService:
 
         return entry
 
-    def create_data_result(self, user_id: str, folder_entry: FolderEntry, result: DataResult) -> DataResult:
+    def create_data_result(self, user_id: str, folder_entry: str, result: DataResult) -> DataResult:
         user = self.user_repo.get_user_by_id(user_id)
-        
+        print(user_id)
         user_folder_entry = next(
-            (entry for entry in user.folder.entries if entry.id == folder_entry.id),
+            (entry for entry in user.folder.entries if entry.id == folder_entry),
             None
         )
         

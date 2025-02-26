@@ -1,67 +1,54 @@
 import sys
 import os
 from typing import Dict, List
-
 from backend.brevio.enums.content import ContentType
 from backend.models.brevio.brevio_generate import BrevioGenerate
-from backend.models.user.folder_entry import FolderEntry
-from backend.models.user.user import User
-from backend.models.user.user_folder import UserFolder
 from .models.config_model import ConfigModel as Config
 from .generate import Generate
-from .constants.constants import Constants
 from .enums.model import ModelType
 from .enums.language import LanguageType
 from .constants.type_messages import TypeMessages
 from .services.yt_service import YTService
-import asyncio
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-def main(argv):
-    try:
-        url = argv[0] if len(argv) > 0 else ""
-        language_str = argv[1] if len(argv) > 1 else LanguageType.SPANISH.name
-        content = argv[2] if len(argv) > 2 else ContentType.PROGRAMMING_CONTENT.name
-        model_str = argv[3] if len(argv) > 3 else ModelType.GPT_4O_MINI.name
+class Main:
+    def __init__(self, argv = None):
+        self.argv = argv
 
-        try:
-            language = LanguageType[language_str.upper()]
-        except KeyError:
-            raise ValueError(f"{TypeMessages.ERROR_INVALID_INPUT} ({TypeMessages.AVAILABLE_LANGUAGES} {[e.name for e in LanguageType]})")
+    async def count_media_in_yt_playlist(self, url: str):
+        return await YTService().count_media_in_yt_playlist(url)
 
-        try:
-            model = ModelType[model_str.upper()]
-        except KeyError:
-            raise ValueError(f"{TypeMessages.ERROR_INVALID_INPUT} ({TypeMessages.AVAILABLE_MODELS} {[e.name for e in ModelType]})")
+    async def get_media_duration(self, url: str):
+        return await YTService().get_media_duration(url)
 
-        config = Config(url=url, content=content, model=model, language=language)
-        generate = Generate(config)
-        
-        response_dict = generate.organize_audio_files_into_folders()
-        return response_dict.to_dict()
-    
-    except ValueError as ve:
-        print(f"{ve}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"{TypeMessages.ERROR_UNEXPECTED}: {e}")
-        sys.exit(1)
+    @staticmethod
+    def get_languages():
+        return [key for key, member in LanguageType.__members__.items()]
 
-def count_media_in_yt_playlist(url: str):
-    return YTService().count_media_in_yt_playlist(url)
+    @staticmethod
+    def get_models():
+        return [key for key, member in ModelType.__members__.items()]
 
-async def get_media_duration(url: str):
-    return await YTService().get_media_duration(url)
+    async def generate(self, data: BrevioGenerate, _create_data_result, current_folder_entry_id: str, _user_folder_id: str, user_id: str) -> Dict:
+        generate = Generate()
+        return await generate._process_online_audio_data(data, _create_data_result, current_folder_entry_id, _user_folder_id, user_id)
 
-def get_languages():
-    return list(LanguageType)
+    async def generate_pdf_summary(self, data: BrevioGenerate, _create_data_result, current_folder_entry_id: str, _user_folder_id: str, user_id: str) -> Dict:
+        generate = Generate()
+        return await generate._process_pdf(data, _create_data_result, current_folder_entry_id, _user_folder_id, user_id)
 
-def get_models():
-    return list(ModelType)
+    async def generate_docx_summary(self, data: BrevioGenerate, _create_data_result, current_folder_entry_id: str, _user_folder_id: str, user_id: str) -> Dict:
+        generate = Generate()
+        return await generate._process_docx(data, _create_data_result, current_folder_entry_id, _user_folder_id, user_id)
 
-async def generate(data: BrevioGenerate, _create_data_result, current_folder_entry: FolderEntry, _user_folder: UserFolder) -> Dict:
-    generate = Generate()
-    return await generate._process_online_audio_data(data, _create_data_result, current_folder_entry, _user_folder) 
+    def run(self):
+        """Main entry point for the script."""
+        self.parse_arguments()
+        return self.organize_audio_files()
+
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    main_app = Main(sys.argv[1:])
+    result = main_app.run()
+    print(result)

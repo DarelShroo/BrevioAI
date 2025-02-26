@@ -3,16 +3,16 @@ import random
 from uuid import uuid1
 import uuid
 from backend.brevio.constants.constants import Constants
-from backend.models.user.recovery_password import RecoveryPassword
-from backend.models.user.recovery_password_otp import RecoveryPasswordOtp
+from backend.models.auth.auth import RecoveryPassword
+from backend.models.auth.auth  import RecoveryPasswordOtp
 from backend.models.user.user_folder import UserFolder
 from backend.services.user_service import UserService
 from backend.utils import otp_utils
 from ..repositories.user_repository import UserRepository
 from ..utils.email_utils import isEmail
 from ..models.user.user import User
-from ..models.user.login_user import LoginUser
-from ..models.user.register_user import RegisterUser
+from backend.models.auth.auth  import LoginUser
+from backend.models.auth.auth import RegisterUser
 from .token_service import TokenService
 from ..services.email_service import EmailService
 from fastapi import HTTPException, status
@@ -31,8 +31,6 @@ class AuthService:
         self._user_service = UserService(self._user_repository)
         self._token_service = token_service
         self.directory_manager = DirectoryManager() 
-
-
 
     async def login(self, user_login: LoginUser):
         user = None

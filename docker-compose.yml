@@ -17,6 +17,8 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    depends_on:
+      - database
     networks:
       - app_network
 

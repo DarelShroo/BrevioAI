@@ -1,21 +1,20 @@
 from typing import Optional
 from bson import ObjectId
-from pydantic import BaseModel, EmailStr, Field
-
+from fastapi import Request
+from pydantic import EmailStr, Field
+from .base_model import BaseModel
 from backend.models.user.user_folder import UserFolder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 class User(BaseModel):
     id: Optional[ObjectId] = Field(default_factory=ObjectId, alias="_id")
-    username: str
+    username: str = Field("", strict=True, min_length=6, max_length=20)
     email: EmailStr
     password: str
     folder: UserFolder
     otp: Optional[int] = None
     exp: Optional[int] = None
-
-    class Config:
-        arbitrary_types_allowed = True  # Permite tipos arbitrarios como ObjectId
-        populate_by_name = True
 
     def to_dict(self):
         user_dict = {
@@ -29,3 +28,4 @@ class User(BaseModel):
         if self.id is not None:
             user_dict["_id"] = self.id
         return user_dict
+
