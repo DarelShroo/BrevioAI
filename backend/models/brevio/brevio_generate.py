@@ -1,4 +1,3 @@
-# En brevio_generate_model.py
 from pydantic import BaseModel, HttpUrl, FilePath, model_validator
 from typing import List, Optional
 from backend.brevio.models.prompt_config_model import PromptConfig

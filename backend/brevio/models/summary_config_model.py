@@ -1,5 +1,5 @@
 from pydantic import BaseModel, field_validator
-from backend.brevio.enums.model import ModelType
+from ..enums.model import ModelType
 
 class SummaryConfig(BaseModel):
     model: ModelType

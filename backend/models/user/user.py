@@ -1,11 +1,8 @@
 from typing import Optional
 from bson import ObjectId
-from fastapi import Request
 from pydantic import EmailStr, Field
 from .base_model import BaseModel
 from backend.models.user.user_folder import UserFolder
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
 
 class User(BaseModel):
     id: Optional[ObjectId] = Field(default_factory=ObjectId, alias="_id")

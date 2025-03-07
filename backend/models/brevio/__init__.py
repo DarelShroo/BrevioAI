@@ -1,11 +1,9 @@
-from .brevio_yt import BrevioYT
-from ..auth.auth import LoginUser
+from .brevio_generate import BrevioGenerate
 from .url_yt import UrlYT
-from ..auth.auth  import RegisterUser
+from .brevio_yt import BrevioYT
 
 __all__ = [
-    "BrevioYT",
-    "LoginUser",
+    "BrevioGenerate",
     "UrlYT",
-    "RegisterUser"
+    "BrevioYT"
 ]

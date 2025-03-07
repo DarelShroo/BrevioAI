@@ -4,6 +4,8 @@ from .response_model import GenerateResponse
 from .response_model import TranscriptionResponse
 from .response_model import FolderResponse
 from .response_model import DownloadResponse
+from .prompt_config_model import PromptConfig
+from .summary_config_model import SummaryConfig
 
 __all__ = [
     "ConfigModel",
@@ -11,5 +13,7 @@ __all__ = [
     "GenerateResponse",
     "TranscriptionResponse",
     "FolderResponse",
-    "DownloadResponse"
+    "DownloadResponse",
+    "PromptConfig",
+    "SummaryConfig"
 ]

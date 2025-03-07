@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from backend.models.auth.auth import LoginUser, RecoveryPasswordOtp, RegisterUser, UserIdentity
+from ..models.auth.auth import LoginUser, RecoveryPasswordOtp, RegisterUser, UserIdentity
 from ..services.auth_service import AuthService
 from ..dependencies.auth_service_dependency import get_auth_service
 

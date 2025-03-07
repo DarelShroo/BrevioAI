@@ -1,20 +1,15 @@
 from datetime import timedelta
-from uuid import uuid1
-import uuid
-
 from pydantic import ValidationError
-from backend.brevio.constants.constants import Constants
-from backend.models.auth.auth import RecoveryPassword
-from backend.models.auth.auth import RecoveryPasswordOtp
-from backend.models.errors.auth_service_exception import AuthServiceException
-from backend.models.user.user_folder import UserFolder
-from backend.services.user_service import UserService
-from backend.utils import otp_utils
+from ..brevio.constants.constants import Constants
+from ..models.auth import RecoveryPassword, RecoveryPasswordOtp
+from ..models.errors import AuthServiceException
+from ..models.user import UserFolder
+from ..services.user_service import UserService
 from ..repositories.user_repository import UserRepository
 from ..utils.email_utils import isEmail
 from ..models.user.user import User
-from backend.models.auth.auth import LoginUser
-from backend.models.auth.auth import RegisterUser
+from ..models.auth.auth import LoginUser
+from ..models.auth.auth import RegisterUser
 from .token_service import TokenService
 from ..services.email_service import EmailService
 from fastapi import HTTPException, status
@@ -185,7 +180,7 @@ class AuthService:
                     status_code=400, detail="El código de recuperación es incorrecto.")
 
             self._user_service.change_password(
-                user.email, recovery_password_otp.new_password)
+                user.email, recovery_password_otp.password)
 
             EmailService(
                 user.email, "Confirmación de cambio de contraseña").send_password_changed_email()

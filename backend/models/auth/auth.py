@@ -31,6 +31,7 @@ class RegisterUser(AuthWithPassword):
 
 class RecoveryPasswordOtp(AuthWithPassword):
     email: EmailStr
+    password: str
     otp: int
 
 class UserIdentity(IdentityBase):

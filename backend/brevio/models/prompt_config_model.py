@@ -1,9 +1,7 @@
 # En prompt_config_model.py
 from pydantic import BaseModel, field_validator, Field
-from backend.brevio.enums.language import LanguageType
-from backend.brevio.enums.output_format_type import OutputFormatType
-from backend.brevio.enums.source_type import SourceType
-from backend.brevio.services.advanced_content_generator import AdvancedContentGenerator
+from ..enums import LanguageType, OutputFormatType, SourceType
+from ..services.advanced_content_generator import AdvancedContentGenerator
 
 class PromptConfig(BaseModel):
     category: str 

@@ -2,8 +2,8 @@ import logging
 import whisper
 from os import path
 from os.path import exists
-from backend.brevio.constants.constants import Constants
-from ..constants.transcription_messages import TranscriptionMessages
+from ..constants.constants import Constants
+from ..utils.utils import format_time
 from ..enums.language import LanguageType
 from ..managers.directory_manager import DirectoryManager
 
@@ -14,84 +14,69 @@ formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-
 class TranscriptionService:
-    _instance = None 
-    
+    _instance = None
+
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
             cls._instance = super(TranscriptionService, cls).__new__(cls)
-            logger.info("Creating new instance of TranscriptionService.")
+            logger.info("Creating new instance of TranscriptionService")
         else:
-            logger.info("Using existing instance of TranscriptionService.")
+            logger.debug("Reusing existing instance of TranscriptionService")
         return cls._instance
 
     def __init__(self):
         if not hasattr(self, '_directory_manager'):
             self._directory_manager = DirectoryManager()
-            logger.info("DirectoryManager initialized.")
+            logger.debug("DirectoryManager initialized")
+        self._format_time = format_time
 
-    def generate_transcription(self, audio_path, destination_path, language: LanguageType):
-        logger.info(f"Starting transcription process for audio file: {audio_path} with language: {language.value}.")
-        
+    def _validate_paths(self, audio_path: str, destination_path: str) -> None:
         if not exists(audio_path):
-            error_message = f"Audio file not found at the path: {audio_path}"
-            logger.error(error_message)
-            raise FileNotFoundError(error_message)
-        
+            error_msg = f"Audio file not found: {audio_path}"
+            logger.error(error_msg)
+            raise FileNotFoundError(error_msg)
         if not exists(destination_path):
-            error_message = f"Destination path does not exist: {destination_path}"
-            logger.error(error_message)
-            raise FileNotFoundError(error_message)
+            error_msg = f"Destination directory not found: {destination_path}"
+            logger.error(error_msg)
+            raise FileNotFoundError(error_msg)
+
+    def generate_transcription(self, audio_path: str, destination_path: str, language: LanguageType) -> str:
+        logger.info(f"Starting transcription for {audio_path} in {language.value}")
+
+        self._validate_paths(audio_path, destination_path)
 
         try:
-            logger.info("Loading Whisper model 'tiny'.")
+            logger.debug("Loading Whisper 'tiny' model")
             model = whisper.load_model("tiny")
-            logger.info("Whisper model loaded successfully.")
+            logger.debug("Whisper model loaded successfully")
 
-            logger.info(f"Transcribing audio file: {audio_path}.")
-            result = model.transcribe(audio_path)
-            logger.info("Transcription completed.")
+            logger.info(f"Transcribing audio: {audio_path}")
+            result = model.transcribe(audio_path, language=language.value)
+            logger.info("Transcription completed successfully")
 
-            def format_time(seconds):
-                hours = int(seconds // 3600)
-                minutes = int((seconds % 3600) // 60)
-                seconds = int(seconds % 60)
-                return f"[{hours:02d}:{minutes:02d}:{seconds:02d}]"
-
-            segments = result.get("segments", [])
-            transcription_text = ""
-            for segment in segments:
-                start_time = format_time(segment["start"])
-                text = segment["text"]
-                transcription_text += f"{start_time} {text}\n"
+            transcription_text = "\n".join(
+                f"{self._format_time(segment['start'])} {segment['text']}"
+                for segment in result.get("segments", [])
+            )
 
             transcription_path = path.join(destination_path, Constants.TRANSCRIPTION_FILE)
-            logger.info(f"Writing transcription to file: {transcription_path}.")
-
-            try:
-                with open(transcription_path, "w", encoding="utf-8") as file:
-                    file.write(transcription_text)
-                logger.info("Transcription file written successfully.")
-            except Exception as e:
-                logger.error(f"Error writing transcription file: {e}", exc_info=True)
-                raise IOError(f"Error al escribir el archivo de transcripción: {e}")
+            logger.debug(f"Writing transcription to {transcription_path}")
+            with open(transcription_path, "w", encoding="utf-8") as file:
+                file.write(transcription_text)
+            logger.info(f"Transcription written to {transcription_path}")
 
             transcription = self._directory_manager.read_transcription(transcription_path)
-            logger.info("Transcription read successfully from file.")
-
-            response_message = TranscriptionMessages.SUCCESS_TRANSCRIPTION_FILE_GENERATED.format(transcription_path)
-            logger.info(f"Transcription process completed successfully. {response_message}")
+            logger.debug("Transcription read successfully")
+            logger.info(f"Transcription process completed: {transcription_path}")
             return transcription
-        except whisper.exceptions.WhisperError as e:
-            logger.error(f"Whisper error during transcription: {e}", exc_info=True)
-            raise Exception(f"Error al transcribir con Whisper: {e}")
-        except FileNotFoundError as e:
-            logger.error(f"File not found: {e}", exc_info=True)
-            raise FileNotFoundError(f"Archivo no encontrado: {e}")
-        except PermissionError as e:
-            logger.error(f"Permission error: {e}", exc_info=True)
-            raise PermissionError(f"Error de permisos: {e}")
+        
+        except RuntimeError as e:
+            logger.error(f"Whisper transcription failed: {str(e)}", exc_info=True)
+            raise
+        except IOError as e:
+            logger.error(f"IO error during transcription: {str(e)}", exc_info=True)
+            raise
         except Exception as e:
-            logger.error(f"Unexpected error during transcription process: {e}", exc_info=True)
-            raise Exception(f"Error inesperado: {e}")
+            logger.error(f"Unexpected error in transcription: {str(e)}", exc_info=True)
+            raise

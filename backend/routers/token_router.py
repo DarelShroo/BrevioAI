@@ -19,5 +19,4 @@ class TokenRouter:
             except Exception as e:
                 return e
 
-
 token_router = TokenRouter().router

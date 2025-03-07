@@ -1,11 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from pydantic import EmailStr
 import random
-from backend.models.user.data_result import DataResult
-from backend.models.user.folder_entry import FolderEntry
-from backend.repositories.user_repository import UserRepository
-from ..models.user.user import User
+from ..models.user import DataResult, FolderEntry, User
+from ..repositories import UserRepository
 from fastapi import HTTPException, status
+
 
 class UserService:
     def __init__(self, user_repository: UserRepository):
@@ -71,7 +70,7 @@ class UserService:
                 )
 
             otp_code = str(random.randint(100000, 999999))
-            otp_expiration = datetime.utcnow() + timedelta(minutes=10)
+            otp_expiration = datetime.now(timezone.utc) + timedelta(minutes=10)
 
             self.user_repo.password_recovery_handshake(
                 email=email,
@@ -135,7 +134,7 @@ class UserService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error changing password: {str(e)}"
             )
-    
+
     def create_folder_entry(self, user_id: str, name: str = "") -> FolderEntry:
         try:
             user = self.user_repo.get_user_by_id(user_id)
@@ -160,17 +159,17 @@ class UserService:
     def create_data_result(self, user_id: str, folder_entry_id: str, result: DataResult) -> DataResult:
         try:
             user = self.user_repo.get_user_by_id(user_id)
-            
+
             folder_entries = {entry.id: entry for entry in user.folder.entries}
-            
+
             user_folder_entry = folder_entries.get(folder_entry_id)
-            
+
             if not user_folder_entry:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="FolderEntry not found"
                 )
-            
+
             user_folder_entry.results.append(result)
             self.user_repo.update_user(user)
             return result

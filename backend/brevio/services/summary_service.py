@@ -25,7 +25,6 @@ formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-
 class SummaryService:
     def __init__(self):
         logger.info("Initializing SummaryService for a new user.")
@@ -74,6 +73,7 @@ class SummaryService:
         if current_time - self.last_token_reset >= 60:
             self.token_bucket = self.tokens_per_minute
             self.last_token_reset = current_time
+            logger.info("Token bucket reset to maximum.")
 
     async def _check_token_limit(self, tokens_needed: int) -> bool:
         await self._update_token_bucket()
@@ -115,7 +115,7 @@ class SummaryService:
             return index, summary, tokens_used
         except Exception as e:
             logger.error(f"Error processing chunk {index}: {str(e)}")
-            return index, "", 0
+            raise
 
     async def process_chunks_in_groups(self, chunks: List[str], prompt: str) -> Tuple[str, int]:
         """Procesa los chunks en grupos concurrentes."""
@@ -159,9 +159,11 @@ class SummaryService:
                 continue
             func, args = await self.task_queue.get()
             try:
+                logger.info("Processing a queued task.")
                 await func(*args)
             except Exception as e:
                 logger.error(f"Error processing queued task: {str(e)}")
+                raise
             finally:
                 self.task_queue.task_done()
 
@@ -184,11 +186,7 @@ class SummaryService:
             return results
         except Exception as e:
             logger.error(f"Error during multiple document summary generation: {str(e)}", exc_info=True)
-            return [SummaryResponse(
-                success=False,
-                summary=f"Error occurred: {str(e)}",
-                message=SummaryMessages.ERROR_GENERATING_SUMMARY.format(str(e))
-            )]
+            raise
 
     async def _process_single_document(self, prompt: str, file_config: FileConfig) -> SummaryResponse:
         """Procesa un solo documento y genera su resumen."""
@@ -208,10 +206,9 @@ class SummaryService:
                 else:
                     raise ValueError(f"Unsupported file type: {file_extension}")
 
-                # Ajuste del chunk_size para maximizar tokens de entrada
-                tokens_per_chunk = 3500  # ~3500 tokens de entrada
-                chars_per_token = 4      # Aproximación: 1 token ≈ 4 caracteres
-                chunk_size = tokens_per_chunk * chars_per_token  # 14000 caracteres
+                tokens_per_chunk = 3500
+                chars_per_token = 4
+                chunk_size = tokens_per_chunk * chars_per_token
                 overlap = self.chunk_overlap
 
                 chunks = self.chunk_text(full_text, chunk_size, overlap)
@@ -231,15 +228,10 @@ class SummaryService:
                 )
             except Exception as e:
                 logger.error(f"Error processing document {file_config.document_path}: {str(e)}", exc_info=True)
-                return SummaryResponse(
-                    success=False,
-                    summary=f"Error occurred: {str(e)}",
-                    message=SummaryMessages.ERROR_GENERATING_SUMMARY.format(str(e))
-                )
+                raise
 
     async def generate_summary(self, prompt_config: PromptConfig, file_configs: Optional[List[FileConfig]] = None, file_config: Optional[FileConfig] = None) -> List[SummaryResponse]:
-        """Genera resúmenes para transcripciones o documentos."""
-        logger.info(f"Starting summary generation.")
+        logger.info("Starting summary generation.")
         if file_config is not None and file_configs is None:
             file_configs = [file_config]
         elif file_configs is None:
@@ -261,14 +253,9 @@ class SummaryService:
             return results
         except Exception as e:
             logger.error(f"Error during summary generation: {str(e)}", exc_info=True)
-            return [SummaryResponse(
-                success=False,
-                summary=f"Error occurred: {str(e)}",
-                message=SummaryMessages.ERROR_GENERATING_SUMMARY.format(str(e))
-            )]
+            raise
 
     async def _process_single_transcription(self, prompt: str, file_config: FileConfig) -> SummaryResponse:
-        """Procesa una sola transcripción y genera su resumen."""
         logger.info(f"Processing transcription: {file_config.transcription_path}")
         async with self.file_semaphore:
             try:
@@ -276,7 +263,6 @@ class SummaryService:
                 transcription = self.directory_manager.read_transcription(file_config.transcription_path)
                 logger.info("Transcription read successfully.")
 
-                # Ajuste del chunk_size para maximizar tokens de entrada
                 tokens_per_chunk = 3500
                 chars_per_token = 4
                 chunk_size = tokens_per_chunk * chars_per_token
@@ -299,17 +285,12 @@ class SummaryService:
                 )
             except Exception as e:
                 logger.error(f"Error processing transcription {file_config.transcription_path}: {str(e)}", exc_info=True)
-                return SummaryResponse(
-                    success=False,
-                    summary=f"Error occurred: {str(e)}",
-                    message=SummaryMessages.ERROR_GENERATING_SUMMARY.format(str(e))
-                )
+                raise
 
     async def postprocess_summary(self, summary: str) -> str:
-        """Postprocesa el resumen para eliminar redundancias sin reducir contenido adicionalmente."""
         logger.info("Postprocessing summary to remove redundancies.")
         try:
-            tokens_needed = len(summary) // 4 + 500  # Aproximación de tokens
+            tokens_needed = len(summary) // 4 + 500
             if tokens_needed <= self.max_tokens:
                 if not await self._check_token_limit(tokens_needed):
                     await self.task_queue.put((self.postprocess_summary, [summary]))
@@ -331,26 +312,22 @@ class SummaryService:
                 self.token_bucket -= response.usage.total_tokens
                 return response.choices[0].message.content.strip()
 
-            # Si el resumen es demasiado largo, dividirlo en fragmentos
-            chunk_size = (self.max_tokens - 500) * 4  # Ajuste en caracteres
+            chunk_size = (self.max_tokens - 500) * 4
             chunks = self.chunk_text(summary, chunk_size, self.chunk_overlap)
             logger.info(f"Summary split into {len(chunks)} chunks for postprocessing.")
 
-            # Procesar fragmentos en grupos con la misma instrucción
             final_summary, total_tokens_used = await self.process_chunks_in_groups(chunks, 
                 "Eres un editor experto en mejorar textos. "
                 "Revisa el siguiente texto y elimina únicamente las redundancias o información repetida, "
                 "asegurando que el texto sea claro, cohesivo y bien organizado. "
                 "No resumas ni reduzcas el contenido adicionalmente; mantén todos los detalles importantes intactos."
             )
-            
             return final_summary
         except Exception as e:
             logger.error(f"Postprocessing failed: {str(e)}")
-            return summary
+            raise
 
     def _create_docx_version(self, md_path: str):
-        """Convierte el resumen de markdown a formato DOCX."""
         docx_path = md_path.replace('.md', '.docx')
         try:
             with open(md_path, 'r', encoding='utf-8') as f:
@@ -377,25 +354,27 @@ class SummaryService:
             logger.info(f"DOCX version created: {docx_path}")
         except Exception as e:
             logger.error(f"DOCX conversion failed: {str(e)}")
+            raise
 
     async def generate_summary_document(self, prompt_config: PromptConfig, file_config: FileConfig) -> SummaryResponse:
-        """Genera un resumen para un solo documento."""
         logger.info(f"Starting summary generation for single document: {file_config.document_path}")
-        results = await self.generate_summary_documents(prompt_config, [file_config])
-        if not results:
-            return SummaryResponse(
-                success=False,
-                summary="No results returned from summary generation",
-                message=SummaryMessages.ERROR_GENERATING_SUMMARY.format("Empty results")
-            )
-        return results[0]
-
+        try:
+            results = await self.generate_summary_documents(prompt_config, [file_config])
+            if not results:
+                raise ValueError("No results returned from summary generation")
+            return results[0]
+        except Exception as e:
+            logger.error(f"Error generating summary for document: {str(e)}")
+            raise
 
 async def process_user_summaries(user_id: int, prompt_config: PromptConfig, file_configs: List[FileConfig]):
-    """Función auxiliar para procesar resúmenes de un usuario."""
     service = SummaryService()
     await service.start()
     logger.info(f"User {user_id} starting summary generation.")
-    results = await service.generate_summary_documents(prompt_config, file_configs)
-    for result in results:
-        logger.info(f"User {user_id} summary: {result.summary[:50]}...")
+    try:
+        results = await service.generate_summary_documents(prompt_config, file_configs)
+        for result in results:
+            logger.info(f"User {user_id} summary: {result.summary[:50]}...")
+    except Exception as e:
+        logger.error(f"Error processing summaries for user {user_id}: {str(e)}")
+        raise

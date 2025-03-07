@@ -1,9 +1,9 @@
 from ..constants.constants import Constants 
-from ..constants.type_messages import TypeMessages
-from ..enums.language import LanguageType
-from ..enums.model import ModelType
+from ..enums import LanguageType, ModelType
 from dotenv import load_dotenv
-from os import path, getenv
+from os import getenv
+
+
 class ConfigModel:
     def __init__(self, url: str = None, content: str = None, model: ModelType = None, language: LanguageType= None):
         self._url = url
