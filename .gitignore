@@ -66,3 +66,5 @@ venv/
 ENV/
 env/
 .venv/
+
+backend/audios/

@@ -1,35 +1,22 @@
-# brevio_generate.py
-
-from pydantic import BaseModel, field_validator, HttpUrl, FilePath
+# En brevio_generate_model.py
+from pydantic import BaseModel, HttpUrl, FilePath, model_validator
 from typing import List, Optional
-
-from backend.brevio.enums.content import ContentType
-from backend.brevio.enums.language import LanguageType
-from backend.brevio.enums.model import ModelType
+from backend.brevio.models.prompt_config_model import PromptConfig
+from backend.brevio.models.summary_config_model import SummaryConfig
 
 class MediaEntry(BaseModel):
     url: Optional[HttpUrl] = None
     path: Optional[FilePath] = None
 
+    @model_validator(mode='after')
+    def validate_media(self) -> 'MediaEntry':
+        if not self.url and not self.path:
+            raise ValueError("Se requiere 'url' o 'path'")
+        return self
+
 class BaseBrevioGenerate(BaseModel):
-    language: LanguageType
-    model: ModelType
-    content: ContentType
-
-    @field_validator('language', 'model', 'content', mode='before')
-    def convert_enum(cls, value, info):
-        enum_type = cls.model_fields[info.field_name].annotation
-
-        if isinstance(value, str):
-            try:
-                return enum_type[value.upper()]
-            except KeyError:
-                raise ValueError(f"Invalid {info.field_name}: {value}")
-        
-        return value
+    summary_config: SummaryConfig
+    prompt_config: PromptConfig
 
 class BrevioGenerate(BaseBrevioGenerate):
     data: List[MediaEntry]
-
-class BrevioGenerateContent(BaseBrevioGenerate):
-    pass

@@ -2,6 +2,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import os
+from fastapi import HTTPException, status
 
 class EmailService:
     def __init__(self, email_to, subject):
@@ -112,7 +113,6 @@ class EmailService:
 <html>
 <head>
   <style>
-    /* Estilos generales */
     body {{
       background-color: #f4f4f4;
       margin: 0;
@@ -192,89 +192,95 @@ class EmailService:
 
         self.send_email()
 
+    def send_password_changed_email(self):
+        texto_plano = "Tu contraseña ha sido cambiada exitosamente. Si no realizaste este cambio, por favor contacta con nuestro soporte."
+        html = """\
+<html>
+<head>
+  <style>
+    body {{
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+    }}
+    .email-container {{
+      width: 100%;
+      margin: 0;
+      background-color: #ffffff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }}
+    .header {{
+      background: linear-gradient(135deg, #073642, #002B36);
+      padding: 20px;
+      text-align: center;
+    }}
+    .header h1 {{
+      margin: 0;
+      color: #ffffff;
+      font-size: 24px;
+      font-weight: normal;
+    }}
+    .content {{
+      padding: 20px;
+      color: #333333;
+      line-height: 1.6;
+    }}
+    .content p {{
+      margin: 0 0 15px;
+      font-size: 16px;
+    }}
+    .footer {{
+      background-color: #f4f4f4;
+      text-align: center;
+      padding: 15px;
+      font-size: 14px;
+      color: #777777;
+      border-top: 1px solid #e0e0e0;
+    }}
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="header">
+      <h1>Contraseña Actualizada</h1>
+    </div>
+    <div class="content">
+      <p>Hola,</p>
+      <p><strong>Tu contraseña ha sido cambiada exitosamente.</strong></p>
+      <p>Si no realizaste este cambio, por favor contacta inmediatamente con nuestro soporte.</p>
+    </div>
+    <div class="footer">
+      <p>© 2025 Brevio. Todos los derechos reservados.</p>
+    </div>
+  </div>
+</body>
+</html>
+        """
+        parte_texto = MIMEText(texto_plano, "plain")
+        parte_html = MIMEText(html, "html")
+        self.message.attach(parte_texto)
+        self.message.attach(parte_html)
+
+        self.send_email()
+
     def send_email(self):
         try:
             with smtplib.SMTP("smtp.gmail.com", 587) as servidor:
                 servidor.starttls()
                 servidor.login(self.email_from, self.password)
-                servidor.sendmail(self.email_from, self.email_to,
-                                  self.message.as_string())
+                servidor.sendmail(self.email_from, self.email_to, self.message.as_string())
             print("Correo enviado exitosamente.")
+        except smtplib.SMTPException as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error en el envío del correo: {str(e)}"
+            )
         except Exception as e:
-            print(f"Error al enviar el correo: {e}")
-
-    def send_password_changed_email(self):
-      texto_plano = "Tu contraseña ha sido cambiada exitosamente. Si no realizaste este cambio, por favor contacta con nuestro soporte."
-      html = """\
-  <html>
-  <head>
-    <style>
-      /* Estilos generales */
-      body {{
-        background-color: #f4f4f4;
-        margin: 0;
-        padding: 0;
-        font-family: Arial, sans-serif;
-      }}
-      .email-container {{
-        width: 100%;
-        margin: 0;
-        background-color: #ffffff;
-        border: 1px solid #e0e0e0;
-        border-radius: 8px;
-        overflow: hidden;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-      }}
-      .header {{
-        background: linear-gradient(135deg, #073642, #002B36);
-        padding: 20px;
-        text-align: center;
-      }}
-      .header h1 {{
-        margin: 0;
-        color: #ffffff;
-        font-size: 24px;
-        font-weight: normal;
-      }}
-      .content {{
-        padding: 20px;
-        color: #333333;
-        line-height: 1.6;
-      }}
-      .content p {{
-        margin: 0 0 15px;
-        font-size: 16px;
-      }}
-      .footer {{
-        background-color: #f4f4f4;
-        text-align: center;
-        padding: 15px;
-        font-size: 14px;
-        color: #777777;
-        border-top: 1px solid #e0e0e0;
-      }}
-    </style>
-  </head>
-  <body>
-    <div class="email-container">
-      <div class="header">
-        <h1>Contraseña Actualizada</h1>
-      </div>
-      <div class="content">
-        <p>Hola,</p>
-        <p><strong>Tu contraseña ha sido cambiada exitosamente.</strong></p>
-        <p>Si no realizaste este cambio, por favor contacta inmediatamente con nuestro soporte.</p>
-      </div>
-      <div class="footer">
-        <p>© 2025 Brevio. Todos los derechos reservados.</p>
-      </div>
-    </div>
-  </body>
-  </html>
-      """
-      parte_texto = MIMEText(texto_plano, "plain")
-      parte_html = MIMEText(html, "html")
-      self.message.attach(parte_texto)
-      self.message.attach(parte_html)
-
-      self.send_email()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error inesperado al enviar el correo: {str(e)}"
+            )

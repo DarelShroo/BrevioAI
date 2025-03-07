@@ -1,213 +1,245 @@
+# Usamos la librería googletrans para la traducción
+from googletrans import Translator
+
+
 class AdvancedContentGenerator:
     TEMPLATES = {
-        # Núcleo Base
         'base': {
             'structure': [
-                "## Título Principal",
-                "### Contexto",
-                "### Elementos Clave",
-                "### Detalles Relevantes",
-                "### Aplicaciones Prácticas"
+                "## Main Title",
+                "### Context",
+                "### Key Elements",
+                "### Relevant Details",
+                "### Practical Applications"
             ],
             'rules': [
-                "Excluir contenido promocional",
-                "Evitar jerga innecesaria",
-                "Priorizar información verificable"
+                "Exclude promotional content",
+                "Avoid unnecessary jargon",
+                "Prioritize verifiable information"
             ]
         },
-        
-        # Especializaciones por Categoría
+
         'programming': {
             'sections': {
-                'code_examples': "### Ejemplos de Implementación",
-                'best_practices': "### Patrones Recomendados",
-                'debugging_tips': "### Errores Comunes",
-                'compatibility': "### Compatibilidad y Dependencias",
-                'performance': "### Consideraciones de Rendimiento"
+                'code_examples': "### Code Examples",
+                'best_practices': "### Recommended Patterns",
+                'debugging_tips': "### Common Errors",
+                'compatibility': "### Compatibility and Dependencies",
+                'performance': "### Performance Considerations"
             },
             'styles': {
-                'tutorial': {"tono": "Didáctico", "elementos": ["code_examples", "debugging_tips"]},
-                'api_docs': {"tono": "Técnico", "elementos": ["compatibility", "best_practices"]},
-                'optimization': {"tono": "Analítico", "elementos": ["performance", "code_examples"]}
+                'tutorial': {"tone": "Didactic", "elements": ["code_examples", "debugging_tips"]},
+                'api_docs': {"tone": "Technical", "elements": ["compatibility", "best_practices"]},
+                'optimization': {"tone": "Analytical", "elements": ["performance", "code_examples"]}
             },
             'rules': [
-                "Incluir versiones de frameworks/lenguajes",
-                "Especificar requisitos de sistema cuando sea necesario"
+                "Include versions of frameworks/languages",
+                "Specify system requirements when necessary"
             ]
         },
-        
+
         'business': {
             'sections': {
-                'kpi_analysis': "### Análisis de Métricas",
-                'swot': "### Análisis SWOT",
-                'decision_points': "### Puntos de Decisión Clave",
-                'market_context': "### Contexto de Mercado",
-                'stakeholders': "### Impacto en Stakeholders",
-                'risk_assessment': "### Evaluación de Riesgos"
+                'kpi_analysis': "### KPI Analysis",
+                'swot': "### SWOT Analysis",
+                'decision_points': "### Key Decision Points",
+                'market_context': "### Market Context",
+                'stakeholders': "### Stakeholder Impact",
+                'risk_assessment': "### Risk Assessment"
             },
             'styles': {
-                'executive': {"tono": "Concisa", "elementos": ["kpi_analysis", "decision_points"]},
-                'investor': {"tono": "Persuasivo", "elementos": ["market_context", "swot"]},
-                'internal': {"tono": "Directivo", "elementos": ["stakeholders", "risk_assessment"]}
+                'executive': {"tone": "Concise", "elements": ["kpi_analysis", "decision_points"]},
+                'investor': {"tone": "Persuasive", "elements": ["market_context", "swot"]},
+                'internal': {"tone": "Direct", "elements": ["stakeholders", "risk_assessment"]}
             },
             'rules': [
-                "Incluir comparativas con competidores clave",
-                "Destacar tendencias históricas relevantes"
+                "Include comparisons with key competitors",
+                "Highlight relevant historical trends"
             ]
         },
-        
+
         'journalism': {
             'sections': {
-                '5w': "### Contexto (5W)",
-                'sources': "### Fuentes Verificadas",
-                'timeline': "### Cronología de Eventos",
-                'impact': "### Impacto Social/Económico",
-                'reactions': "### Reacciones Oficiales",
-                'background': "### Antecedentes Históricos"
+                '5w': "### Context (5W)",
+                'sources': "### Verified Sources",
+                'timeline': "### Event Timeline",
+                'impact': "### Social/Economic Impact",
+                'reactions': "### Official Reactions",
+                'background': "### Historical Background"
             },
             'styles': {
-                'breaking_news': {"tono": "Urgente", "elementos": ["5w", "timeline"]},
-                'investigative': {"tono": "Profundo", "elementos": ["sources", "background"]},
-                'analysis': {"tono": "Interpretativo", "elementos": ["impact", "reactions"]}
+                'breaking_news': {"tone": "Urgent", "elements": ["5w", "timeline"]},
+                'investigative': {"tone": "In-Depth", "elements": ["sources", "background"]},
+                'analysis': {"tone": "Interpretative", "elements": ["impact", "reactions"]}
             },
             'rules': [
-                "Contrastar fuentes oficiales y alternativas",
-                "Evitar especulaciones sin fundamento"
+                "Contrast official and alternative sources",
+                "Avoid baseless speculation"
             ]
         },
-        
+
         'science': {
             'sections': {
-                'methodology': "### Metodología",
-                'findings': "### Hallazgos Principales",
-                'limitations': "### Limitaciones del Estudio",
-                'implications': "### Implicaciones Científicas",
-                'future_research': "### Investigación Futura"
+                'methodology': "### Methodology",
+                'findings': "### Key Findings",
+                'limitations': "### Study Limitations",
+                'implications': "### Scientific Implications",
+                'future_research': "### Future Research"
             },
             'styles': {
-                'academic': {"tono": "Formal", "elementos": ["methodology", "limitations"]},
-                'educational': {"tono": "Accesible", "elementos": ["findings", "implications"]},
-                'research': {"tono": "Técnico", "elementos": ["methodology", "future_research"]}
+                'academic': {"tone": "Formal", "elements": ["methodology", "limitations"]},
+                'educational': {"tone": "Accessible", "elements": ["findings", "implications"]},
+                'research': {"tone": "Technical", "elements": ["methodology", "future_research"]}
             },
             'rules': [
-                "Citar referencias académicas siguiendo estándar APA/MLA",
-                "Distinguir entre correlación y causalidad"
+                "Cite academic references following APA/MLA standards",
+                "Distinguish between correlation and causality"
             ]
         },
-        
+
         'medical': {
             'sections': {
-                'diagnosis': "### Diagnóstico",
-                'treatment': "### Opciones de Tratamiento",
-                'prevention': "### Medidas Preventivas",
-                'research': "### Investigaciones Recientes",
-                'patient_info': "### Información para Pacientes"
+                'diagnosis': "### Diagnosis",
+                'treatment': "### Treatment Options",
+                'prevention': "### Preventive Measures",
+                'research': "### Recent Research",
+                'patient_info': "### Patient Information"
             },
             'styles': {
-                'clinical': {"tono": "Profesional", "elementos": ["diagnosis", "treatment"]},
-                'patient': {"tono": "Informativo", "elementos": ["prevention", "patient_info"]},
-                'research': {"tono": "Científico", "elementos": ["research", "diagnosis"]}
+                'clinical': {"tone": "Professional", "elements": ["diagnosis", "treatment"]},
+                'patient': {"tone": "Informative", "elements": ["prevention", "patient_info"]},
+                'research': {"tone": "Scientific", "elements": ["research", "diagnosis"]}
             },
             'rules': [
-                "Incluir disclaimers médicos apropiados",
-                "Referenciar guías clínicas actualizadas"
+                "Include appropriate medical disclaimers",
+                "Reference updated clinical guidelines"
+            ]
+        },
+        'book_summary': {
+            'sections': {
+                'core_concepts': "### Conceptos Fundamentales",
+                'key_tools': "### Herramientas Clave",
+                'practical_use_cases': "### Casos de Uso Prácticos",
+                'main_lessons': "### Lecciones Principales",
+                'best_practices': "### Buenas Prácticas"
+            },
+            'styles': {
+                'executive': {
+                    "tone": "Directo y Accionable",
+                    "elements": ["core_concepts", "main_lessons"]
+                },
+                'developer': {
+                    "tone": "Técnico sin Jerga",
+                    "elements": ["key_tools", "practical_use_cases"]
+                }
+            },
+            'rules': [
+                "Máximo 5 puntos por sección",
+                "Evitar detalles redundantes",
+                "Priorizar ejemplos aplicables",
+                "Usar viñetas, no párrafos largos",
+                "Incluir comparaciones clave (ej: asyncio vs hilos)"
             ]
         }
     }
-    
-    def generate_prompt(self, category, style, output_format='markdown', lang='es', source_type=None):
+
+    async def generate_prompt(self, category, style, output_format='markdown', lang='en', source_type=None):
         if category not in self.TEMPLATES:
-            raise ValueError(f"Categoría '{category}' no encontrada. Opciones disponibles: {', '.join(self.TEMPLATES.keys())}")
-        
+            raise ValueError(
+                f"Category '{category}' not found. Available options: {', '.join(self.TEMPLATES.keys())}")
+
         base = self.TEMPLATES['base']
         spec = self.TEMPLATES.get(category, {})
-        
+
         if style not in spec.get('styles', {}):
-            raise ValueError(f"Estilo '{style}' no encontrado para categoría '{category}'. Opciones disponibles: {', '.join(spec.get('styles', {}).keys())}")
-            
+            raise ValueError(
+                f"Style '{style}' not found for category '{category}'. Available options: {', '.join(spec.get('styles', {}).keys())}")
+
         style_info = spec['styles'][style]
-        
+
         prompt = [
-            f"# Generador de Resumen: {category.replace('_', ' ').title()} - {style.replace('_', ' ').title()}",
-            f"Genera un resumen en {output_format.upper()} para contenido de {category.replace('_', ' ').title()}",
-            f"**Estilo requerido**: {style.replace('_', ' ').title()} ({style_info['tono']})",
+            f"# Summary Generator: {category.replace('_', ' ').title()} - {style.replace('_', ' ').title()}",
+            f"Generate a summary in {output_format.upper()} format for content of {category.replace('_', ' ').title()}",
+            f"**Required style**: {style.replace('_', ' ').title()} ({style_info['tone']})",
             "",
-            "**Instrucciones especiales**:"
+            "**Special Instructions**:"
         ]
-        
+
         all_rules = base['rules'] + spec.get('rules', [])
         prompt.extend([f"- {rule}" for rule in all_rules])
-        
+
         prompt.append("")
-        prompt.append("**Estructura requerida**:")
-        
+        prompt.append("**Required Structure**:")
+
         sections = base['structure'].copy()
-        if 'sections' in spec and 'elementos' in style_info:
-            for elemento in style_info['elementos']:
-                if elemento in spec['sections']:
-                    sections.append(spec['sections'][elemento])
-        
+        if 'sections' in spec and 'elements' in style_info:
+            for element in style_info['elements']:
+                if element in spec['sections']:
+                    sections.append(spec['sections'][element])
+
         formatted_sections = []
         for section in sections:
             if output_format == 'markdown':
-                # Mantener el formato markdown pero ajustar niveles si es necesario
                 header_level = section.count('#')
                 content = section.split(' ', header_level)[-1]
                 formatted_sections.append(f"{'#' * header_level} {content}")
             elif output_format == 'html':
-                # Convertir a formato HTML
                 header_level = section.count('#')
                 content = section.split(' ', header_level)[-1]
-                formatted_sections.append(f"<h{header_level}>{content}</h{header_level}>")
+                formatted_sections.append(
+                    f"<h{header_level}>{content}</h{header_level}>")
             elif output_format == 'json':
-                # Formato para representación JSON
                 header_level = section.count('#')
                 content = section.split(' ', header_level)[-1]
-                formatted_sections.append(f'"section_{len(formatted_sections)}": "{content}"')
-            else:  # texto plano u otros
-                # Simplificar a texto plano
+                formatted_sections.append(
+                    f'"section_{len(formatted_sections)}": "{content}"')
+            else:
                 content = section.split(' ', section.count('#'))[-1]
                 formatted_sections.append(f"{content.upper()}")
-        
-        # Añadir secciones formateadas
+
         if output_format == 'json':
             prompt.append("```json\n{")
-            prompt.extend([f"  {section}," for section in formatted_sections[:-1]])
+            prompt.extend(
+                [f"  {section}," for section in formatted_sections[:-1]])
             prompt.append(f"  {formatted_sections[-1]}\n}}\n```")
         else:
             prompt.extend(formatted_sections)
-        
-        # Consideraciones especiales según el tipo de fuente
+
         prompt.append("")
-        prompt.append("**Consideraciones especiales**:")
-        
+        prompt.append("**Special Considerations**:")
+
         source_considerations = {
-            'video': "- Video: Incluir timeline con marcas de tiempo (00:00 - 00:00)",
-            'pdf': "- PDF: Referenciar secciones/páginas clave con números de página",
-            'audio': "- Audio: Destacar citas textuales relevantes con timestamp",
-            'web': "- Web: Incluir enlaces a fuentes adicionales relevantes",
-            None: "- Adaptar al formato de la fuente original"
+            'video': "- Video: Include timeline with timestamps (00:00 - 00:00)",
+            'pdf': "- PDF: Reference key sections/pages with page numbers",
+            'audio': "- Audio: Highlight relevant quotes with timestamps",
+            'web': "- Web: Include links to relevant additional sources",
+            None: "- Adapt to the format of the original source"
         }
-        
+
         if source_type:
-            prompt.append(source_considerations.get(source_type, source_considerations[None]))
+            prompt.append(source_considerations.get(
+                source_type, source_considerations[None]))
         else:
             for src_type, consideration in source_considerations.items():
                 if src_type is not None:
                     prompt.append(consideration)
-        
-        prompt.append(f"- Traducción completa al {lang} manteniendo tecnicismos originales")
-        
+
+        prompt.append(
+            f"- Full translation to {lang} maintaining original technical terms")
+
         prompt.append("")
-        prompt.append("**Metadatos**:")
-        prompt.append(f"- Categoría: {category}")
-        prompt.append(f"- Estilo: {style}")
-        prompt.append(f"- Formato: {output_format}")
-        prompt.append(f"- Idioma: {lang}")
+        prompt.append("**Metadata**:")
+        prompt.append(f"- Category: {category}")
+        prompt.append(f"- Style: {style}")
+        prompt.append(f"- Format: {output_format}")
+        prompt.append(f"- Language: {lang}")
         if source_type:
-            prompt.append(f"- Tipo de fuente: {source_type}")
-        
-        return '\n'.join(prompt)
+            prompt.append(f"- Source type: {source_type}")
+
+        translator = Translator()
+        translated_prompt = await translator.translate('\n'.join(prompt), dest=lang)
+
+        return translated_prompt.text
 
     def get_available_templates(self):
         summary = {}
@@ -215,17 +247,26 @@ class AdvancedContentGenerator:
             if category != 'base':
                 summary[category] = list(data.get('styles', {}).keys())
         return summary
-        
+
     def add_custom_template(self, category, sections, styles, rules=None):
         if category in self.TEMPLATES:
-            raise ValueError(f"La categoría '{category}' ya existe. Use otro nombre o actualice la existente.")
-            
+            raise ValueError(
+                f"The category '{category}' already exists. Use a different name or update the existing one.")
+
         self.TEMPLATES[category] = {
             'sections': sections,
             'styles': styles
         }
-        
+
         if rules:
             self.TEMPLATES[category]['rules'] = rules
-            
-        return f"Plantilla '{category}' creada con éxito con {len(sections)} secciones y {len(styles)} estilos."
+
+        return f"Template '{category}' successfully created with {len(sections)} sections and {len(styles)} styles."
+
+    def get_all_category_style_combinations(self):
+        combinations = []
+        templates = self.get_available_templates()
+        for category, styles in templates.items():
+            for style in styles:
+                combinations.append((category, style))
+        return combinations

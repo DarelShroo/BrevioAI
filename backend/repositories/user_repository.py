@@ -1,7 +1,6 @@
 from typing import Optional
 from bson import ObjectId
 from pymongo import ReturnDocument
-
 from backend.utils.data_mapper import generate_obj_if_data_exist
 from ..models.user.user import User
 from pymongo.database import Database
@@ -9,7 +8,6 @@ from pydantic import EmailStr
 from ..utils.password_utils import hash_password
 from pymongo.errors import PyMongoError
 from bson.errors import InvalidId
-
 
 class UserRepository:
     def __init__(self, db: Database):
@@ -21,26 +19,46 @@ class UserRepository:
             user_dict = self.collection.find_one({"_id": ObjectId(id)})
             return generate_obj_if_data_exist(user_dict, User)
         except InvalidId as e:
-            raise ValueError(
-                f"The following error occurred when getting the user: {e}")
+            raise ValueError(f"Invalid ID format: {id}. Error: {str(e)}")
+        except PyMongoError as e:
+            raise RuntimeError(f"Database error when fetching user by ID: {str(e)}")
+        except Exception as e:
+            raise RuntimeError(f"Unexpected error occurred when fetching user by ID: {str(e)}")
 
     def get_user_by_field(self, field: str, value: str) -> Optional[User]:
         try:
             user_dict = self.collection.find_one({field: value})
             return generate_obj_if_data_exist(user_dict, User)
         except PyMongoError as e:
-            raise RuntimeError(f"The following error occurred: {e}")
+            raise RuntimeError(f"Database error when fetching user by field '{field}': {str(e)}")
+        except Exception as e:
+            raise RuntimeError(f"Unexpected error occurred when fetching user by field '{field}': {str(e)}")
 
     def password_recovery_handshake(self, email: EmailStr, user: User) -> Optional[User]:
-        user_dict = self.collection.find_one_and_update({"email": email}, {"$set": user},
-                                                        return_document=ReturnDocument.AFTER)
-        return generate_obj_if_data_exist(user_dict, User)
+        try:
+            user_dict = self.collection.find_one_and_update(
+                {"email": email}, {"$set": user.to_dict()},
+                return_document=ReturnDocument.AFTER
+            )
+            return generate_obj_if_data_exist(user_dict, User)
+        except PyMongoError as e:
+            raise RuntimeError(f"Database error during password recovery handshake: {str(e)}")
+        except Exception as e:
+            raise RuntimeError(f"Unexpected error occurred during password recovery handshake: {str(e)}")
 
     def change_password(self, email: EmailStr, password: str) -> Optional[User]:
-        user_dict = self.collection.find_one_and_update({"email": email}, {
-                                                        "$set": {"password": hash_password(password), "exp": 0, "otp": None}},
-                                                        return_document=ReturnDocument.AFTER)
-        return generate_obj_if_data_exist(user_dict, User)
+        try:
+            user_dict = self.collection.find_one_and_update(
+                {"email": email}, {
+                    "$set": {"password": hash_password(password), "exp": 0, "otp": None}
+                },
+                return_document=ReturnDocument.AFTER
+            )
+            return generate_obj_if_data_exist(user_dict, User)
+        except PyMongoError as e:
+            raise RuntimeError(f"Database error when changing password for email {email}: {str(e)}")
+        except Exception as e:
+            raise RuntimeError(f"Unexpected error occurred when changing password for email {email}: {str(e)}")
 
     def create_user(self, user: User) -> User:
         try:
@@ -49,18 +67,23 @@ class UserRepository:
             user_dict["_id"] = inserted_id
             return User(**user_dict)
         except PyMongoError as e:
-            raise RuntimeError(f"Error when creating user: {e}")
+            raise RuntimeError(f"Database error when creating user: {str(e)}")
+        except Exception as e:
+            raise RuntimeError(f"Unexpected error occurred when creating user: {str(e)}")
 
     def update_user(self, user: User) -> Optional[User]:
         try:
             user_id = ObjectId(user.id) if ObjectId.is_valid(user.id) else None
             if not user_id:
-                raise ValueError("Invalid user id")
-            user_dict_updated = self.collection.find_one_and_update({"_id" : user_id}, {
-                "$set": user.to_dict()},
-                return_document=ReturnDocument.AFTER)
-            
+                raise ValueError("Invalid user ID format.")
+            user_dict_updated = self.collection.find_one_and_update(
+                {"_id": user_id}, {"$set": user.to_dict()},
+                return_document=ReturnDocument.AFTER
+            )
+            if not user_dict_updated:
+                raise ValueError(f"User with ID {user.id} not found for update.")
             return generate_obj_if_data_exist(user_dict_updated, User)
-        
         except (PyMongoError, ValueError) as e:
-            raise RuntimeError(f"Error when updating user: {e}")
+            raise RuntimeError(f"Error when updating user with ID {user.id}: {str(e)}")
+        except Exception as e:
+            raise RuntimeError(f"Unexpected error occurred when updating user with ID {user.id}: {str(e)}")

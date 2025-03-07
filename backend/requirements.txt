@@ -14,3 +14,4 @@ yt-dlp
 python-multipart
 beautifulsoup4
 PyPDF2
+googletrans

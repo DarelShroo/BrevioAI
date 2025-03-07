@@ -1,23 +1,25 @@
 import asyncio
 import os
-import time
-import threading
 import logging
+import time
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
-from backend.brevio.models.summary_config_model import SummaryConfig
-from ..constants.summary_messages import SummaryMessages
-from ..enums.role import RoleType
-from ..managers.directory_manager import DirectoryManager
-from ..models.response_model import SummaryResponse
+from backend.brevio.models.file_config_model import FileConfig
+from backend.brevio.models.prompt_config_model import PromptConfig
+from backend.brevio.constants.summary_messages import SummaryMessages
+from backend.brevio.enums.role import RoleType
+from backend.brevio.managers.directory_manager import DirectoryManager
+from backend.brevio.models.response_model import SummaryResponse
 import markdown
 from docx import Document
 from bs4 import BeautifulSoup
 from .advanced_content_generator import AdvancedContentGenerator
+from typing import List, Tuple, Optional
+
 load_dotenv()
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 handler = logging.StreamHandler()
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
@@ -25,338 +27,375 @@ logger.addHandler(handler)
 
 
 class SummaryService:
-    _instance = None
-    _lock = threading.Lock()
-
-    def __new__(cls):
-        if not cls._instance:
-            with cls._lock:
-                if not cls._instance:
-                    cls._instance = super(SummaryService, cls).__new__(cls)
-                    cls._instance._initialize()
-                    logger.info("Created new instance of SummaryService.")
-        else:
-            logger.info("Using existing instance of SummaryService.")
-        return cls._instance
-
-    def _initialize(self):
-        logger.info("Initializing SummaryService.")
+    def __init__(self):
+        logger.info("Initializing SummaryService for a new user.")
         self.directory_manager = DirectoryManager()
-        logger.info("DirectoryManager initialized.")
-        self.max_tokens = int(os.getenv("MAX_TOKENS"))
-        self.tokens_per_minute = int(os.getenv("TOKENS_PER_MINUTE"))
-        self.temperature = float(os.getenv("TEMPERATURE"))
-        logger.debug(f"Configuration: max_tokens={self.max_tokens}, tokens_per_minute={self.tokens_per_minute}, "
-                     f"temperature={self.temperature}")
+        self.max_tokens = int(os.getenv("MAX_TOKENS", 4096))
+        self.max_tokens_per_chunk = int(os.getenv("MAX_TOKENS_PER_CHUNK", 3500))
+        self.tokens_per_minute = int(os.getenv("TOKENS_PER_MINUTE", 100000))
+        self.temperature = float(os.getenv("TEMPERATURE", 0.7))
+        self.chunk_overlap = 100
+        self.max_concurrent_chunks = 20
+        self.max_concurrent_files = 5
+        self.max_concurrent_requests = 20
+        self.token_bucket = self.tokens_per_minute
+        self.last_token_reset = time.time()
+        self.task_queue = asyncio.Queue()
+        self.running = False 
 
         api_key = os.getenv("DEEPSEEK_API_KEY")
         if not api_key:
-            logger.error(
-                "DEEPSEEK_API_KEY is not set in the environment variables.")
-            raise ValueError("DEEPSEEK_API_KEY not set")
-        self.client = AsyncOpenAI(
-            api_key=api_key, base_url="https://api.deepseek.com")
-        logger.info("OpenAI client initialized.")
-        self.semaphore = asyncio.Semaphore(10)  # Control de concurrencia
+            logger.error("DEEPSEEK_API_KEY is not set.")
+            raise ValueError("API key not configured")
+        
+        self.client = AsyncOpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        self.semaphore = asyncio.Semaphore(self.max_concurrent_requests)
+        self.file_semaphore = asyncio.Semaphore(self.max_concurrent_files)
         self.generator = AdvancedContentGenerator()
 
-    def chunk_text(self, text, chunk_size):
-        logger.debug("Chunking text into pieces.")
-        return [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
+    async def start(self):
+        if not self.running:
+            self.running = True
+            asyncio.create_task(self._process_queue())
+            logger.info("SummaryService queue processor started.")
 
-    async def generate_summary_chunk(self, total_tokens_used, chunk, summary_config: SummaryConfig):
-        logger.info("Generating summary for a text chunk.")
-        if total_tokens_used + self.max_tokens > self.tokens_per_minute:
-            logger.info(SummaryMessages.WAITING)
-            # Nota: En un entorno async, podrías usar await asyncio.sleep(60)
-            time.sleep(60)
-            total_tokens_used = 0
+    def chunk_text(self, text: str, chunk_size: int, overlap: int) -> List[str]:
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = min(start + chunk_size, len(text))
+            chunks.append(text[start:end])
+            start = end - overlap if end - overlap > start else end
+        logger.debug(f"Text split into {len(chunks)} chunks with size {chunk_size} and overlap {overlap}.")
+        return chunks
 
-        generator = self.generator.generate_prompt(
-            category='journalism',
-            style='breaking_news',
-            output_format='html',
-            lang=summary_config.language.name,
-            source_type='video'
-        )
+    async def _update_token_bucket(self) -> None:
+        current_time = time.time()
+        if current_time - self.last_token_reset >= 60:
+            self.token_bucket = self.tokens_per_minute
+            self.last_token_reset = current_time
+
+    async def _check_token_limit(self, tokens_needed: int) -> bool:
+        await self._update_token_bucket()
+        if self.token_bucket >= tokens_needed:
+            return True
+        logger.warning(f"Token limit reached. Tokens needed: {tokens_needed}, available: {self.token_bucket}. Queuing task.")
+        return False
+
+    async def generate_summary_chunk(self, index: int, chunk: str, prompt: str, accumulated_summary: str) -> Tuple[int, str, int]:
+        """Genera un resumen para un chunk específico."""
         try:
-            logger.debug(
-                "Sending request to OpenAI API for summary generation.")
-            response = await self.client.chat.completions.create(  # Añadimos await aquí
-                model="deepseek-chat",  # summary_config.model.value,
-                messages=[
-                    {"role": RoleType.SYSTEM.value,
-                     "content": generator},
-                    {"role": RoleType.USER.value, "content": chunk}
-                ],
-                max_tokens=self.max_tokens,
-                temperature=self.temperature
+            truncated_summary = accumulated_summary[-2000:] if len(accumulated_summary) > 2000 else accumulated_summary
+            full_prompt = (
+                f"{prompt}\n\n"
+                f"Contexto previo del resumen: {truncated_summary}\n"
+                f"Instrucciones: Proporciona un resumen detallado del siguiente texto, integrando nueva información con el contexto previo de manera coherente. "
+                f"Incluye ejemplos, explicaciones y cualquier detalle que facilite el estudio del tema. "
+                f"Organiza el resumen en secciones o puntos clave para una mejor comprensión."
             )
-            logger.debug("Received response from OpenAI API.")
+
+            messages = [
+                {"role": RoleType.SYSTEM.value, "content": full_prompt},
+                {"role": RoleType.USER.value, "content": chunk}
+            ]
+
+            async with self.semaphore:
+                logger.debug(f"Sending request for chunk {index}")
+                response = await self.client.chat.completions.create(
+                    model="deepseek-chat",
+                    messages=messages,
+                    max_tokens=self.max_tokens,
+                    temperature=self.temperature
+                )
+
+            summary = response.choices[0].message.content.strip()
+            tokens_used = response.usage.total_tokens
+            self.token_bucket -= tokens_used
+            logger.info(f"Chunk {index} processed. Tokens used: {tokens_used}")
+            return index, summary, tokens_used
         except Exception as e:
-            logger.error(f"Error calling OpenAI API: {e}", exc_info=True)
-            raise
+            logger.error(f"Error processing chunk {index}: {str(e)}")
+            return index, "", 0
 
-        summary = response.choices[0].message.content.strip()
-        total_tokens_used += response.usage.total_tokens
-        logger.info(f"Chunk summary generated. Tokens used in this call: {response.usage.total_tokens}. "
-                    f"Total tokens used: {total_tokens_used}.")
-        return summary, total_tokens_used
+    async def process_chunks_in_groups(self, chunks: List[str], prompt: str) -> Tuple[str, int]:
+        """Procesa los chunks en grupos concurrentes."""
+        accumulated_summary = ""
+        total_tokens_used = 0
+        chunk_summaries = [None] * len(chunks)
 
-    def markdown_to_docx(self, md_file_path, docx_file_path):
-        logger.info(
-            f"Converting Markdown file '{md_file_path}' to DOCX file '{docx_file_path}'.")
-        try:
-            with open(md_file_path, 'r', encoding='utf-8') as md_file:
-                md_content = md_file.read()
-            logger.debug("Markdown file read successfully.")
+        for group_start in range(0, len(chunks), self.max_concurrent_chunks):
+            group_end = min(group_start + self.max_concurrent_chunks, len(chunks))
+            group_chunks = chunks[group_start:group_end]
+            group_indices = list(range(group_start, group_end))
 
-            html_content = markdown.markdown(md_content)
-            logger.debug("Converted Markdown to HTML.")
+            total_tokens_needed = sum(len(chunk) // 4 + 500 for chunk in group_chunks)  # Aproximación de tokens
+            if not await self._check_token_limit(total_tokens_needed):
+                await self.task_queue.put((self.process_chunks_in_groups, [chunks[group_start:], prompt]))
+                break
 
-            # Si el archivo DOCX ya existe, lo abrimos; si no, creamos uno nuevo
-            if os.path.exists(docx_file_path):
-                doc = Document(docx_file_path)
-                logger.info(
-                    f"Appending to existing DOCX file '{docx_file_path}'.")
-            else:
-                doc = Document()
-                logger.info(f"Creating new DOCX file '{docx_file_path}'.")
-
-            def add_html_to_docx(html):
-                soup = BeautifulSoup(html, 'html.parser')
-                for element in soup:
-                    if element.name == 'h1':
-                        doc.add_heading(element.text, level=1)
-                    elif element.name == 'h2':
-                        doc.add_heading(element.text, level=2)
-                    elif element.name == 'h3':
-                        doc.add_heading(element.text, level=3)
-                    elif element.name == 'p':
-                        doc.add_paragraph(element.text)
-                    elif element.name == 'ul':
-                        for li in element.find_all('li'):
-                            doc.add_paragraph(li.text, style='List Bullet')
-                logger.debug("HTML content added to DOCX document.")
-
-            add_html_to_docx(html_content)
-            doc.save(docx_file_path)
-            logger.info(f"Word file saved at '{docx_file_path}'.")
-        except Exception as e:
-            logger.error(
-                f"Error converting Markdown to Word: {e}", exc_info=True)
-            raise
-
-    async def generate_summary(self, summary_config: SummaryConfig):
-        logger.info("Starting summary generation process.")
-        try:
-            logger.info(
-                f"Validating transcription path: {summary_config.transcription_path}.")
-            self.directory_manager.validate_paths(
-                summary_config.transcription_path)
-
-            logger.info(
-                f"Reading transcription from: {summary_config.transcription_path}.")
-            transcription = self.directory_manager.read_transcription(
-                summary_config.transcription_path)
-            logger.info("Transcription read successfully.")
-
-            chunks = self.chunk_text(transcription, self.max_tokens)
-            logger.info(f"Text split into {len(chunks)} chunks.")
-
-            # Función asincrónica para procesar cada chunk, retornando su índice
-            async def process_chunk(index, chunk):
-                async with self.semaphore:  # Limitar llamadas concurrentes
-                    try:
-                        chunk_summary, tokens_used = await self.generate_summary_chunk(
-                            0,  # Valor inicial o variable adecuada para tokens
-                            chunk,
-                            summary_config
-                        )
-                        return index, chunk_summary, tokens_used
-                    except Exception as e:
-                        logger.error(
-                            f"Error procesando chunk {index}: {str(e)}")
-                        return index, "", 0
-
-            # Procesar todos los chunks concurrentemente, manteniendo el índice
-            tasks = [process_chunk(i, chunk) for i, chunk in enumerate(chunks)]
+            logger.info(f"Processing chunk group {group_start} to {group_end-1}")
+            tasks = [
+                self.generate_summary_chunk(index, chunk, prompt, accumulated_summary)
+                for index, chunk in zip(group_indices, group_chunks)
+            ]
             results = await asyncio.gather(*tasks)
 
-            # Ordenar los resultados por índice para conservar el orden original
             results.sort(key=lambda x: x[0])
-            # Separar los resultados
-            chunk_summaries = [result[1] for result in results]
-            tokens_used_list = [result[2] for result in results]
+            for index, chunk_summary, tokens_used in results:
+                chunk_summaries[index] = chunk_summary
+                total_tokens_used += tokens_used
 
-            # Combinar los resúmenes en el orden correcto
-            full_summary = "\n".join([cs.lstrip('\n')
-                                    for cs in chunk_summaries if cs])
-            total_tokens_used = sum(tokens_used_list)
+            group_summary = "\n".join(chunk_summary for _, chunk_summary, _ in results if chunk_summary)
+            accumulated_summary += "\n" + group_summary if accumulated_summary else group_summary
 
-            logger.info(
-                f"Writing summary to file: {summary_config.summary_path}.")
-            self.directory_manager.write_summary(
-                full_summary, summary_config.summary_path)
+        full_summary = "\n".join(summary for summary in chunk_summaries if summary).strip()
+        return full_summary, total_tokens_used
 
-            docx_path = summary_config.summary_path.replace('.md', '.docx')
-            logger.info(
-                f"Converting Markdown summary to DOCX file: {docx_path}.")
-            self.markdown_to_docx(summary_config.summary_path, docx_path)
+    async def _process_queue(self):
+        """Procesa tareas en la cola."""
+        while self.running:
+            if self.task_queue.empty():
+                await asyncio.sleep(1)
+                continue
+            func, args = await self.task_queue.get()
+            try:
+                await func(*args)
+            except Exception as e:
+                logger.error(f"Error processing queued task: {str(e)}")
+            finally:
+                self.task_queue.task_done()
 
-            logger.info("Summary generation process completed successfully.")
-            return SummaryResponse(
-                success=True,
-                summary=str(full_summary),
-                message=str(SummaryMessages.WRITE_SUMMARY.format(
-                    summary_config.summary_path))
+    async def generate_summary_documents(self, prompt_config: PromptConfig, file_configs: List[FileConfig]) -> List[SummaryResponse]:
+        """Genera resúmenes para múltiples documentos."""
+        logger.info(f"Starting summary generation for {len(file_configs)} documents.")
+        try:
+            prompt = await self.generator.generate_prompt(
+                category=prompt_config.category,
+                style=prompt_config.style,
+                output_format=prompt_config.format.value,
+                lang=prompt_config.language.name,
+                source_type=prompt_config.source.value
             )
+
+            tasks = [self._process_single_document(prompt, file_config) for file_config in file_configs]
+            results = await asyncio.gather(*tasks)
+
+            logger.info("All document summaries completed.")
+            return results
         except Exception as e:
-            logger.error(
-                f"Error during summary generation: {e}", exc_info=True)
-            return SummaryResponse(
+            logger.error(f"Error during multiple document summary generation: {str(e)}", exc_info=True)
+            return [SummaryResponse(
                 success=False,
                 summary=f"Error occurred: {str(e)}",
                 message=SummaryMessages.ERROR_GENERATING_SUMMARY.format(str(e))
-            )
-    async def generate_summary_pdf(self, summary_config: SummaryConfig):
-        logger.info("Starting PDF summary generation process.")
+            )]
+
+    async def _process_single_document(self, prompt: str, file_config: FileConfig) -> SummaryResponse:
+        """Procesa un solo documento y genera su resumen."""
+        logger.info(f"Processing document: {file_config.document_path}")
+        async with self.file_semaphore:
+            try:
+                self.directory_manager.validate_paths(file_config.document_path)
+                file_extension = file_config.document_path.split('.')[-1].lower()
+                logger.info(f"Detected file extension: {file_extension}")
+
+                if file_extension == "pdf":
+                    fragments = list(self.directory_manager.read_pdf(file_config.document_path))
+                    full_text = "\n".join(fragments)
+                elif file_extension == "docx":
+                    doc = Document(file_config.document_path)
+                    full_text = "\n".join([para.text for para in doc.paragraphs if para.text.strip()])
+                else:
+                    raise ValueError(f"Unsupported file type: {file_extension}")
+
+                # Ajuste del chunk_size para maximizar tokens de entrada
+                tokens_per_chunk = 3500  # ~3500 tokens de entrada
+                chars_per_token = 4      # Aproximación: 1 token ≈ 4 caracteres
+                chunk_size = tokens_per_chunk * chars_per_token  # 14000 caracteres
+                overlap = self.chunk_overlap
+
+                chunks = self.chunk_text(full_text, chunk_size, overlap)
+                logger.info(f"Document split into {len(chunks)} chunks of ~{tokens_per_chunk} tokens each.")
+
+                full_summary, total_tokens_used = await self.process_chunks_in_groups(chunks, prompt)
+                final_summary = await self.postprocess_summary(full_summary)
+
+                self.directory_manager.write_summary(final_summary, file_config.summary_path)
+                self._create_docx_version(file_config.summary_path)
+
+                logger.info(f"Summary for {file_config.document_path} completed. Total tokens used: {total_tokens_used}")
+                return SummaryResponse(
+                    success=True,
+                    summary=final_summary,
+                    message=SummaryMessages.WRITE_SUMMARY.format(file_config.summary_path)
+                )
+            except Exception as e:
+                logger.error(f"Error processing document {file_config.document_path}: {str(e)}", exc_info=True)
+                return SummaryResponse(
+                    success=False,
+                    summary=f"Error occurred: {str(e)}",
+                    message=SummaryMessages.ERROR_GENERATING_SUMMARY.format(str(e))
+                )
+
+    async def generate_summary(self, prompt_config: PromptConfig, file_configs: Optional[List[FileConfig]] = None, file_config: Optional[FileConfig] = None) -> List[SummaryResponse]:
+        """Genera resúmenes para transcripciones o documentos."""
+        logger.info(f"Starting summary generation.")
+        if file_config is not None and file_configs is None:
+            file_configs = [file_config]
+        elif file_configs is None:
+            raise ValueError("Debe proporcionar file_configs o file_config.")
+
         try:
-            self.directory_manager.validate_paths(summary_config.pdf_path)
-            logger.info(f"Reading PDF from: {summary_config.pdf_path}")
+            prompt = await self.generator.generate_prompt(
+                category=prompt_config.category,
+                style=prompt_config.style,
+                output_format=prompt_config.format.value,
+                lang=prompt_config.language.name,
+                source_type=prompt_config.source.value
+            )
 
-            # Leer el PDF y dividir en fragmentos
-            fragments = list(self.directory_manager.read_pdf(
-                summary_config.pdf_path))
-            all_chunks = []
-            for fragment in fragments:
-                chunks = self.chunk_text(fragment, self.max_tokens)
-                all_chunks.extend(chunks)
-            logger.info(f"Text split into {len(all_chunks)} chunks.")
-
-            # Función asincrónica para procesar cada chunk, retornando su índice
-            async def process_chunk(index, chunk):
-                async with self.semaphore:  # Limitar llamadas concurrentes
-                    try:
-                        chunk_summary, tokens_used = await self.generate_summary_chunk(
-                            0,  # Valor inicial o variable adecuada para tokens
-                            chunk,
-                            summary_config
-                        )
-                        return index, chunk_summary, tokens_used
-                    except Exception as e:
-                        logger.error(
-                            f"Error procesando chunk {index}: {str(e)}")
-                        return index, "", 0
-
-            # Procesar todos los chunks concurrentemente, manteniendo el índice
-            tasks = [process_chunk(i, chunk)
-                     for i, chunk in enumerate(all_chunks)]
+            tasks = [self._process_single_transcription(prompt, fc) for fc in file_configs]
             results = await asyncio.gather(*tasks)
 
-            # Ordenar los resultados por índice para conservar el orden original
-            results.sort(key=lambda x: x[0])
-            # Separar los resultados
-            chunk_summaries = [result[1] for result in results]
-            tokens_used_list = [result[2] for result in results]
-
-            # Combinar los resúmenes en el orden correcto
-            full_summary = "\n".join([cs.lstrip('\n')
-                                     for cs in chunk_summaries if cs])
-            total_tokens_used = sum(tokens_used_list)
-
-            logger.info(
-                f"Writing summary to file: {summary_config.summary_path}")
-            self.directory_manager.write_summary(
-                full_summary, summary_config.summary_path)
-
-            docx_path = summary_config.summary_path.replace('.md', '.docx')
-            logger.info(f"Converting Markdown summary to DOCX: {docx_path}")
-            self.markdown_to_docx(summary_config.summary_path, docx_path)
-
-            logger.info("PDF summary generation completed successfully.")
-            return SummaryResponse(
-                success=True,
-                summary=full_summary,
-                message=SummaryMessages.WRITE_SUMMARY.format(
-                    summary_config.summary_path)
-            )
+            logger.info("All summaries completed.")
+            return results
         except Exception as e:
-            logger.error(
-                f"Error during PDF summary generation: {e}", exc_info=True)
-            return SummaryResponse(
+            logger.error(f"Error during summary generation: {str(e)}", exc_info=True)
+            return [SummaryResponse(
                 success=False,
                 summary=f"Error occurred: {str(e)}",
                 message=SummaryMessages.ERROR_GENERATING_SUMMARY.format(str(e))
-            )
+            )]
 
-    async def generate_summary_docx(self, summary_config: SummaryConfig):
-        logger.info("Starting DOCX summary generation process.")
+    async def _process_single_transcription(self, prompt: str, file_config: FileConfig) -> SummaryResponse:
+        """Procesa una sola transcripción y genera su resumen."""
+        logger.info(f"Processing transcription: {file_config.transcription_path}")
+        async with self.file_semaphore:
+            try:
+                self.directory_manager.validate_paths(file_config.transcription_path)
+                transcription = self.directory_manager.read_transcription(file_config.transcription_path)
+                logger.info("Transcription read successfully.")
+
+                # Ajuste del chunk_size para maximizar tokens de entrada
+                tokens_per_chunk = 3500
+                chars_per_token = 4
+                chunk_size = tokens_per_chunk * chars_per_token
+                overlap = self.chunk_overlap
+
+                chunks = self.chunk_text(transcription, chunk_size, overlap)
+                logger.info(f"Text split into {len(chunks)} chunks of ~{tokens_per_chunk} tokens each.")
+
+                full_summary, total_tokens_used = await self.process_chunks_in_groups(chunks, prompt)
+                final_summary = await self.postprocess_summary(full_summary)
+
+                self.directory_manager.write_summary(final_summary, file_config.summary_path)
+                self._create_docx_version(file_config.summary_path)
+
+                logger.info(f"Summary for {file_config.transcription_path} completed. Total tokens used: {total_tokens_used}")
+                return SummaryResponse(
+                    success=True,
+                    summary=final_summary,
+                    message=SummaryMessages.WRITE_SUMMARY.format(file_config.summary_path)
+                )
+            except Exception as e:
+                logger.error(f"Error processing transcription {file_config.transcription_path}: {str(e)}", exc_info=True)
+                return SummaryResponse(
+                    success=False,
+                    summary=f"Error occurred: {str(e)}",
+                    message=SummaryMessages.ERROR_GENERATING_SUMMARY.format(str(e))
+                )
+
+    async def postprocess_summary(self, summary: str) -> str:
+        """Postprocesa el resumen para eliminar redundancias sin reducir contenido adicionalmente."""
+        logger.info("Postprocessing summary to remove redundancies.")
         try:
-            logger.info(f"Validating DOCX path: {summary_config.docx_path}")
-            self.directory_manager.validate_paths(summary_config.docx_path)
+            tokens_needed = len(summary) // 4 + 500  # Aproximación de tokens
+            if tokens_needed <= self.max_tokens:
+                if not await self._check_token_limit(tokens_needed):
+                    await self.task_queue.put((self.postprocess_summary, [summary]))
+                    return summary
+                response = await self.client.chat.completions.create(
+                    model="deepseek-chat",
+                    messages=[
+                        {"role": RoleType.SYSTEM.value, "content": "Eres un editor experto en mejorar textos."},
+                        {"role": RoleType.USER.value, "content": (
+                            "Revisa el siguiente resumen y elimina únicamente las redundancias o información repetida, "
+                            "asegurando que el texto sea claro, cohesivo y bien organizado. "
+                            "No resumas ni reduzcas el contenido adicionalmente; mantén todos los detalles importantes intactos."
+                            f"\n\n{summary}"
+                        )}
+                    ],
+                    max_tokens=self.max_tokens,
+                    temperature=self.temperature
+                )
+                self.token_bucket -= response.usage.total_tokens
+                return response.choices[0].message.content.strip()
 
-            logger.info(f"Reading DOCX from: {summary_config.docx_path}")
-            doc = Document(summary_config.docx_path)
-            full_text = "\n".join(
-                [para.text for para in doc.paragraphs if para.text.strip()])
+            # Si el resumen es demasiado largo, dividirlo en fragmentos
+            chunk_size = (self.max_tokens - 500) * 4  # Ajuste en caracteres
+            chunks = self.chunk_text(summary, chunk_size, self.chunk_overlap)
+            logger.info(f"Summary split into {len(chunks)} chunks for postprocessing.")
 
-            chunks = self.chunk_text(full_text, self.max_tokens)
-            logger.info(f"Text split into {len(chunks)} chunks.")
-
-            # Función para procesar cada chunk con control de concurrencia y retornar su índice
-            async def process_chunk(index, chunk):
-                async with self.semaphore:  # Limitar llamadas concurrentes
-                    try:
-                        response = await self.client.chat.completions.create(
-                            model="deepseek-chat",
-                            messages=[
-                                {"role": RoleType.SYSTEM.value,
-                                 "content": summary_config.content.value.format(summary_config.language.name)},
-                                {"role": RoleType.USER.value, "content": chunk}
-                            ],
-                            max_tokens=self.max_tokens,
-                            temperature=self.temperature
-                        )
-                        return index, response.choices[0].message.content.strip()
-                    except Exception as e:
-                        logger.error(
-                            f"Error procesando chunk {index}: {str(e)}")
-                        return index, ""
-
-            # Procesar todos los chunks concurrentemente, asignando índices para preservar el orden
-            tasks = [process_chunk(i, chunk) for i, chunk in enumerate(chunks)]
-            results = await asyncio.gather(*tasks)
-
-            # Ordenar los resultados por índice para conservar el orden original
-            results.sort(key=lambda x: x[0])
-            chunk_summaries = [result[1] for result in results]
-
-            # Combinar los resúmenes en el orden correcto
-            summary = "\n".join([cs.lstrip('\n')
-                                for cs in chunk_summaries if cs])
-
-            logger.info(
-                f"Writing summary to file: {summary_config.summary_path}")
-            self.directory_manager.write_summary(
-                summary, summary_config.summary_path)
-
-            docx_path = summary_config.summary_path.replace('.md', '.docx')
-            logger.info(f"Converting Markdown summary to DOCX: {docx_path}")
-            self.markdown_to_docx(summary_config.summary_path, docx_path)
-
-            logger.info("DOCX summary generation completed successfully.")
-            return SummaryResponse(
-                success=True,
-                summary=summary,
-                message=SummaryMessages.WRITE_SUMMARY.format(
-                    summary_config.summary_path)
+            # Procesar fragmentos en grupos con la misma instrucción
+            final_summary, total_tokens_used = await self.process_chunks_in_groups(chunks, 
+                "Eres un editor experto en mejorar textos. "
+                "Revisa el siguiente texto y elimina únicamente las redundancias o información repetida, "
+                "asegurando que el texto sea claro, cohesivo y bien organizado. "
+                "No resumas ni reduzcas el contenido adicionalmente; mantén todos los detalles importantes intactos."
             )
+            
+            return final_summary
         except Exception as e:
-            logger.error(
-                f"Error during DOCX summary generation: {e}", exc_info=True)
+            logger.error(f"Postprocessing failed: {str(e)}")
+            return summary
+
+    def _create_docx_version(self, md_path: str):
+        """Convierte el resumen de markdown a formato DOCX."""
+        docx_path = md_path.replace('.md', '.docx')
+        try:
+            with open(md_path, 'r', encoding='utf-8') as f:
+                md_content = f.read()
+
+            doc = Document()
+            html = markdown.markdown(md_content)
+            soup = BeautifulSoup(html, 'html.parser')
+
+            for element in soup:
+                if element.name in ['h1', 'h2', 'h3']:
+                    level = int(element.name[1])
+                    doc.add_heading(element.text, level=level)
+                elif element.name == 'p':
+                    doc.add_paragraph(element.text)
+                elif element.name == 'ul':
+                    for item in element.find_all('li'):
+                        doc.add_paragraph(item.text, style='List Bullet')
+                elif element.name == 'ol':
+                    for idx, item in enumerate(element.find_all('li')):
+                        doc.add_paragraph(f"{idx+1}. {item.text}", style='List Number')
+
+            doc.save(docx_path)
+            logger.info(f"DOCX version created: {docx_path}")
+        except Exception as e:
+            logger.error(f"DOCX conversion failed: {str(e)}")
+
+    async def generate_summary_document(self, prompt_config: PromptConfig, file_config: FileConfig) -> SummaryResponse:
+        """Genera un resumen para un solo documento."""
+        logger.info(f"Starting summary generation for single document: {file_config.document_path}")
+        results = await self.generate_summary_documents(prompt_config, [file_config])
+        if not results:
             return SummaryResponse(
                 success=False,
-                summary=f"Error occurred: {str(e)}",
-                message=SummaryMessages.ERROR_GENERATING_SUMMARY.format(str(e))
+                summary="No results returned from summary generation",
+                message=SummaryMessages.ERROR_GENERATING_SUMMARY.format("Empty results")
             )
+        return results[0]
+
+
+async def process_user_summaries(user_id: int, prompt_config: PromptConfig, file_configs: List[FileConfig]):
+    """Función auxiliar para procesar resúmenes de un usuario."""
+    service = SummaryService()
+    await service.start()
+    logger.info(f"User {user_id} starting summary generation.")
+    results = await service.generate_summary_documents(prompt_config, file_configs)
+    for result in results:
+        logger.info(f"User {user_id} summary: {result.summary[:50]}...")

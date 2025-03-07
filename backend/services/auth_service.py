@@ -1,17 +1,19 @@
 from datetime import timedelta
-import random
 from uuid import uuid1
 import uuid
+
+from pydantic import ValidationError
 from backend.brevio.constants.constants import Constants
 from backend.models.auth.auth import RecoveryPassword
-from backend.models.auth.auth  import RecoveryPasswordOtp
+from backend.models.auth.auth import RecoveryPasswordOtp
+from backend.models.errors.auth_service_exception import AuthServiceException
 from backend.models.user.user_folder import UserFolder
 from backend.services.user_service import UserService
 from backend.utils import otp_utils
 from ..repositories.user_repository import UserRepository
 from ..utils.email_utils import isEmail
 from ..models.user.user import User
-from backend.models.auth.auth  import LoginUser
+from backend.models.auth.auth import LoginUser
 from backend.models.auth.auth import RegisterUser
 from .token_service import TokenService
 from ..services.email_service import EmailService
@@ -30,124 +32,170 @@ class AuthService:
         self._user_repository = UserRepository(self._db)
         self._user_service = UserService(self._user_repository)
         self._token_service = token_service
-        self.directory_manager = DirectoryManager() 
+        self.directory_manager = DirectoryManager()
 
     async def login(self, user_login: LoginUser):
-        user = None
-        if isEmail(user_login.identity):
-            user = self._user_service.get_user_by_email(
-                user_login.identity)
-        else:
-            user = self._user_service.get_user_by_username(
-                user_login.identity)
+        try:
+            user = None
+            if isEmail(user_login.identity):
+                user = self._user_service.get_user_by_email(
+                    user_login.identity)
+            else:
+                user = self._user_service.get_user_by_username(
+                    user_login.identity)
 
-        if not user:
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Usuario no encontrado"
+                )
+            if not verify_password(user_login.password, user.password):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Contraseña incorrecta"
+                )
+
+            token = self._token_service.create_access_token({
+                "id": str(user.id),
+            }, timedelta(hours=1))
+
+            self._token_service.validate_access_token(token)
+
+            return {"username": user.username, "token": token}
+
+        except HTTPException as e:
+            raise e
+        except Exception as e:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Usuario no encontrado"
+                status_code=500,
+                detail=f"Error en el inicio de sesión: {str(e)}"
             )
-        if not verify_password(user_login.password, user.password):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Contraseña incorrecta"
-            )
-
-        token = self._token_service.create_access_token({
-            "id": str(user.id),
-        }, timedelta(hours=1))
-
-        self._token_service.validate_access_token(token)
-
-        return {"username": user.username, "token": token}
 
     async def register(self, user_register: RegisterUser):
-        hashed_password = hash_password(user_register.password.strip())
-        
-        user_folder = UserFolder()
+        try:
+            hashed_password = hash_password(user_register.password.strip())
 
-        user = User(
-            username = user_register.username,
-            email = user_register.email,
-            password = hashed_password,
-            folder = user_folder
-        )
+            user_folder = UserFolder()
 
-        user_db: User = self._user_service.create_user(user)
-        folder_response = self.create_folder(folder_id = user_db.folder.id)
+            user = User(
+                username=user_register.username,
+                email=user_register.email,
+                password=hashed_password,
+                folder=user_folder
+            )
 
-        token = self._token_service.create_access_token({
-            "id": str(user_db.id),
-        }, timedelta(hours=1))
+            try:
+                user_db: User = self._user_service.create_user(user)
+            except ValueError as e:
+                raise AuthServiceException(
+                    f"User already exists: {user_register.username}")
 
-        email_service = EmailService(user_db.email, f"Usuario {user_db.username} registrado en Brevio")
-        email_service.send_register_email()
+            folder_response = None
+            dest_folder = path.join(
+                ".", Constants.DESTINATION_FOLDER, str(user_db.folder.id))
 
-        return {"folder_dest": folder_response, "token": token}
+            while not path.exists(dest_folder):
+                folder_response = self.directory_manager.createFolder(
+                    dest_folder)
 
-    def create_folder(self, folder_id):
-        result = None
-        dest_folder = path.join(
-                ".", Constants.DESTINATION_FOLDER, str(folder_id))
-        while not path.exists(dest_folder):
-            result = self.directory_manager.createFolder(dest_folder)
-        return result
+            token = self._token_service.create_access_token({
+                "id": str(user_db.id),
+            }, timedelta(hours=1))
+
+            email_service = EmailService(
+                user_db.email, f"Usuario {user_db.username} registrado en Brevio")
+            email_service.send_register_email()
+
+            return {"folder_dest": folder_response, "token": token}
+
+        except AuthServiceException as e:
+            raise HTTPException(
+                status_code=400, detail=f"Error al registrar usuario: {str(e)}")
+
+        except ValidationError as e:
+            raise HTTPException(
+                status_code=422, detail=f"Error de validación: {str(e)}")
+        except HTTPException as e:
+            raise e
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"Error inesperado: {str(e)}")
 
     async def password_recovery_handshake(self, recovery_password_user: RecoveryPassword):
-        user = None
+        try:
+            user = None
 
-        if isEmail(recovery_password_user.identity):
-            user = self._user_service.get_user_by_email(
-                recovery_password_user.identity) 
-        else:
-            user = self._user_service.get_user_by_username(
-                recovery_password_user.identity)
+            if isEmail(recovery_password_user.identity):
+                user = self._user_service.get_user_by_email(
+                    recovery_password_user.identity)
+            else:
+                user = self._user_service.get_user_by_username(
+                    recovery_password_user.identity)
 
-        if not user:
+            if not user:
+                raise HTTPException(
+                    status_code=404, detail="Usuario no encontrado."
+                )
+
+            now = datetime.now()
+
+            if "otp" not in user or "exp" not in user or user["exp"] < int(now.timestamp()):
+                otp = OTPUtils.generate_otp()
+                new_time = now + timedelta(minutes=10)
+
+                update_user = {"otp": otp, "exp": int(new_time.timestamp())}
+
+                self._user_repository.password_recovery_handshake(
+                    user.email, update_user)
+
+                EmailService(
+                    user.email, "Recuperación de contraseña").send_recovery_password_email(otp)
+
+                return {"detail": "Código de recuperación enviado al correo electrónico."}
+
+            return {"detail": "OTP aún válido"}
+
+        except HTTPException as e:
+            raise e
+        except Exception as e:
             raise HTTPException(
-                status_code=404, detail="Usuario no encontrado.")
-
-        now = datetime.now()
-
-        if "otp" not in user or "exp" not in user or user["exp"] < int(now.timestamp()):
-            otp = OTPUtils.generate_otp()
-            new_time = now + timedelta(minutes=10)
-
-            update_user = {"otp": otp, "exp": int(new_time.timestamp())}
-
-            self._user_repository.password_recovery_handshake(
-                user.email, update_user)
-
-            EmailService(
-                user.email, "Recuperación de contraseña").send_recovery_password_email(otp)
-
-            return {"detail": "Código de recuperación enviado al correo electrónico."}
-
-        return {"detail": "OTP aún válido"}
-
-
+                status_code=500,
+                detail=f"Error en el proceso de recuperación de contraseña: {str(e)}"
+            )
 
     async def change_password(self, recovery_password_otp: RecoveryPasswordOtp):
-        user = None
+        try:
+            user = None
 
-        if isEmail(recovery_password_otp.email):
-            user = self._user_service.get_user_by_email(
-                recovery_password_otp.email)
+            if isEmail(recovery_password_otp.email):
+                user = self._user_service.get_user_by_email(
+                    recovery_password_otp.email)
 
-        if not user:
-            return HTTPException("Usuario no existe")
+            if not user:
+                raise HTTPException(
+                    status_code=404, detail="Usuario no existe")
 
-        if user.exp < int(datetime.now().timestamp()):
+            if user.exp < int(datetime.now().timestamp()):
+                raise HTTPException(
+                    status_code=400, detail="El código de recuperación ha expirado.")
+
+            if user.otp != recovery_password_otp.otp:
+                raise HTTPException(
+                    status_code=400, detail="El código de recuperación es incorrecto.")
+
+            self._user_service.change_password(
+                user.email, recovery_password_otp.new_password)
+
+            EmailService(
+                user.email, "Confirmación de cambio de contraseña").send_password_changed_email()
+
+            return {"detail": "Contraseña cambiada exitosamente."}
+
+        except HTTPException as e:
+            raise e
+        except Exception as e:
             raise HTTPException(
-                status_code=400, detail="El código de recuperación ha expirado.")
-
-        if user.otp!= recovery_password_otp.otp:
-            raise HTTPException(
-                status_code=400, detail="El código de recuperación es incorrecto.")
-
-        self._user_service.change_password(
-            user.email, user.password)
-
-        EmailService(
-            user.email, "confirmacion password modificado").send_password_changed_email()
-
-        return
+                status_code=500,
+                detail=f"Error al cambiar la contraseña: {str(e)}"
+            )

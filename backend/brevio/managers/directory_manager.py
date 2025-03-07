@@ -1,8 +1,6 @@
 import os
 import shutil
-
 from docx import Document
-
 from backend.brevio.services.pdf_service import PdfService
 from ..constants.directory_messages import DirectoryMessages
 from ..constants.summary_messages import SummaryMessages
@@ -16,54 +14,38 @@ class DirectoryManager:
 
     def createFolder(self, path=None):
         try:
+            os.makedirs(path, exist_ok=True)
             if os.path.exists(path):
                 return FolderResponse(
-                    False, 
-                    DirectoryMessages.ERROR_FOLDER_ALREADY_EXISTS.format(path),
+                    True, 
+                    DirectoryMessages.SUCCESS_FOLDER_CREATED.format(path)
                 )
-            else:
-                os.makedirs(path, exist_ok=True)
-                if os.path.exists(path):
-                    return FolderResponse(
-                        True, 
-                        DirectoryMessages.SUCCESS_FOLDER_CREATED.format(path)
-                    )
-                    
-                print("No se ha creado la carpeta, revisa si la ruta es válida.")
-                raise Exception("La carpeta no se creó, la ruta puede ser incorrecta.")
+            raise RuntimeError("La carpeta no se creó, la ruta puede ser incorrecta.")
         except OSError as e:
-            return FolderResponse(
-                False, 
-                DirectoryMessages.ERROR_FAILED_TO_CREATE_FOLDER.format(path, e)
-            
-        )
+            raise OSError(f"Error al crear la carpeta: {e}")
+        except Exception as e:
+            raise RuntimeError(f"Error inesperado al crear la carpeta: {str(e)}") from e
+        
     def deleteFolder(self):
         folder = self._config.dest_folder
         try:
             if not os.path.exists(folder):
-                return FolderResponse(
-                    False, 
-                    DirectoryMessages.ERROR_FOLDER_NOT_FOUND.format(folder)
-                )
+                raise FileNotFoundError(DirectoryMessages.ERROR_FOLDER_NOT_FOUND.format(folder))
             else:
                 shutil.rmtree(folder)
                 return FolderResponse(
                     True, 
-                    DirectoryMessages.SUCCES_DELETION.format(folder)
+                    DirectoryMessages.SUCCESS_DELETION.format(folder)
                 )
         except OSError as e:
-            return FolderResponse(
-                False, 
-                DirectoryMessages.ERROR_DELETION_FAILED.format(folder, e)
-            )
+            raise OSError(f"Error al eliminar la carpeta: {str(e)}") from e
+        except Exception as e:
+            raise RuntimeError(f"Error inesperado al eliminar la carpeta: {str(e)}") from e
 
     def deleteFile(self, file_path):
         try:
             if not os.path.exists(file_path):
-                return FolderResponse(
-                    False, 
-                    DirectoryMessages.ERROR_FILE_NOT_FOUND.format(file_path)
-                )
+                raise FileNotFoundError(DirectoryMessages.ERROR_FILE_NOT_FOUND.format(file_path))
             else:
                 os.remove(file_path)
                 return FolderResponse(
@@ -71,22 +53,15 @@ class DirectoryManager:
                     DirectoryMessages.SUCCESS_FILE_DELETED.format(file_path)
                 )
         except PermissionError:
-            return FolderResponse(
-                False, 
-                DirectoryMessages.ERROR_PERMISSION_DENIED.format(file_path)
-            )
+            raise PermissionError(DirectoryMessages.ERROR_PERMISSION_DENIED.format(file_path))
         except OSError as e:
-            return FolderResponse(
-                False, 
-                DirectoryMessages.ERROR_DELETION_FAILED.format(file_path, e)
-            )
+            raise OSError(f"Error al eliminar el archivo: {str(e)}") from e
+        except Exception as e:
+            raise RuntimeError(f"Error inesperado al eliminar el archivo: {str(e)}") from e
 
     def validate_paths(self, transcription_path):
         if not os.path.exists(transcription_path):
-            return FolderResponse(
-                False, 
-                SummaryMessages.ERROR_READING_TRANSCRIPTION.format(transcription_path)
-            )
+            raise FileNotFoundError(SummaryMessages.ERROR_READING_TRANSCRIPTION.format(transcription_path))
 
     def read_transcription(self, transcription_path):
         try:
@@ -94,23 +69,28 @@ class DirectoryManager:
                 transcription = file.read()
 
             if not transcription.strip():
-                return FolderResponse(
-                    False, 
-                    SummaryMessages.ERROR_EMPTY_TRANSCRIPTION
-                )
+                raise ValueError(SummaryMessages.ERROR_EMPTY_TRANSCRIPTION)
 
             return transcription
 
+        except FileNotFoundError:
+            raise FileNotFoundError(f"El archivo de transcripción no se encontró en la ruta: {transcription_path}")
+        except ValueError as e:
+            raise ValueError(f"Transcripción vacía: {str(e)}")
         except Exception as e:
-            return FolderResponse(
-                False, 
-                f"Error reading transcription: {str(e)}"
-            )
+            raise RuntimeError(f"Error al leer la transcripción: {str(e)}") from e
+
     def read_pdf(self, pdf_path):
-        return self._pdf_service.read_pdf_in_pieces(pdf_path)
+        try:
+            return self._pdf_service.read_pdf_in_pieces(pdf_path)
+        except Exception as e:
+            raise RuntimeError(f"Error al leer el archivo PDF: {str(e)}") from e
     
     def read_docx(self, docx_path):
-        return self.read_docx_in_pieces(docx_path)
+        try:
+            return self.read_docx_in_pieces(docx_path)
+        except Exception as e:
+            raise RuntimeError(f"Error al leer el archivo DOCX: {str(e)}") from e
     
     def read_docx_in_pieces(self, docx_path, paragraphs_per_chunk=50):
         try:
@@ -122,8 +102,7 @@ class DirectoryManager:
                 chunk_text = "\n".join(paragraphs[i:i + paragraphs_per_chunk])
                 yield chunk_text
         except Exception as e:
-            #logger.error(f"Error reading DOCX in pieces: {e}", exc_info=True)
-            raise
+            raise RuntimeError(f"Error al leer el archivo DOCX en trozos: {str(e)}") from e
 
     def write_summary(self, summary, summary_path):
         try:
@@ -131,6 +110,4 @@ class DirectoryManager:
                 file.write(summary)
                 file.write("\n")
         except Exception as e:
-            #logger.error(f"Error writing summary to {summary_path}: {e}", exc_info=True)
-            raise
-
+            raise RuntimeError(f"Error al escribir el resumen en {summary_path}: {str(e)}") from e

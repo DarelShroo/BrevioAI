@@ -1,11 +1,16 @@
 from typing import List
-from fastapi import APIRouter, Depends, BackgroundTasks, File, Form, UploadFile
-from pydantic import ValidationError
-from backend.models.brevio.brevio_generate import BrevioGenerate, BrevioGenerateContent
+from fastapi import APIRouter, Body, Depends, BackgroundTasks, File, Form, UploadFile
+from backend.brevio.enums.extension import ExtensionType
+from backend.brevio.enums.source_type import SourceType
+from backend.brevio.models.prompt_config_model import PromptConfig
+from backend.brevio.models.summary_config_model import SummaryConfig
+from backend.models.brevio.brevio_generate import BrevioGenerate
 from backend.models.brevio.url_yt import UrlYT
 from backend.services.brevio_service import BrevioService
+from ..utils.extension_validator import validate_file_extension
 from ..dependencies.api_key_dependency import verify_api_key
 from ..dependencies.user_dependency import get_current_user
+
 
 class BrevioRoutes:
     def __init__(self):
@@ -25,6 +30,10 @@ class BrevioRoutes:
         async def get_models(verify_api_key: str = Depends(verify_api_key)):
             return {"models": await self._brevio_service.get_models()}
 
+        @self.router.get("/categories-styles")
+        async def get_models(verify_api_key: str = Depends(verify_api_key)):
+            return {"catogories_styles": await self._brevio_service.get_all_category_style_combinations()}
+
         @self.router.post("/count-yt-videos")
         async def count_media_in_yt_playlist(request: UrlYT, verify_api_key: str = Depends(verify_api_key)):
             return await self._brevio_service.count_media_in_yt_playlist(request.url)
@@ -34,82 +43,80 @@ class BrevioRoutes:
             return await self._brevio_service.get_media_duration(request.url)
 
         @self.router.post("/summary-yt-playlist")
-        async def generate_summary_yt_playlist(brevio_generate_list: BrevioGenerate, background_tasks: BackgroundTasks, name: str = "", _current_user: str = Depends(get_current_user)):
-            background_tasks.add_task(
-                self._brevio_service.generate, brevio_generate_list, _current_user, name)
-            return {"message": "La generación de resúmenes se está procesando en segundo plano."}
-        
-        @self.router.post("/summary-media")
-        async def generate_summary_media(
-            background_tasks: BackgroundTasks,
-            language: str = Form(...),
-            model: str = Form(...),
-            content: str = Form(...),
-            files: List[UploadFile] = File(...),
+        async def generate_summary_yt_playlist(
+            brevio_generate: BrevioGenerate,
+            background_tasks: BackgroundTasks = BackgroundTasks(),
             _current_user: str = Depends(get_current_user)
         ):
-            files_data = []
-            for file in files:
-                file_content = await file.read()
-                files_data.append((file.filename, file_content))
-            
-            brevio_generate_content = BrevioGenerateContent(language=language, model=model, content=content)
-            
+            background_tasks.add_task(
+                self._brevio_service.generate, brevio_generate, _current_user)
+            return {"message": "La generación de resúmenes se está procesando en segundo plano."}
+
+        @self.router.post("/summary-media")
+        async def generate_summary_media(
+            files: List[UploadFile] = File(...),
+            language: str = Form(...),
+            model: str = Form(...),
+            category: str = Form(...),
+            style: str = Form(...),
+            format: str = Form(...),
+            background_tasks: BackgroundTasks = BackgroundTasks(),
+            _current_user: str = Depends(get_current_user)
+        ):
+            allowed_extensions = [
+                ExtensionType.MP3.value]
+
+            files_data = [
+                (file.filename, await file.read()) for file in files if validate_file_extension(file, allowed_extensions)
+            ]
+
+            summary_config = SummaryConfig(
+                model=model, category=category, style=style)
+            prompt_config = PromptConfig(
+                category=category, style=style, format=format, language=language, source=SourceType.PDF.value)
+
             background_tasks.add_task(
                 self._brevio_service.generate_summary_media_upload,
                 files_data,
                 _current_user,
-                brevio_generate_content
-            )
-            
-            return {"message": "La generación de resúmenes se está procesando en segundo plano."}
-        
-        @self.router.post("/summary-pdf")
-        async def generate_summary_pdf(
-            background_tasks: BackgroundTasks,
-            language: str = Form(...),
-            model: str = Form(...),
-            content: str = Form(...),
-            files: List[UploadFile] = File(...),
-            _current_user: str = Depends(get_current_user)
-            ):
-            
-            files_data = [(file.filename, await file.read()) for file in files]
-
-            brevio_generate_content = BrevioGenerateContent(language=language, model=model, content=content)
-
-            background_tasks.add_task(
-                self._brevio_service.generate_summary_pdf,
-                files_data,
-                _current_user,
-                brevio_generate_content
+                summary_config,
+                prompt_config
             )
 
             return {"message": "La generación de resúmenes se está procesando en segundo plano."}
-            
-        @self.router.post("/summary-docx")
-        async def generate_summary_docx(
-            background_tasks: BackgroundTasks,
+
+        @self.router.post("/summary-documents")
+        async def generate_summary_documents(
+            files: List[UploadFile] = File(...),
             language: str = Form(...),
             model: str = Form(...),
-            content: str = Form(...),
-            files: List[UploadFile] = File(...),
+            category: str = Form(...),
+            style: str = Form(...),
+            format: str = Form(...),
+            background_tasks: BackgroundTasks = BackgroundTasks(),
             _current_user: str = Depends(get_current_user)
         ):
-            files_data = [(file.filename, await file.read()) for file in files]
+            allowed_extensions = [
+                ExtensionType.DOCX.value, ExtensionType.PDF.value]
 
-            brevio_generate_content = BrevioGenerateContent(language=language, model=model, content=content)
+            files_data = [
+                (file.filename, await file.read()) for file in files if validate_file_extension(file, allowed_extensions)
+            ]
+
+            summary_config = SummaryConfig(
+                model=model, category=category, style=style)
+            prompt_config = PromptConfig(
+                category=category, style=style, format=format, language=language, source=SourceType.PDF.value)
 
             background_tasks.add_task(
-                self._brevio_service.generate_summary_docx,
+                self._brevio_service.generate_summary_documents,
                 files_data,
                 _current_user,
-                brevio_generate_content
+                summary_config,
+                prompt_config
             )
 
             return {"message": "La generación de resúmenes se está procesando en segundo plano."}
 
 
-
-        
 brevio_router = BrevioRoutes().router
