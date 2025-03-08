@@ -5,3 +5,4 @@ class SourceType(Enum):
     AUDIO = "audio"
     PDF = "pdf"
     WEB = "web"
+    TEXT = "text"

@@ -15,14 +15,15 @@ from .models.response_model import SummaryResponse, TranscriptionResponse
 from .constants.constants import Constants
 from os import listdir, path
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler()
-    ]
-)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.propagate = False
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
 environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 class Generate:

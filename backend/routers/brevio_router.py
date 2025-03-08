@@ -69,7 +69,7 @@ class BrevioRoutes:
             summary_config = SummaryConfig(
                 model=model, category=category, style=style)
             prompt_config = PromptConfig(
-                category=category, style=style, format=format, language=language, source=SourceType.PDF.value)
+                category=category, style=style, format=format, language=language, source=SourceType.VIDEO.value)
 
             background_tasks.add_task(
                 self._brevio_service.generate_summary_media_upload,
@@ -102,7 +102,7 @@ class BrevioRoutes:
             summary_config = SummaryConfig(
                 model=model, category=category, style=style)
             prompt_config = PromptConfig(
-                category=category, style=style, format=format, language=language, source=SourceType.PDF.value)
+                category=category, style=style, format=format, language=language, source=SourceType.TEXT.value)
 
             background_tasks.add_task(
                 self._brevio_service.generate_summary_documents,

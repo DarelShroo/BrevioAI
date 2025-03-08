@@ -1,267 +1,300 @@
-# Usamos la librería googletrans para la traducción
 from googletrans import Translator
-
+import asyncio
 
 class AdvancedContentGenerator:
     TEMPLATES = {
-        'base': {
-            'structure': [
-                "## Main Title",
-                "### Context",
-                "### Key Elements",
-                "### Relevant Details",
-                "### Practical Applications"
+        'simple_summary': {
+            'structures': {
+                'default': ["Direct summary without additional headings"]
+            },
+            'styles': {
+                'default': {"tone": "Neutral, adapted to context", "elements": [], "source_types": ["text", "video", "audio"]}
+            },
+            'rules': [
+                "Summarize concisely, removing redundancies",
+                "Preserve the original title if present, without modification, using its exact wording and format (e.g., # Title, ## Subtitle)",
+                "Adapt fully to the tone, intent, and implicit structure of the source content",
+                "Do not introduce titles, subtitles, or headings unless explicitly present in the original text",
+                "Maintain key examples or concepts in their original format (e.g., lists, code, italics)",
+                "Avoid subjective interpretations or unnecessary modifications",
+                "Produce a single, continuous block of text unless the original content specifies otherwise"
             ],
-            'rules': [
-                "Exclude promotional content",
-                "Avoid unnecessary jargon",
-                "Prioritize verifiable information"
-            ]
+            'needs': "Simplicity and fidelity to the original content"
         },
-
-        'programming': {
-            'sections': {
-                'code_examples': "### Code Examples",
-                'best_practices': "### Recommended Patterns",
-                'debugging_tips': "### Common Errors",
-                'compatibility': "### Compatibility and Dependencies",
-                'performance': "### Performance Considerations"
-            },
-            'styles': {
-                'tutorial': {"tone": "Didactic", "elements": ["code_examples", "debugging_tips"]},
-                'api_docs': {"tone": "Technical", "elements": ["compatibility", "best_practices"]},
-                'optimization': {"tone": "Analytical", "elements": ["performance", "code_examples"]}
-            },
-            'rules': [
-                "Include versions of frameworks/languages",
-                "Specify system requirements when necessary"
-            ]
-        },
-
-        'business': {
-            'sections': {
-                'kpi_analysis': "### KPI Analysis",
-                'swot': "### SWOT Analysis",
-                'decision_points': "### Key Decision Points",
-                'market_context': "### Market Context",
-                'stakeholders': "### Stakeholder Impact",
-                'risk_assessment': "### Risk Assessment"
-            },
-            'styles': {
-                'executive': {"tone": "Concise", "elements": ["kpi_analysis", "decision_points"]},
-                'investor': {"tone": "Persuasive", "elements": ["market_context", "swot"]},
-                'internal': {"tone": "Direct", "elements": ["stakeholders", "risk_assessment"]}
-            },
-            'rules': [
-                "Include comparisons with key competitors",
-                "Highlight relevant historical trends"
-            ]
-        },
-
         'journalism': {
-            'sections': {
-                '5w': "### Context (5W)",
-                'sources': "### Verified Sources",
-                'timeline': "### Event Timeline",
-                'impact': "### Social/Economic Impact",
-                'reactions': "### Official Reactions",
-                'background': "### Historical Background"
+            'structures': {
+                'chronicle': ["# [Event] Live", "- **[MM:SS]** Statement or key fact"],
+                'news_wire': ["[Date] - [Location] - Brief and direct summary"],
+                'analysis': ["## [Topic] In Depth", "### [Aspect]", "- Key point"]
             },
             'styles': {
-                'breaking_news': {"tone": "Urgent", "elements": ["5w", "timeline"]},
-                'investigative': {"tone": "In-Depth", "elements": ["sources", "background"]},
-                'analysis': {"tone": "Interpretative", "elements": ["impact", "reactions"]}
+                'chronicle': {"tone": "Narrative, urgent", "elements": ["timeline"], "source_types": ["video", "audio"]},
+                'news_wire': {"tone": "Direct, informative", "elements": [], "source_types": ["text", "video", "audio"]},
+                'analysis': {"tone": "Reflective, contextual", "elements": ["subsections"], "source_types": ["text"]}
             },
             'rules': [
-                "Contrast official and alternative sources",
-                "Avoid baseless speculation"
-            ]
+                "Include precise timestamps for chronicle",
+                "Cite sources if applicable",
+                "Avoid opinions in news wire"
+            ],
+            'needs': "Speed in news wire, detail in chronicle, context in analysis"
         },
-
-        'science': {
-            'sections': {
-                'methodology': "### Methodology",
-                'findings': "### Key Findings",
-                'limitations': "### Study Limitations",
-                'implications': "### Scientific Implications",
-                'future_research': "### Future Research"
+        'marketing': {
+            'structures': {
+                'highlights': ["# ✨ [Campaign] - Highlights", "🎯 **Key:** Value"],
+                'storytelling': ["**[Brand] - A Story:**", "Emotional narrative paragraph"],
+                'report': ["## [Campaign] - Results", "| **Metric** | **Goal** | **Actual** |"]
             },
             'styles': {
-                'academic': {"tone": "Formal", "elements": ["methodology", "limitations"]},
-                'educational': {"tone": "Accessible", "elements": ["findings", "implications"]},
-                'research': {"tone": "Technical", "elements": ["methodology", "future_research"]}
+                'highlights': {"tone": "Engaging, visual", "elements": ["emojis", "bullet_points"], "source_types": ["text", "video"]},
+                'storytelling': {"tone": "Emotional, immersive", "elements": ["narrative"], "source_types": ["text"]},
+                'report': {"tone": "Analytical, clear", "elements": ["table"], "source_types": ["text"]}
             },
             'rules': [
-                "Cite academic references following APA/MLA standards",
-                "Distinguish between correlation and causality"
-            ]
+                "Use engaging language for highlights and storytelling",
+                "Include KPIs in report",
+                "Avoid excessive technical terms"
+            ],
+            'needs': "Visual impact, emotional connection, actionable data"
         },
-
-        'medical': {
-            'sections': {
-                'diagnosis': "### Diagnosis",
-                'treatment': "### Treatment Options",
-                'prevention': "### Preventive Measures",
-                'research': "### Recent Research",
-                'patient_info': "### Patient Information"
+        'health': {
+            'structures': {
+                'report': ["**[Study/Treatment] - Clinical Report:**", "Concise technical paragraph"],
+                'summary': ["# 🩺 [Topic] - Summary", "📈 **Indicator:** Result", "| Week | Progress |"],
+                'case': ["**[Patient] - Clinical Case:**", "Detailed narrative"]
             },
             'styles': {
-                'clinical': {"tone": "Professional", "elements": ["diagnosis", "treatment"]},
-                'patient': {"tone": "Informative", "elements": ["prevention", "patient_info"]},
-                'research': {"tone": "Scientific", "elements": ["research", "diagnosis"]}
+                'report': {"tone": "Precise, professional", "elements": [], "source_types": ["text"]},
+                'summary': {"tone": "Visual, accessible", "elements": ["bullet_points", "table"], "source_types": ["text", "video"]},
+                'case': {"tone": "Narrative, clinical", "elements": ["narrative"], "source_types": ["text", "audio"]}
             },
             'rules': [
-                "Include appropriate medical disclaimers",
-                "Reference updated clinical guidelines"
-            ]
+                "Include quantitative data when possible",
+                "Maintain scientific rigor",
+                "Adjust language to the audience (technical or general)"
+            ],
+            'needs': "Clarity for doctors, accessibility for patients, precision in data"
         },
-        'book_summary': {
-            'sections': {
-                'core_concepts': "### Conceptos Fundamentales",
-                'key_tools': "### Herramientas Clave",
-                'practical_use_cases': "### Casos de Uso Prácticos",
-                'main_lessons': "### Lecciones Principales",
-                'best_practices': "### Buenas Prácticas"
+        'technology': {
+            'structures': {
+                'changelog': ["# [Version] - Update", "✨ **New Features:**", "- Feature", "🐛 **Fixes:**", "- Fix"],
+                'proposal': ["**[Project] - Technical Proposal:**", "Structured paragraph"],
+                'diagram': ["# [Process] - Flow", "```mermaid", "graph TD", "  A --> B", "```"]
             },
             'styles': {
-                'executive': {
-                    "tone": "Directo y Accionable",
-                    "elements": ["core_concepts", "main_lessons"]
-                },
-                'developer': {
-                    "tone": "Técnico sin Jerga",
-                    "elements": ["key_tools", "practical_use_cases"]
-                }
+                'changelog': {"tone": "Technical, concise", "elements": ["bullet_points"], "source_types": ["text"]},
+                'proposal': {"tone": "Persuasive, clear", "elements": [], "source_types": ["text"]},
+                'diagram': {"tone": "Visual, descriptive", "elements": ["mermaid"], "source_types": ["text", "video"]}
             },
             'rules': [
-                "Máximo 5 puntos por sección",
-                "Evitar detalles redundantes",
-                "Priorizar ejemplos aplicables",
-                "Usar viñetas, no párrafos largos",
-                "Incluir comparaciones clave (ej: asyncio vs hilos)"
-            ]
+                "Use specific technical terminology",
+                "Highlight benefits in proposals",
+                "Include clear flows in diagrams"
+            ],
+            'needs': "Quick documentation, persuasion for stakeholders, process clarity"
+        },
+        'education': {
+            'structures': {
+                'guide': ["# 📚 [Topic] - Guide", "## [Section]", "- **Concept:** Explanation"],
+                'quick_ref': ["**[Topic] - Quick Reference:**", "- Key point"],
+                'timeline': ["# 🎥 [Class] - Timeline", "- **[MM:SS]** Content"]
+            },
+            'styles': {
+                'guide': {"tone": "Educational, structured", "elements": ["subsections", "bullet_points"], "source_types": ["text"]},
+                'quick_ref': {"tone": "Concise, practical", "elements": ["bullet_points"], "source_types": ["text"]},
+                'timeline': {"tone": "Chronological, clear", "elements": ["timeline"], "source_types": ["video"]}
+            },
+            'rules': [
+                "Use practical examples",
+                "Avoid information overload",
+                "Align with learning objectives"
+            ],
+            'needs': "Ease of study, quick reference, video tracking"
+        },
+        'architecture': {
+            'structures': {
+                'chronicle': ["# 🏛️ [Project] - Chronicle", "- **[MM:SS]** Highlighted element"],
+                'report': ["**[Project] - Technical Report:**", "Paragraph with key details"],
+                'list': ["# [Project] - Details", "- **Aspect:** Description"]
+            },
+            'styles': {
+                'chronicle': {"tone": "Narrative, visual", "elements": ["timeline"], "source_types": ["video"]},
+                'report': {"tone": "Technical, detailed", "elements": [], "source_types": ["text"]},
+                'list': {"tone": "Descriptive, organized", "elements": ["bullet_points"], "source_types": ["text"]}
+            },
+            'rules': [
+                "Highlight innovation or sustainability",
+                "Include technical data if applicable",
+                "Be visually appealing"
+            ],
+            'needs': "Technical documentation, attractive presentation, video tracking"
+        },
+        'finance': {
+            'structures': {
+                'report': ["# 💰 [Period] - Report", "- **Indicator:** Value"],
+                'table': ["## [Period] - Summary", "| **Indicator** | **Value** |"],
+                'executive': ["**[Period] - Executive:**", "Brief paragraph"]
+            },
+            'styles': {
+                'report': {"tone": "Analytical, formal", "elements": ["bullet_points"], "source_types": ["text"]},
+                'table': {"tone": "Visual, concise", "elements": ["table"], "source_types": ["text"]},
+                'executive': {"tone": "Direct, executive", "elements": [], "source_types": ["text"]}
+            },
+            'rules': [
+                "Include clear figures",
+                "Avoid ambiguity",
+                "Guide decision-making"
+            ],
+            'needs': "Actionable data, visual synthesis, executive reports"
+        },
+        'tourism': {
+            'structures': {
+                'chronicle': ["# 🌍 [Destination] - Chronicle", "- **[MM:SS]** Initiative"],
+                'report': ["**[Destination] - Policies:**", "Formal paragraph"],
+                'list': ["# [Destination] - Initiatives", "- **Area:** Detail"]
+            },
+            'styles': {
+                'chronicle': {"tone": "Narrative, engaging", "elements": ["timeline"], "source_types": ["audio", "video"]},
+                'report': {"tone": "Formal, informative", "elements": [], "source_types": ["text"]},
+                'list': {"tone": "Descriptive, clear", "elements": ["bullet_points"], "source_types": ["text"]}
+            },
+            'rules': [
+                "Highlight sustainability or appeal",
+                "Include practical data",
+                "Avoid exaggerations"
+            ],
+            'needs': "Engaging promotion, useful information, clear policies"
         }
     }
 
-    async def generate_prompt(self, category, style, output_format='markdown', lang='en', source_type=None):
+    EXAMPLES = {
+        'simple_summary': {
+            'default': "The content describes economic measures announced on March 08, 2025, including tax reductions and credit lines."
+        },
+        'journalism': {
+            'chronicle': "# Debate Live\n- **[00:45]** Announcement of measures.\n- **[02:10]** Tax reduction.",
+            'news_wire': "[March 08, 2025] - Capital - President announces economic measures.",
+            'analysis': "## Tax Reform In Depth\n### Taxes\n- 10% reduction for SMEs."
+        },
+        'marketing': {
+            'highlights': "# ✨ EcoLife Launch - Highlights\n🎯 **Target:** Youth.\n📈 **Sales:** +15%.",
+            'storytelling': "**EcoLife - A Story:** A young woman finds purpose in sustainability.",
+            'report': "## EcoLife - Results\n| **Metric** | **Goal** | **Actual** |\n| Sales     | +15%    | +18%      |"
+        },
+        'health': {
+            'report': "**Treatment X - Clinical Report:** Reduces symptoms by 70% after 8 weeks.",
+            'summary': "# 🩺 Treatment X - Summary\n📈 **Efectiveness:** 70%.\n| Week | Progress |\n| 8    | 70%     |",
+            'case': "**Patient A - Clinical Case:** A 62-year-old man improves after 2 weeks."
+        },
+        'technology': {
+            'changelog': "# v3.0 - Update\n✨ **New Features:**\n- OCR.\n🐛 **Fixes:**\n- Export.",
+            'proposal': "**App X - Technical Proposal:** Integrate API for automation.",
+            'diagram': "# App Flow\n```mermaid\ngraph TD\n  A[Start] --> B[Process]\n```"
+        },
+        'education': {
+            'guide': "# 📚 Python - Guide\n## Basics\n- **Print:** Display text.",
+            'quick_ref': "**Python - Quick Reference:**\n- Print: Output.\n- If: Condition.",
+            'timeline': "# 🎥 Python Class - Timeline\n- **[01:00]** Intro to variables."
+        },
+        'architecture': {
+            'chronicle': "# 🏛️ Green Tower - Chronicle\n- **[01:15]** Sustainable materials.",
+            'report': "**Green Tower - Technical Report:** Design uses renewable energy.",
+            'list': "# Green Tower - Details\n- **Materials:** Recycled.\n- **Energy:** Solar."
+        },
+        'finance': {
+            'report': "# 💰 Q1 2025 - Report\n- **Revenue:** +5%.",
+            'table': "## Q1 2025 - Summary\n| **Indicator** | **Value** |\n| Revenue      | +5%      |",
+            'executive': "**Q1 2025 - Executive:** 5% growth due to technology."
+        },
+        'tourism': {
+            'chronicle': "# 🌍 Blue Beach - Chronicle\n- **[01:00]** Eco-tourism.",
+            'report': "**Blue Beach - Policies:** Promotes sustainability.",
+            'list': "# Blue Beach - Initiatives\n- **Ecology:** Less plastic."
+        }
+    }
+
+    async def generate_prompt(self, category, style, output_format='markdown', lang='en', source_type=None, content_length=None):
         if category not in self.TEMPLATES:
-            raise ValueError(
-                f"Category '{category}' not found. Available options: {', '.join(self.TEMPLATES.keys())}")
-
-        base = self.TEMPLATES['base']
-        spec = self.TEMPLATES.get(category, {})
-
-        if style not in spec.get('styles', {}):
-            raise ValueError(
-                f"Style '{style}' not found for category '{category}'. Available options: {', '.join(spec.get('styles', {}).keys())}")
-
+            raise ValueError(f"Category '{category}' not found: {', '.join(self.TEMPLATES.keys())}")
+        spec = self.TEMPLATES[category]
+        if style not in spec['styles']:
+            raise ValueError(f"Style '{style}' not valid for '{category}': {', '.join(spec['styles'].keys())}")
         style_info = spec['styles'][style]
 
+        if source_type and source_type not in style_info['source_types']:
+            raise ValueError(f"Source type '{source_type}' not supported for '{style}' in '{category}'.")
+
         prompt = [
-            f"# Summary Generator: {category.replace('_', ' ').title()} - {style.replace('_', ' ').title()}",
-            f"Generate a summary in {output_format.upper()} format for content of {category.replace('_', ' ').title()}",
-            f"**Required style**: {style.replace('_', ' ').title()} ({style_info['tone']})",
-            "",
-            "**Special Instructions**:"
+            f"# Prompt for {category.title()} - {style.title()}",
+            f"**Objective:** Generate content in {output_format.upper()} optimized for {category.title()}",
+            f"**Style:** {style.title()} ({style_info['tone']})",
+            f"**Key Needs:** {spec.get('needs', 'Adapt to context')}",
+            ""
         ]
 
-        all_rules = base['rules'] + spec.get('rules', [])
+        prompt.append("**Instructions**:")
+        all_rules = spec.get('rules', [])
         prompt.extend([f"- {rule}" for rule in all_rules])
 
-        prompt.append("")
-        prompt.append("**Required Structure**:")
+        if content_length:
+            prompt.append(f"- Summarize a {content_length}-page document comprehensively, capturing main themes, key points, and overall purpose in approximately 200-300 words.")
 
-        sections = base['structure'].copy()
-        if 'sections' in spec and 'elements' in style_info:
-            for element in style_info['elements']:
-                if element in spec['sections']:
-                    sections.append(spec['sections'][element])
-
-        formatted_sections = []
-        for section in sections:
+        prompt.append("\n**Expected Format**:")
+        structure = spec['structures'].get(style, ["Direct summary without additional headings"])
+        for line in structure:
             if output_format == 'markdown':
-                header_level = section.count('#')
-                content = section.split(' ', header_level)[-1]
-                formatted_sections.append(f"{'#' * header_level} {content}")
-            elif output_format == 'html':
-                header_level = section.count('#')
-                content = section.split(' ', header_level)[-1]
-                formatted_sections.append(
-                    f"<h{header_level}>{content}</h{header_level}>")
-            elif output_format == 'json':
-                header_level = section.count('#')
-                content = section.split(' ', header_level)[-1]
-                formatted_sections.append(
-                    f'"section_{len(formatted_sections)}": "{content}"')
-            else:
-                content = section.split(' ', section.count('#'))[-1]
-                formatted_sections.append(f"{content.upper()}")
+                prompt.append(line)
+            elif output_format == 'text':
+                prompt.append(line.lstrip('#* ').strip('*- ').upper())
 
-        if output_format == 'json':
-            prompt.append("```json\n{")
-            prompt.extend(
-                [f"  {section}," for section in formatted_sections[:-1]])
-            prompt.append(f"  {formatted_sections[-1]}\n}}\n```")
-        else:
-            prompt.extend(formatted_sections)
-
-        prompt.append("")
-        prompt.append("**Special Considerations**:")
-
-        source_considerations = {
-            'video': "- Video: Include timeline with timestamps (00:00 - 00:00)",
-            'pdf': "- PDF: Reference key sections/pages with page numbers",
-            'audio': "- Audio: Highlight relevant quotes with timestamps",
-            'web': "- Web: Include links to relevant additional sources",
-            None: "- Adapt to the format of the original source"
+        prompt.append("\n**Source Handling**:")
+        source_rules = {
+            'video': "- Use timestamps [MM:SS] for key events",
+            'audio': "- Include relevant quotes with timestamps if applicable",
+            'text': "- Summarize main ideas with references if applicable",
+            None: "- Adapt to the original content"
         }
+        prompt.append(source_rules.get(source_type, source_rules[None]))
 
-        if source_type:
-            prompt.append(source_considerations.get(
-                source_type, source_considerations[None]))
-        else:
-            for src_type, consideration in source_considerations.items():
-                if src_type is not None:
-                    prompt.append(consideration)
+        if category in self.EXAMPLES and style in self.EXAMPLES[category]:
+            prompt.append("\n**Example**:")
+            example = self.EXAMPLES[category][style]
+            if output_format == 'markdown':
+                prompt.append(f"```markdown\n{example}\n```")
+            else:
+                prompt.append(example.replace('#', '').replace('*', '').strip())
 
-        prompt.append(
-            f"- Full translation to {lang} maintaining original technical terms")
+        prompt_text = '\n'.join(prompt)
+        if lang != 'en':
+            translator = Translator()
+            try:
+                translated = await translator.translate(prompt_text, dest=lang)
+                prompt_text = translated.text
+            except Exception as e:
+                print(f"Translation error: {e}")
 
-        prompt.append("")
-        prompt.append("**Metadata**:")
-        prompt.append(f"- Category: {category}")
-        prompt.append(f"- Style: {style}")
-        prompt.append(f"- Format: {output_format}")
-        prompt.append(f"- Language: {lang}")
-        if source_type:
-            prompt.append(f"- Source type: {source_type}")
-
-        translator = Translator()
-        translated_prompt = await translator.translate('\n'.join(prompt), dest=lang)
-
-        return translated_prompt.text
+        return prompt_text
 
     def get_available_templates(self):
         summary = {}
         for category, data in self.TEMPLATES.items():
-            if category != 'base':
-                summary[category] = list(data.get('styles', {}).keys())
+            summary[category] = list(data.get('styles', {}).keys())
         return summary
 
-    def add_custom_template(self, category, sections, styles, rules=None):
+    def add_custom_template(self, category, structures, styles, rules=None, examples=None, needs=None):
         if category in self.TEMPLATES:
-            raise ValueError(
-                f"The category '{category}' already exists. Use a different name or update the existing one.")
-
+            raise ValueError(f"The category '{category}' already exists. Use a different name or update the existing one.")
         self.TEMPLATES[category] = {
-            'sections': sections,
+            'structures': structures,
             'styles': styles
         }
-
         if rules:
             self.TEMPLATES[category]['rules'] = rules
-
-        return f"Template '{category}' successfully created with {len(sections)} sections and {len(styles)} styles."
+        if examples:
+            self.EXAMPLES[category] = examples
+        if needs:
+            self.TEMPLATES[category]['needs'] = needs
+        return f"Template '{category}' successfully created with {len(structures)} structures and {len(styles)} styles."
 
     def get_all_category_style_combinations(self):
         combinations = []
