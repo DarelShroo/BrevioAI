@@ -8,6 +8,7 @@ from ..services.brevio_service import BrevioService
 from ..utils.extension_validator import validate_file_extension
 from ..dependencies import verify_api_key, get_current_user
 
+
 class BrevioRoutes:
     def __init__(self):
         self.router = APIRouter(
@@ -56,6 +57,7 @@ class BrevioRoutes:
             category: str = Form(...),
             style: str = Form(...),
             format: str = Form(...),
+            source_types: str = Form(...),
             background_tasks: BackgroundTasks = BackgroundTasks(),
             _current_user: str = Depends(get_current_user)
         ):
@@ -66,16 +68,19 @@ class BrevioRoutes:
                 (file.filename, await file.read()) for file in files if validate_file_extension(file, allowed_extensions)
             ]
 
-            summary_config = SummaryConfig(
-                model=model, category=category, style=style)
             prompt_config = PromptConfig(
-                category=category, style=style, format=format, language=language, source=SourceType.VIDEO.value)
+                model=model,
+                category=category,
+                style=style,
+                format=format,
+                language=language,
+                source_types=source_types
+            )
 
             background_tasks.add_task(
                 self._brevio_service.generate_summary_media_upload,
                 files_data,
                 _current_user,
-                summary_config,
                 prompt_config
             )
 
@@ -89,6 +94,7 @@ class BrevioRoutes:
             category: str = Form(...),
             style: str = Form(...),
             format: str = Form(...),
+            source_types: str = Form(...),
             background_tasks: BackgroundTasks = BackgroundTasks(),
             _current_user: str = Depends(get_current_user)
         ):
@@ -99,16 +105,19 @@ class BrevioRoutes:
                 (file.filename, await file.read()) for file in files if validate_file_extension(file, allowed_extensions)
             ]
 
-            summary_config = SummaryConfig(
-                model=model, category=category, style=style)
             prompt_config = PromptConfig(
-                category=category, style=style, format=format, language=language, source=SourceType.TEXT.value)
+                model=model,
+                category=category,
+                style=style,
+                format=format,
+                language=language,
+                source_types=source_types
+            )
 
             background_tasks.add_task(
                 self._brevio_service.generate_summary_documents,
                 files_data,
                 _current_user,
-                summary_config,
                 prompt_config
             )
 

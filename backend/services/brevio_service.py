@@ -88,7 +88,6 @@ class BrevioService:
         self,
         files_data: List[Tuple[str, bytes]],
         _current_user_id: str,
-        _summary_config: SummaryConfig,
         _prompt_config: PromptConfig
     ) -> Dict:
         try:
@@ -121,7 +120,6 @@ class BrevioService:
 
             _data = BrevioGenerate(
                 data=saved_files,
-                summary_config=_summary_config,
                 prompt_config=_prompt_config
             )
 
@@ -136,7 +134,6 @@ class BrevioService:
         self,
         files_data: List[Tuple[str, bytes]],
         _current_user_id: str,
-        _summary_config: SummaryConfig,
         _prompt_config: PromptConfig
     ) -> Dict:
         try:
@@ -168,7 +165,6 @@ class BrevioService:
 
             _data = BrevioGenerate(
                 data=saved_files,
-                summary_config=_summary_config,
                 prompt_config=_prompt_config
             )
 

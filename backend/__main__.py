@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException
-from backend.handlers.exception_handlers import global_exception_handler, http_exception_handler
+from backend.handlers.exception_handlers import global_exception_handler, http_exception_handler, pydantic_validation_exception_handler, value_error_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 from .routers import auth_router, brevio_router, user_router
@@ -18,6 +18,7 @@ app.add_middleware(
 )
 
 app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(ValueError, value_error_exception_handler)
 app.add_exception_handler(Exception, global_exception_handler)
 
 app.include_router(auth_router)

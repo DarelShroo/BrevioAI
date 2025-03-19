@@ -49,8 +49,8 @@ class TranscriptionService:
         self._validate_paths(audio_path, destination_path)
 
         try:
-            logger.debug("Loading Whisper 'tiny' model")
-            model = whisper.load_model("tiny")
+            logger.debug("Loading Whisper 'small' model")
+            model = whisper.load_model("small")
             logger.debug("Whisper model loaded successfully")
 
             logger.info(f"Transcribing audio: {audio_path}")

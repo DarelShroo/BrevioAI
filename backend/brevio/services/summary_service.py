@@ -49,12 +49,13 @@ class SummaryService:
         self.task_queue = asyncio.Queue()
         self.running = False
 
-        api_key = os.getenv("DEEPSEEK_API_KEY")
+        api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             logger.error("DEEPSEEK_API_KEY is not set.")
             raise ValueError("API key not configured")
 
-        self.client = AsyncOpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        #self.client = AsyncOpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        self.client = AsyncOpenAI(api_key=api_key)
         self.semaphore = asyncio.Semaphore(self.max_concurrent_requests)
         self.file_semaphore = asyncio.Semaphore(self.max_concurrent_files)
         self.generator = AdvancedContentGenerator()
@@ -116,7 +117,8 @@ class SummaryService:
                 logger.debug(
                     f"Sending request for chunk {index}. Chunk preview: {chunk[:500]}...")
                 response = await self.client.chat.completions.create(
-                    model="deepseek-chat",
+                    #model="deepseek-chat",
+                    model="gpt-4o-mini",
                     messages=messages,
                     max_tokens=self.max_tokens,
                     temperature=self.temperature
@@ -143,44 +145,23 @@ class SummaryService:
         total_tokens_used = 0
         chunk_summaries = [None] * len(chunks)
 
-        for group_start in range(0, len(chunks), self.max_concurrent_chunks):
-            group_end = min(
-                group_start + self.max_concurrent_chunks, len(chunks))
-            group_chunks = chunks[group_start:group_end]
-            group_indices = list(range(group_start, group_end))
-
-            total_tokens_needed = sum(
-                len(chunk) // 4 + 500 for chunk in group_chunks)
-            if not await self._check_token_limit(total_tokens_needed):
-                await self.task_queue.put((self.process_chunks_in_groups, [chunks[group_start:], prompt]))
-                logger.info(f"Task queued for chunks {group_start} onwards.")
+        for index, chunk in enumerate(chunks):
+            tokens_needed = len(chunk) // 4 + 500  # Estimación conservadora
+            if not await self._check_token_limit(tokens_needed):
+                await self.task_queue.put((self.process_chunks_in_groups, [chunks[index:], prompt]))
+                logger.info(f"Task queued for chunks {index} onwards.")
                 break
 
-            logger.info(
-                f"Processing chunk group {group_start} to {group_end-1}")
-            tasks = [
-                self.generate_summary_chunk(
-                    index, chunk, prompt, accumulated_summary)
-                for index, chunk in zip(group_indices, group_chunks)
-            ]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            result = await self.generate_summary_chunk(index, chunk, prompt, accumulated_summary)
+            if isinstance(result, tuple):
+                chunk_index, chunk_summary, tokens_used = result
+                chunk_summaries[chunk_index] = chunk_summary
+                total_tokens_used += tokens_used
+                accumulated_summary += "\n" + chunk_summary if accumulated_summary else chunk_summary
+            else:
+                logger.warning(f"Task failed for chunk {index}: {str(result)}")
 
-            results.sort(key=lambda x: x[0] if isinstance(
-                x, tuple) else x.args[0] if isinstance(x, Exception) else 0)
-            for result in results:
-                if isinstance(result, tuple):
-                    index, chunk_summary, tokens_used = result
-                    chunk_summaries[index] = chunk_summary
-                    total_tokens_used += tokens_used
-                else:
-                    logger.warning(f"Task failed for a chunk: {str(result)}")
-
-            group_summary = "\n".join(
-                chunk_summary for chunk_summary in chunk_summaries[group_start:group_end] if chunk_summary)
-            accumulated_summary += "\n" + group_summary if accumulated_summary else group_summary
-
-        full_summary = "\n".join(
-            summary for summary in chunk_summaries if summary).strip()
+        full_summary = "\n".join(summary for summary in chunk_summaries if summary).strip()
         return full_summary, total_tokens_used
 
     async def _process_queue(self):
@@ -207,7 +188,7 @@ class SummaryService:
                 style=prompt_config.style,
                 output_format=prompt_config.format.value,
                 lang=prompt_config.language.name,
-                source_type=prompt_config.source.value
+                source_type=prompt_config.source_types
             )
 
             tasks = [self._process_single_document(
@@ -277,14 +258,13 @@ class SummaryService:
             file_configs = [file_config]
         elif file_configs is None:
             raise ValueError("Debe proporcionar file_configs o file_config.")
-
         try:
             prompt = await self.generator.generate_prompt(
                 category=prompt_config.category,
                 style=prompt_config.style,
                 output_format=prompt_config.format.value,
                 lang=prompt_config.language.name,
-                source_type=prompt_config.source.value
+                source_type=prompt_config.source_types
             )
 
             tasks = [self._process_single_transcription(prompt, fc) for fc in file_configs]
@@ -338,7 +318,8 @@ class SummaryService:
                     logger.info("Postprocessing task queued due to token limit.")
                     return summary  # Devuelve el summary sin procesar hasta que se ejecute la cola
                 response = await self.client.chat.completions.create(
-                    model="deepseek-chat",
+                    #model="deepseek-chat",
+                    model="gpt-4o-mini",
                     messages=[
                         {"role": "system", "content": "Eres un editor experto en optimizar textos eliminando redundancias."},
                         {"role": "user", "content": (

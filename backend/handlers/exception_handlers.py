@@ -113,3 +113,17 @@ async def global_exception_handler(request: Request, exc: Exception):
             }
         }
     )
+
+async def value_error_exception_handler(request: Request, exc: ValueError):
+    return JSONResponse(
+        status_code=400, 
+        content={
+            "status": "error",
+            "message": f"Valor inválido en alguno de los campos. Por favor, revisa los datos proporcionados.",
+            "signature": {
+                "brand": "Brevio",
+                "version": "v1.0",
+                "contact": "support@brevio.com"
+            }
+        }
+    )

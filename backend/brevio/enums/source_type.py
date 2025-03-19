@@ -4,5 +4,7 @@ class SourceType(Enum):
     VIDEO = "video"
     AUDIO = "audio"
     PDF = "pdf"
-    WEB = "web"
     TEXT = "text"
+    DOCX = "docx"
+    MEDIA = "media"
+    IMAGE = "image"

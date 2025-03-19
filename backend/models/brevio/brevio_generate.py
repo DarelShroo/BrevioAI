@@ -14,7 +14,6 @@ class MediaEntry(BaseModel):
         return self
 
 class BaseBrevioGenerate(BaseModel):
-    summary_config: SummaryConfig
     prompt_config: PromptConfig
 
 class BrevioGenerate(BaseBrevioGenerate):
