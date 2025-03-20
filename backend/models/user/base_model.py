@@ -1,7 +1,19 @@
 from bson import ObjectId
-import pydantic
-class BaseModel(pydantic.BaseModel):
-    class Config:
-        arbitrary_types_allowed = True
-        json_encoders = {ObjectId: str}
-        populate_by_name = True
+from pydantic import BaseModel, ConfigDict, PlainSerializer
+from typing import Annotated
+
+def serialize_object_id(value: ObjectId) -> str:
+    return str(value)
+
+SerializedObjectId = Annotated[
+    ObjectId,
+    PlainSerializer(serialize_object_id, return_type=str)
+]
+
+class BaseModel(BaseModel):
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        populate_by_name=True
+    )
+
+    id: SerializedObjectId

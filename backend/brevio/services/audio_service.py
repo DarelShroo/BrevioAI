@@ -1,5 +1,6 @@
 import asyncio
 import subprocess
+import re
 from typing import Any, Dict, Optional
 from pydantic import HttpUrl
 import yt_dlp
@@ -19,7 +20,7 @@ class AudioService:
             result = await loop.run_in_executor(
                 None,
                 lambda: subprocess.run(
-                    ["ffmpeg", "-i", file_path],
+                    ["ffmpeg", "-i", file_path, "-hide_banner"],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True
@@ -30,9 +31,9 @@ class AudioService:
             logger.debug(f"Extracted title: {title}")
 
             for line in result.stderr.split('\n'):
-                if 'Duration' in line:
-                    duration_str = line.split(',')[0].split('Duration:')[1].strip()
-                    hours, minutes, seconds = map(float, duration_str.split(':'))
+                match = re.search(r"Duration:\s(\d+):(\d+):([\d.]+)", line)
+                if match:
+                    hours, minutes, seconds = map(float, match.groups())
                     duration = (hours * 3600 + minutes * 60 + seconds) / 60
                     logger.debug(f"Calculated duration: {duration} minutes")
                     return {"title": title, "duration": duration}
@@ -42,7 +43,7 @@ class AudioService:
 
         except Exception as e:
             logger.error(f"Error processing file {file_path}: {str(e)}", exc_info=True)
-            raise Exception(f"Ha ocurride un error inesperado al obtener información del video {file_path}")
+            raise Exception(f"Ha ocurrido un error inesperado al obtener información del video {file_path}")
         
     async def get_media_info_yt(self, url: HttpUrl) -> Optional[Dict[str, Any]]:
         try:
@@ -53,10 +54,8 @@ class AudioService:
                 'ignoreerrors': True,
             }
 
-            loop = asyncio.get_running_loop()
-
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = await loop.run_in_executor(None, lambda: ydl.extract_info(str(url), download=False))
+                info = await asyncio.to_thread(ydl.extract_info, str(url), download=False)
                 if not info:
                     logger.warning(f"No info extracted from YouTube URL: {url}")
                     return None
@@ -70,4 +69,4 @@ class AudioService:
 
         except Exception as e:
             logger.error(f"Error fetching YouTube info from {url}: {str(e)}", exc_info=True)
-            raise Exception(f"Ha ocurride un error inesperado al obtener información del video {url}")
+            raise Exception(f"Ha ocurrido un error inesperado al obtener información del video {url}")

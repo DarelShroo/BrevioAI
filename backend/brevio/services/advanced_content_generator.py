@@ -2,7 +2,7 @@ import re
 from typing import List
 from googletrans import Translator
 from backend.brevio.enums.source_type import SourceType
-
+import html
 
 class AdvancedContentGenerator:
     TEMPLATES = {
@@ -530,19 +530,25 @@ class AdvancedContentGenerator:
     }
 
     async def generate_prompt(self, category, style, output_format='markdown', lang='en', source_type=None, content_length=None):
+        # Validación de entrada
+        if not category:
+            raise ValueError("Category cannot be empty")
         if category not in self.TEMPLATES:
-            raise ValueError(
-                f"Category '{category}' not found: {', '.join(self.TEMPLATES.keys())}")
+            raise ValueError(f"Category '{category}' not found: {', '.join(self.TEMPLATES.keys())}")
         spec = self.TEMPLATES[category]
 
+        if not style:
+            raise ValueError("Style cannot be empty")
         if style not in spec['styles']:
-            raise ValueError(
-                f"Style '{style}' not valid for '{category}': {', '.join(spec['styles'].keys())}")
+            raise ValueError(f"Style '{style}' not valid for '{category.title()}': {', '.join(spec['styles'].keys())}")
+
+        if content_length is not None:
+            if not isinstance(content_length, int) or content_length <= 0:
+                raise ValueError("Content length must be a positive integer")
 
         style_info = spec['styles'][style]
         if source_type not in style_info['source_types']:
-            raise ValueError(
-                f"Source type '{source_type}' not supported for '{style}' in '{category}'.")
+            raise ValueError(f"Source type '{source_type}' not supported for '{style}' in '{category}'.")
 
         prompt = [
             f"# Prompt for {category.title()} - {style.title()}",
@@ -592,8 +598,7 @@ class AdvancedContentGenerator:
             if output_format == 'markdown':
                 prompt.append(f"```markdown\n{example}\n```")
             else:
-                prompt.append(example.replace(
-                    '#', '').replace('*', '').strip())
+                prompt.append(example.replace('#', '').replace('*', '').strip())
 
         prompt_text = '\n'.join(prompt)
 
@@ -605,10 +610,10 @@ class AdvancedContentGenerator:
             except Exception as e:
                 print(f"Translation error: {e}")
 
-        print("prompt", " \n" + prompt_text)
+        print("prompt", "\n" + prompt_text)
         return prompt_text
 
-    def sanitize_markdown(self, prompt_text):
+    def sanitize_markdown(self, prompt_text):        # Remove extra spaces before and after the double asterisks in headers (e.g., | **Indicator** |)
         # Remove extra spaces before and after the double asterisks in headers (e.g., | **Indicator** |)
         prompt_text = re.sub(
             r'\| \*\*([^*]+)\*\* \|', r'| **\1** |', prompt_text)
@@ -618,12 +623,12 @@ class AdvancedContentGenerator:
 
         # Ensure no spaces before and after double asterisks in any other places
         prompt_text = re.sub(r' \*\*([^*]+)\*\* ', r'**\1**', prompt_text)
-
-        return prompt_text
+        
+        # Escapar caracteres HTML para prevenir XSS
+        return html.escape(prompt_text)
 
     def get_available_templates(self):
         summary = {}
-
         for category, data in self.TEMPLATES.items():
             summary[category] = [
                 {
@@ -632,14 +637,15 @@ class AdvancedContentGenerator:
                 }
                 for style_name, style_data in data.get('styles', {}).items()
             ]
-
         return summary
 
     def add_custom_template(self, category, structures, styles, rules=None, examples=None, needs=None):
-
+        if not structures:
+            raise ValueError("Structures cannot be empty")
+        if not styles:
+            raise ValueError("Styles cannot be empty")
         if category in self.TEMPLATES:
-            raise ValueError(
-                f"The category '{category}' already exists. Use a different name or update the existing one.")
+            raise ValueError(f"The category '{category}' already exists. Use a different name or update the existing one.")
         self.TEMPLATES[category] = {
             'structures': structures,
             'styles': styles
@@ -655,7 +661,6 @@ class AdvancedContentGenerator:
     def get_all_category_style_combinations(self):
         combinations = []
         templates = self.get_available_templates()
-
         for category, styles in templates.items():
             for style in styles:
                 combinations.append((category, style))

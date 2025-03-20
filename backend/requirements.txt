@@ -13,5 +13,8 @@ passlib[bcrypt]
 yt-dlp
 python-multipart
 beautifulsoup4
-PyPDF2
+pypdf
 googletrans
+pytest-asyncio
+pre-commit
+

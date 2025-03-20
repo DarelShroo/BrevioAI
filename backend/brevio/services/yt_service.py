@@ -31,22 +31,23 @@ class YTService:
             return f"Error en descarga: {str(e)}"
 
     def _sync_download(self, url: str, dest_folder: str, mp3_id: Optional[str] = None):
-        os.makedirs(dest_folder, exist_ok=True)
-        
-        outtmpl = f"{dest_folder}/{mp3_id}.%(ext)s" if mp3_id else f"{dest_folder}/%(autonumber)s.%(ext)s"
-
-        ydl_opts = {
-            'format': 'bestaudio',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-            }],
-            'outtmpl': outtmpl,
-            'quiet': True,
-            'ignoreerrors': True,
-        }
-        
         try:
+            os.makedirs(dest_folder, exist_ok=True)
+            
+            outtmpl = f"{dest_folder}/{mp3_id}.%(ext)s" if mp3_id else f"{dest_folder}/%(autonumber)s.%(ext)s"
+
+            ydl_opts = {
+                'format': 'bestaudio',
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                }],
+                'outtmpl': outtmpl,
+                'quiet': True,
+                'ignoreerrors': True,
+            }
+        
+        
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 print(f"Iniciando descarga con yt_dlp para {url}")
                 ydl.download([url])
@@ -91,14 +92,6 @@ class YTService:
             self.executor, sync_get_video_duration, url
         )
 
-    def _sync_get_video_duration(self, url: str) -> Optional[float]:
-        try:
-            result = self._extract_video_info(url)
-            return self._parse_duration(result)
-        except Exception as e:
-            print(f"Error obteniendo duración de {url}: {e}")
-            return None
-
     async def get_media_duration(self, url: str) -> Dict[str, List[Dict[str, Any]]]:
         durations = []
 
@@ -117,15 +110,6 @@ class YTService:
             if duration is not None:
                 durations.append({"url": url, "duration": duration})
         return {"durations": durations}
-
-    def _extract_video_info(self, url: str):
-        ydl_opts = {
-            'quiet': True,
-            'skip_download': True,
-            'ignoreerrors': True,
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            return ydl.extract_info(url, download=False)
 
     def _parse_duration(self, info):
         if 'duration' in info:
@@ -163,7 +147,6 @@ def sync_extract_count(url: str) -> int:
         return 0
 
 
-from typing import Optional
 
 def sync_get_video_duration(url: str) -> Optional[float]:
     ydl_opts = {

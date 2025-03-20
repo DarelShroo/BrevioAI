@@ -36,7 +36,7 @@ class SummaryService:
     def __init__(self):
         logger.info("Initializing SummaryService for a new user.")
         self.directory_manager = DirectoryManager()
-        self.max_tokens = int(os.getenv("MAX_TOKENS"))  # Valor por defecto si no está en .env
+        self.max_tokens = int(os.getenv("MAX_TOKENS"))
         self.max_tokens_per_chunk = int(os.getenv("MAX_TOKENS_PER_CHUNK"))
         self.tokens_per_minute = int(os.getenv("TOKENS_PER_MINUTE"))
         self.temperature = float(os.getenv("TEMPERATURE"))
@@ -49,13 +49,13 @@ class SummaryService:
         self.task_queue = asyncio.Queue()
         self.running = False
 
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = os.getenv("DEEPSEEK_API_KEY")
         if not api_key:
             logger.error("DEEPSEEK_API_KEY is not set.")
             raise ValueError("API key not configured")
 
-        #self.client = AsyncOpenAI(api_key=api_key, base_url="https://api.deepseek.com")
-        self.client = AsyncOpenAI(api_key=api_key)
+        self.client = AsyncOpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        #self.client = AsyncOpenAI(api_key=api_key)
         self.semaphore = asyncio.Semaphore(self.max_concurrent_requests)
         self.file_semaphore = asyncio.Semaphore(self.max_concurrent_files)
         self.generator = AdvancedContentGenerator()
@@ -117,8 +117,8 @@ class SummaryService:
                 logger.debug(
                     f"Sending request for chunk {index}. Chunk preview: {chunk[:500]}...")
                 response = await self.client.chat.completions.create(
-                    #model="deepseek-chat",
-                    model="gpt-4o-mini",
+                    model="deepseek-chat",
+                    #model="gpt-4o-mini",
                     messages=messages,
                     max_tokens=self.max_tokens,
                     temperature=self.temperature
@@ -138,31 +138,53 @@ class SummaryService:
                 return index, summary, tokens_used
         except Exception as e:
             logger.error(f"Error processing chunk {index}: {str(e)}")
-            return index, f"Error procesando chunk {index}: {str(e)}", 0
+            return index, f"Error procesando chunk", 0
 
     async def process_chunks_in_groups(self, chunks: List[str], prompt: str) -> Tuple[str, int]:
         accumulated_summary = ""
         total_tokens_used = 0
         chunk_summaries = [None] * len(chunks)
+        group_size = 5  # Ajustado a 5 para reducir el número de tareas simultáneas
 
-        for index, chunk in enumerate(chunks):
-            tokens_needed = len(chunk) // 4 + 500  # Estimación conservadora
-            if not await self._check_token_limit(tokens_needed):
-                await self.task_queue.put((self.process_chunks_in_groups, [chunks[index:], prompt]))
-                logger.info(f"Task queued for chunks {index} onwards.")
-                break
+        for group_start in range(0, len(chunks), group_size):
+            group_end = min(group_start + group_size, len(chunks))
+            group_chunks = chunks[group_start:group_end]
+            group_indices = list(range(group_start, group_end))
 
-            result = await self.generate_summary_chunk(index, chunk, prompt, accumulated_summary)
-            if isinstance(result, tuple):
-                chunk_index, chunk_summary, tokens_used = result
-                chunk_summaries[chunk_index] = chunk_summary
-                total_tokens_used += tokens_used
-                accumulated_summary += "\n" + chunk_summary if accumulated_summary else chunk_summary
-            else:
-                logger.warning(f"Task failed for chunk {index}: {str(result)}")
+            logger.info(f"Processing chunk group {group_start} to {group_end - 1}")
+
+            total_tokens_needed = sum(len(chunk) // 4 + 500 for chunk in group_chunks)
+            logger.info(f"Tokens needed for this group: {total_tokens_needed}")
+
+            # Reemplazar el tiempo de espera largo por 5 segundos para depuración
+            while not await self._check_token_limit(total_tokens_needed):
+                logger.warning(
+                    f"Token limit reached. Tokens needed: {total_tokens_needed}, "
+                    f"available: {self.token_bucket}. Waiting 5 seconds for token regeneration."
+                )
+                await asyncio.sleep(5)
+                await self._update_token_bucket()
+
+            tasks = [
+                self.generate_summary_chunk(index, chunk, prompt, accumulated_summary)
+                for index, chunk in zip(group_indices, group_chunks)
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for result in results:
+                if isinstance(result, tuple):
+                    index, chunk_summary, tokens_used = result
+                    chunk_summaries[index] = chunk_summary
+                    total_tokens_used += tokens_used
+                    accumulated_summary += "\n" + chunk_summary if accumulated_summary else chunk_summary
+                else:
+                    logger.warning(f"Task failed for chunk: {str(result)}")
 
         full_summary = "\n".join(summary for summary in chunk_summaries if summary).strip()
         return full_summary, total_tokens_used
+
+    async def _check_token_limit(self, tokens_needed: int) -> bool:
+        return self.token_bucket >= tokens_needed
 
     async def _process_queue(self):
         while self.running:
@@ -234,7 +256,6 @@ class SummaryService:
 
                 full_summary, total_tokens_used = await self.process_chunks_in_groups(chunks, prompt)
                 final_summary = await self.postprocess_summary(full_summary)
-                #final_summary = full_summary
                 self.directory_manager.write_summary(
                     final_summary, file_config.summary_path)
                 self._create_docx_version(file_config.summary_path)
@@ -316,10 +337,10 @@ class SummaryService:
                 if not await self._check_token_limit(tokens_needed):
                     await self.task_queue.put((self.postprocess_summary, [summary]))
                     logger.info("Postprocessing task queued due to token limit.")
-                    return summary  # Devuelve el summary sin procesar hasta que se ejecute la cola
+                    return summary 
                 response = await self.client.chat.completions.create(
-                    #model="deepseek-chat",
-                    model="gpt-4o-mini",
+                    model="deepseek-chat",
+                    #model="gpt-4o-mini",
                     messages=[
                         {"role": "system", "content": "Eres un editor experto en optimizar textos eliminando redundancias."},
                         {"role": "user", "content": (
@@ -394,11 +415,9 @@ class SummaryService:
                     for item in element.find_all('li', recursive=False):
                         doc.add_paragraph(item.text.strip(), style='List Bullet')
                 elif element.name == 'ol':
-                    # Reiniciar la numeración para cada lista ordenada
                     counter = 1
                     for item in element.find_all('li', recursive=False):
                         text = item.text.strip()
-                        # Se omite el número original y se asigna el contador
                         doc.add_paragraph(f"{counter}. {text}", style='List Number')
                         counter += 1
 

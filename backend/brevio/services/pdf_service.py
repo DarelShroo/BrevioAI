@@ -1,11 +1,11 @@
-import PyPDF2
+import pypdf
 
 class PdfService:
     def read_pdf_in_pieces(self, path, pieces_for_page=5):
         with open(path, "rb") as archivo:
-            lector = PyPDF2.PdfReader(archivo)
+            lector = pypdf.PdfReader(archivo)
             total_paginas = len(lector.pages)
-            
+
             for i in range(0, total_paginas, pieces_for_page):
                 texto_parcial = ""
 
