@@ -107,7 +107,7 @@ class EmailService:
 
         self.send_email()
 
-    def send_recovery_password_email(self, otp: str):
+    async def send_recovery_password_email(self, otp: str):
         texto_plano = f"Tu código de recuperación es: {otp}. Este código es válido por 10 minutos."
         html = f"""\
 <html>
@@ -192,7 +192,7 @@ class EmailService:
 
         self.send_email()
 
-    def send_password_changed_email(self):
+    async def send_password_changed_email(self):
         texto_plano = "Tu contraseña ha sido cambiada exitosamente. Si no realizaste este cambio, por favor contacta con nuestro soporte."
         html = """\
 <html>
@@ -267,7 +267,7 @@ class EmailService:
 
         self.send_email()
 
-    def send_email(self):
+    async def send_email(self):
         try:
             with smtplib.SMTP("smtp.gmail.com", 587) as servidor:
                 servidor.starttls()

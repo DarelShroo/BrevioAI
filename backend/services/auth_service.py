@@ -20,7 +20,6 @@ from os import path
 from ..brevio.managers.directory_manager import DirectoryManager
 from ..utils.otp_utils import OTPUtils
 
-
 class AuthService:
     def __init__(self, db: Database, token_service: TokenService):
         self._db = db
@@ -89,9 +88,13 @@ class AuthService:
             dest_folder = path.join(
                 ".", Constants.DESTINATION_FOLDER, str(user_db.folder.id))
 
-            while not path.exists(dest_folder):
-                folder_response = self.directory_manager.createFolder(
-                    dest_folder)
+            if not path.exists(dest_folder):
+                folder_response = self.directory_manager.createFolder(dest_folder)
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="La carpeta ya existe. No se puede crear una nueva."
+                )
 
             token = self._token_service.create_access_token({
                 "id": str(user_db.id),
@@ -99,24 +102,24 @@ class AuthService:
 
             email_service = EmailService(
                 user_db.email, f"Usuario {user_db.username} registrado en Brevio")
-            email_service.send_register_email()
+            await email_service.send_register_email()
 
             return {"folder_dest": folder_response, "token": token}
 
         except AuthServiceException as e:
             raise HTTPException(
                 status_code=400, detail=f"Error al registrar usuario: {str(e)}")
-
         except ValidationError as e:
             raise HTTPException(
-                status_code=422, detail=f"Error de validación: {str(e)}")
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Error de validación: {str(e)}"
+            )
         except HTTPException as e:
             raise e
         except Exception as e:
             print(f"Unexpected error: {e}")
             raise HTTPException(
                 status_code=500, detail=f"Error inesperado: {str(e)}")
-
     async def password_recovery_handshake(self, recovery_password_user: RecoveryPassword):
         try:
             user = None
@@ -144,13 +147,13 @@ class AuthService:
                 self._user_repository.password_recovery_handshake(
                     user.email, update_user)
 
-                EmailService(
-                    user.email, "Recuperación de contraseña").send_recovery_password_email(otp)
+                email_service = EmailService(
+                    user.email, "Recuperación de contraseña")
+                await email_service.send_recovery_password_email(otp)
 
                 return {"detail": "Código de recuperación enviado al correo electrónico."}
 
             return {"detail": "OTP aún válido"}
-
         except HTTPException as e:
             raise e
         except Exception as e:
@@ -158,7 +161,6 @@ class AuthService:
                 status_code=500,
                 detail=f"Error en el proceso de recuperación de contraseña: {str(e)}"
             )
-
     async def change_password(self, recovery_password_otp: RecoveryPasswordOtp):
         try:
             user = None

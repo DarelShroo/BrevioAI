@@ -5,15 +5,17 @@ from pydantic import EmailStr, Field, field_validator, model_validator, root_val
 class LoginUser(AuthWithPassword, IdentityBase):
     @field_validator('identity')
     def validate_identity(cls, v: Union[str, EmailStr]) -> Union[str, EmailStr]:
-        if "@" in v:
-            try:
-                return EmailStr(v)
-            except Exception:
-                raise ValueError("El formato del correo electrónico es inválido")
-        else:
-            if len(v) > 100:
-                raise ValueError("La longitud del campo debe ser de máximo 100 caracteres")
-            return v
+        if isinstance(v, str):
+            if "@" in v:
+                try:
+                    return EmailStr._validate(v) 
+                except ValueError:
+                    raise ValueError("El formato del correo electrónico es inválido")
+            else:
+                if len(v) > 100:
+                    raise ValueError("La longitud del campo debe ser de máximo 100 caracteres")
+                return v
+        raise ValueError("El valor de identidad no es válido")
 
 class RegisterUser(AuthWithPassword):
     username: str = Field("", strict=True, max_length=100)

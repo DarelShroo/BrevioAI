@@ -16,5 +16,8 @@ beautifulsoup4
 pypdf
 googletrans
 pytest-asyncio
+pytest-mock
+mongomock
 pre-commit
+
 

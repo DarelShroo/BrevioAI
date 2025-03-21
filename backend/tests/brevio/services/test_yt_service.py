@@ -6,7 +6,7 @@ from backend.brevio.services.yt_service import YTService
 import multiprocessing
 
 if multiprocessing.current_process().name == 'MainProcess':
-    multiprocessing.set_start_method('forkserver', force=True)
+    multiprocessing.set_start_method('spawn', force=True)
 
 @pytest.fixture
 def yt_service():
