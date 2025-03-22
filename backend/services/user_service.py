@@ -102,9 +102,9 @@ class UserService:
                     detail="Invalid or expired OTP"
                 )
 
-            self.user_repo.password_recovery_handshake(
-                email=email,
-                update_user={"is_otp_verified": True}
+            self.user_repo.update_user(
+                user.id,
+                {"is_otp_verified": True}
             )
 
             return True
@@ -123,9 +123,9 @@ class UserService:
                     detail="User not found"
                 )
 
-            updated_user = self.user_repo.change_password(
-                email,
-                password=new_password
+            updated_user = self.user_repo.update_user(
+                user.id,
+                {"password": new_password}
             )
 
             return updated_user

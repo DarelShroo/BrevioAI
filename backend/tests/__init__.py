@@ -1,4 +1,4 @@
-from .brevio import services, models, managers
+from backend.brevio import services, models, managers
 import brevio
 
 __all__ = [

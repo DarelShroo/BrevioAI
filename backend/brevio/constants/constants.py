@@ -3,5 +3,5 @@ class Constants:
     SUMMARY_FILE = "summary.md"
     ALL_TRANSCRIPTIONS = "all_transcriptions.txt"
     ALL_SUMMARIES = "all_summaries.md"
-    DESTINATION_FOLDER = "audios"
+    DESTINATION_FOLDER = "data"
    

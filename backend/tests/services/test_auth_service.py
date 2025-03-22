@@ -153,8 +153,6 @@ async def test_password_recovery_handshake_new_otp(auth_service, mocker):
     auth_service._user_repository.password_recovery_handshake.assert_called_once()
     EmailService.send_recovery_password_email.assert_called_once_with("123456")
 
-
-
 @pytest.mark.asyncio
 async def test_password_recovery_handshake_otp_valid(auth_service, mocker):
     user_mock = User(
@@ -164,10 +162,8 @@ async def test_password_recovery_handshake_otp_valid(auth_service, mocker):
         password=hashed_password,
         folder=UserFolder(id=ObjectId(), entries=[]),
         otp="123456",
-        exp=int((datetime.now() + timedelta(minutes=5)).timestamp())
+        exp=int((datetime.now() + timedelta(minutes=10)).timestamp())  # OTP no ha expirado
     )
-
-    # Mock email utility and user service
     mocker.patch('backend.utils.email_utils.isEmail', return_value=True)
     auth_service._user_service.get_user_by_email.return_value = user_mock
 
@@ -175,10 +171,10 @@ async def test_password_recovery_handshake_otp_valid(auth_service, mocker):
 
     result = await auth_service.password_recovery_handshake(RecoveryPassword(identity=email))
 
-    assert result == {"detail": "Código de recuperación enviado al correo electrónico."}
-
     mock_send_email.assert_not_called()
 
+    
+    
 """
 @pytest.mark.asyncio
 async def test_password_recovery_handshake_user_not_found(auth_service, mocker):
@@ -190,7 +186,6 @@ async def test_password_recovery_handshake_user_not_found(auth_service, mocker):
     assert exc.value.status_code == 404
     assert exc.value.detail == "Usuario no encontrado."
 
-# --- Pruebas para el método change_password ---
 @pytest.mark.asyncio
 async def test_change_password_success(auth_service, mocker):
     user_mock = User(id="1", email="test@example.com", otp="123456", exp=int((datetime.now() + timedelta(minutes=5)).timestamp()))

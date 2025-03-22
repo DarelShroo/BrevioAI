@@ -120,35 +120,28 @@ class AuthService:
             print(f"Unexpected error: {e}")
             raise HTTPException(
                 status_code=500, detail=f"Error inesperado: {str(e)}")
+                
     async def password_recovery_handshake(self, recovery_password_user: RecoveryPassword):
         try:
-            user = None
-
             if isEmail(recovery_password_user.identity):
-                user = self._user_service.get_user_by_email(
-                    recovery_password_user.identity)
+                user = self._user_service.get_user_by_email(recovery_password_user.identity)
             else:
-                user = self._user_service.get_user_by_username(
-                    recovery_password_user.identity)
+                user = self._user_service.get_user_by_username(recovery_password_user.identity)
 
             if not user:
-                raise HTTPException(
-                    status_code=404, detail="Usuario no encontrado."
-                )
+                raise HTTPException(status_code=404, detail="Usuario no encontrado.")
 
+            user_data = user.model_dump() if hasattr(user, "dict") else user
             now = datetime.now()
 
-            if "otp" not in user or "exp" not in user or user["exp"] < int(now.timestamp()):
+            if (not user_data.get("otp")) or (not user_data.get("exp")) or (user_data.get("exp") < int(now.timestamp())):
                 otp = OTPUtils.generate_otp()
                 new_time = now + timedelta(minutes=10)
-
                 update_user = {"otp": otp, "exp": int(new_time.timestamp())}
 
-                self._user_repository.password_recovery_handshake(
-                    user.email, update_user)
+                self._user_repository.password_recovery_handshake(user.email, update_user)
 
-                email_service = EmailService(
-                    user.email, "Recuperación de contraseña")
+                email_service = EmailService(user.email, "Recuperación de contraseña")
                 await email_service.send_recovery_password_email(otp)
 
                 return {"detail": "Código de recuperación enviado al correo electrónico."}
@@ -161,6 +154,7 @@ class AuthService:
                 status_code=500,
                 detail=f"Error en el proceso de recuperación de contraseña: {str(e)}"
             )
+
     async def change_password(self, recovery_password_otp: RecoveryPasswordOtp):
         try:
             user = None
