@@ -4,7 +4,7 @@ from bson import ObjectId
 from .base_model import BaseModel
 
 class DataResult(BaseModel):
-    id: ObjectId = Field(default_factory=ObjectId)
+    id: ObjectId = Field(default_factory=ObjectId, alias="_id")
     index: Optional[int] = None
     url: Optional[str] = None 
     download_location: Optional[str] = None

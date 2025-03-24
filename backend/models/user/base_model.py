@@ -13,7 +13,8 @@ SerializedObjectId = Annotated[
 class BaseModel(BaseModel):
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
-        populate_by_name=True
+        populate_by_name=True,
+        exclude={"id"},
     )
 
     id: SerializedObjectId

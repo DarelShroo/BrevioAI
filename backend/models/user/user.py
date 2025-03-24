@@ -5,7 +5,7 @@ from .base_model import BaseModel
 from backend.models.user.user_folder import UserFolder
 
 class User(BaseModel):
-    id: Optional[ObjectId] = Field(default_factory=ObjectId, alias="_id")
+    id: ObjectId = Field(default_factory=ObjectId, alias="_id")
     username: str = Field("", strict=True, min_length=6, max_length=20)
     email: EmailStr
     password: str

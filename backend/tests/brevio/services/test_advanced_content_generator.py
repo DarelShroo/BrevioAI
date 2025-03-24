@@ -4,12 +4,12 @@ from backend.brevio.services.advanced_content_generator import AdvancedContentGe
 
 @pytest.fixture
 def generator():
-    """Fixture para instanciar AdvancedContentGenerator."""
+    """Fixture that should instantiate AdvancedContentGenerator."""
     return AdvancedContentGenerator()
 
 @pytest.mark.asyncio
 async def test_generate_prompt_valid_input(generator):
-    """Prueba que generate_prompt funcione correctamente con entradas válidas."""
+    """Should generate a valid prompt with correct input values."""
     category = "journalism"
     style = "news_wire"
     output_format = "markdown"
@@ -26,14 +26,18 @@ async def test_generate_prompt_valid_input(generator):
         content_length=content_length
     )
 
+    # Should return a string as prompt
     assert isinstance(prompt, str)
+    # Should contain the correct prompt title with category and style capitalized
     assert f"# Prompt for {category.title()} - {style.title()}" in prompt
+    # Should include the correct style description
     assert "**Style:** News_Wire (Direct, informative)" in prompt
+    # Should include a summary note about the 5-page document content length
     assert "- Summarize a 5-page document comprehensively" in prompt
 
 @pytest.mark.asyncio
 async def test_generate_prompt_invalid_category(generator):
-    """Prueba que generate_prompt lance un error para una categoría inválida."""
+    """Should raise an error when an invalid category is provided."""
     with pytest.raises(ValueError, match="Category 'invalid_category' not found"):
         await generator.generate_prompt(
             category="invalid_category",
@@ -45,7 +49,7 @@ async def test_generate_prompt_invalid_category(generator):
 
 @pytest.mark.asyncio
 async def test_generate_prompt_empty_category(generator):
-    """Prueba que generate_prompt lance un error para una categoría vacía."""
+    """Should raise an error when an empty category is provided."""
     with pytest.raises(ValueError, match="Category cannot be empty"):
         await generator.generate_prompt(
             category="",
@@ -57,7 +61,7 @@ async def test_generate_prompt_empty_category(generator):
 
 @pytest.mark.asyncio
 async def test_generate_prompt_invalid_style(generator):
-    """Prueba que generate_prompt lance un error para un estilo inválido."""
+    """Should raise an error when an invalid style is provided for the given category."""
     with pytest.raises(ValueError, match="Style 'invalid_style' not valid for 'Journalism'"):
         await generator.generate_prompt(
             category="journalism",
@@ -69,7 +73,7 @@ async def test_generate_prompt_invalid_style(generator):
 
 @pytest.mark.asyncio
 async def test_generate_prompt_empty_style(generator):
-    """Prueba que generate_prompt lance un error para un estilo vacío."""
+    """Should raise an error when an empty style is provided."""
     with pytest.raises(ValueError, match="Style cannot be empty"):
         await generator.generate_prompt(
             category="journalism",
@@ -81,7 +85,7 @@ async def test_generate_prompt_empty_style(generator):
 
 @pytest.mark.asyncio
 async def test_generate_prompt_invalid_source_type(generator):
-    """Prueba que generate_prompt lance un error para un tipo de fuente no soportado."""
+    """Should raise an error when an unsupported source type is provided."""
     with pytest.raises(ValueError, match="Source type 'INVALID_SOURCE_TYPE' not supported"):
         await generator.generate_prompt(
             category="journalism",
@@ -93,7 +97,7 @@ async def test_generate_prompt_invalid_source_type(generator):
 
 @pytest.mark.asyncio
 async def test_generate_prompt_invalid_content_length(generator):
-    """Prueba que generate_prompt maneje correctamente un content_length inválido."""
+    """Should raise an error when a non-positive content_length is provided."""
     with pytest.raises(ValueError, match="Content length must be a positive integer"):
         await generator.generate_prompt(
             category="journalism",
@@ -105,16 +109,18 @@ async def test_generate_prompt_invalid_content_length(generator):
         )
 
 def test_get_available_templates(generator):
-    """Prueba que get_available_templates devuelva un resumen correcto de las plantillas disponibles."""
+    """Should return a correct summary of the available templates."""
     templates_summary = generator.get_available_templates()
+    # Should be a dictionary containing available categories
     assert isinstance(templates_summary, dict)
     assert "journalism" in templates_summary
     assert "health" in templates_summary
+    # Should include at least one style for journalism category
     assert len(templates_summary["journalism"]) > 0
     assert any(style["category"] == "news_wire" for style in templates_summary["journalism"])
 
 def test_add_custom_template(generator):
-    """Prueba que add_custom_template agregue una nueva plantilla correctamente."""
+    """Should add a new custom template correctly."""
     category = "custom_category"
     structures = {
         "custom_structure": ["# Custom Structure"]
@@ -137,13 +143,15 @@ def test_add_custom_template(generator):
         needs=needs
     )
 
+    # Should return a success message indicating the creation of the template
     assert result == "Template 'custom_category' successfully created with 1 structures and 1 styles."
+    # Should update the TEMPLATES with the new category and its details
     assert category in generator.TEMPLATES
     assert "custom_structure" in generator.TEMPLATES[category]["structures"]
     assert "custom_style" in generator.TEMPLATES[category]["styles"]
 
 def test_add_custom_template_empty_structures(generator):
-    """Prueba que add_custom_template lance un error si structures está vacío."""
+    """Should raise an error if the provided structures are empty."""
     with pytest.raises(ValueError, match="Structures cannot be empty"):
         generator.add_custom_template(
             category="empty_structures",
@@ -155,7 +163,7 @@ def test_add_custom_template_empty_structures(generator):
         )
 
 def test_add_custom_template_empty_styles(generator):
-    """Prueba que add_custom_template lance un error si styles está vacío."""
+    """Should raise an error if the provided styles are empty."""
     with pytest.raises(ValueError, match="Styles cannot be empty"):
         generator.add_custom_template(
             category="empty_styles",
@@ -167,7 +175,7 @@ def test_add_custom_template_empty_styles(generator):
         )
 
 def test_add_custom_template_duplicate_category(generator):
-    """Prueba que add_custom_template lance un error si se intenta agregar una categoría duplicada."""
+    """Should raise an error when attempting to add a template with an existing category."""
     category = "journalism"
     structures = {
         "duplicate_structure": ["# Duplicate Structure"]
@@ -184,18 +192,23 @@ def test_add_custom_template_duplicate_category(generator):
         )
 
 def test_get_all_category_style_combinations(generator):
-    """Prueba que get_all_category_style_combinations devuelva todas las combinaciones válidas."""
+    """Should return all valid category-style combinations."""
     combinations = generator.get_all_category_style_combinations()
+    # Should be a list of combinations
     assert isinstance(combinations, list)
     assert len(combinations) > 0
     for category, style in combinations:
+        # Each category should exist in the templates
         assert category in generator.TEMPLATES
+        # Each style's category should exist within the category's styles in the templates
         assert style["category"] in generator.TEMPLATES[category]["styles"]
+    # Should contain the combination for journalism and news_wire
     assert ("journalism", "news_wire") in [(cat, sty["category"]) for cat, sty in combinations]
 
 def test_sanitize_markdown(generator):
-    """Prueba que sanitize_markdown limpie correctamente el texto Markdown."""
+    """Should sanitize the Markdown text by escaping potentially harmful tags."""
     raw_text = "Text with <script>alert('xss')</script> and *unclosed Markdown"
     sanitized_text = generator.sanitize_markdown(raw_text)
     expected_text = "Text with &lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt; and *unclosed Markdown"
+    # Should return the expected sanitized text
     assert sanitized_text == expected_text

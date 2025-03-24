@@ -28,7 +28,7 @@ class FolderEntryRepository:
             logger.error(f"Unexpected error during initialization: {str(e)}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Unexpected initialization error: {str(e)}")
 
-    def create_entry(self, folder_entry: FolderEntry) -> FolderEntry:
+    def create_folder_entry(self, folder_entry: FolderEntry) -> FolderEntry:
         try:
             logger.debug("Creating FolderEntry")
             folder_entry_dict = folder_entry.model_dump()

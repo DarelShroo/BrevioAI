@@ -74,12 +74,11 @@ class UserRepository:
         try:
             logger.debug("Creating new user")
             
-            user_dict = user.model_dump()  
+            user_dict = user.model_dump(by_alias=True)  
 
             inserted_id = self.collection.insert_one(user_dict).inserted_id
-            user_dict["_id"] = inserted_id
 
-            created_user = User(**user_dict)
+            created_user: User = User(**user_dict)
 
             logger.info(f"User created successfully with ID: {inserted_id}")
             return created_user
@@ -95,39 +94,11 @@ class UserRepository:
 
 
     def update_user(self, _user_id: ObjectId, fields: dict) -> Optional[User]:
-        try:
-            logger.debug(f"Updating user with ID: {_user_id}")
-            
-            if not _user_id:
-                raise HTTPException(status_code=400, detail="Invalid user ID format")
-            
-            if not isinstance(fields, dict) or not fields:
-                raise HTTPException(status_code=400, detail="Invalid fields data provided")
-
-            valid_fields = {key: value for key, value in fields.items() if key in User.model_fields}
-
-            if not valid_fields:
-                raise HTTPException(status_code=400, detail="No valid fields provided for update")
-
-            user_dict_updated = self.collection.find_one_and_update(
-                {"_id": _user_id},
-                {"$set": valid_fields},
-                return_document=ReturnDocument.AFTER
-            )
-
-            if not user_dict_updated:
-                logger.warning(f"No user found to update with ID: {_user_id}")
-                raise HTTPException(status_code=404, detail=f"User with ID {_user_id} not found")
-
-            updated_user = generate_obj_if_data_exist(user_dict_updated, User)
-            logger.info(f"User updated successfully with ID: {_user_id}")
-            return updated_user
-
-        except HTTPException as e:
-            raise e 
-        except PyMongoError as e:
-            logger.error(f"Database error updating user with ID {_user_id}: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-        except Exception as e:
-            logger.error(f"Unexpected error updating user with ID {_user_id}: {str(e)}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+        user_dict_updated = self.collection.find_one_and_update(
+            {"_id": _user_id},
+            {"$set": fields},
+            return_document=ReturnDocument.AFTER
+        )
+        if not user_dict_updated:
+            raise HTTPException(status_code=404, detail=f"User with ID {_user_id} not found")
+        return generate_obj_if_data_exist(user_dict_updated, User)

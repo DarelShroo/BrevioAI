@@ -16,7 +16,7 @@ class EmailService:
         self.message["From"] = self.email_from
         self.message["To"] = self.email_to
 
-    def send_register_email(self):
+    async def send_register_email(self):
         texto_plano = "Bienvenido a nuestra plataforma. ¡Gracias por registrarte!"
         html = """\
 <html>
@@ -105,7 +105,7 @@ class EmailService:
         self.message.attach(parte_texto)
         self.message.attach(parte_html)
 
-        self.send_email()
+        await self.send_email()
 
     async def send_recovery_password_email(self, otp: str):
         texto_plano = f"Tu código de recuperación es: {otp}. Este código es válido por 10 minutos."

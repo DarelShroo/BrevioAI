@@ -7,60 +7,71 @@ from backend.brevio.constants.constants import Constants
 
 @pytest.fixture
 def caplog(caplog):
+    """Should set the logging level to DEBUG for transcription service tests."""
     caplog.set_level(logging.DEBUG)
     return caplog
 
 @pytest.fixture
 def transcription_service():
+    """Should provide a fresh instance of TranscriptionService for testing by resetting the singleton."""
     TranscriptionService._instance = None
     return TranscriptionService()
 
 @pytest.mark.asyncio
 async def test_singleton_instance(caplog):
-    """Prueba que TranscriptionService sea un singleton."""
+    """Should verify that TranscriptionService is implemented as a singleton."""
     caplog.set_level(logging.DEBUG, logger="backend.brevio.services.transcription_service")
     first_instance = TranscriptionService()
     second_instance = TranscriptionService()
+    # Should return the same instance for both calls.
     assert first_instance is second_instance
+    # Should log messages indicating instance creation and reuse.
     assert "Creating new instance of TranscriptionService" in caplog.text
     assert "Reusing existing instance of TranscriptionService" in caplog.text
 
 @pytest.mark.asyncio
 async def test_init_directory_manager(transcription_service):
-    """Prueba que DirectoryManager se inicializa solo una vez."""
+    """Should initialize DirectoryManager only once."""
+    # Should have a _directory_manager attribute that is not None.
     assert hasattr(transcription_service, '_directory_manager')
     assert transcription_service._directory_manager is not None
     old_manager = transcription_service._directory_manager
+    # Should not reinitialize _directory_manager on subsequent __init__ calls.
     transcription_service.__init__()
     assert transcription_service._directory_manager is old_manager
 
 @pytest.mark.asyncio
 async def test_validate_paths_success(transcription_service):
-    """Prueba que _validate_paths no lanza errores con paths válidos."""
+    """Should not raise any errors when valid paths are provided."""
     with patch('backend.brevio.services.transcription_service.exists', return_value=True):
+        # Should validate the provided audio and destination paths successfully.
         transcription_service._validate_paths("./backend/audios/audio.mp3", "./backend/audios")
 
 @pytest.mark.asyncio
 async def test_validate_paths_audio_not_found(transcription_service, caplog):
-    """Prueba que _validate_paths lanza FileNotFoundError si el audio no existe."""
+    """Should raise FileNotFoundError when the audio file is not found."""
     with patch('backend.brevio.services.transcription_service.exists', side_effect=[False, True]):
         with pytest.raises(FileNotFoundError) as exc_info:
             transcription_service._validate_paths("/invalid/audio.mp3", "./backend/audios")
+        # Should include the expected error message in the exception.
         assert "Audio file not found: /invalid/audio.mp3" in str(exc_info.value)
+        # Should also log the error message.
         assert "Audio file not found: /invalid/audio.mp3" in caplog.text
 
 @pytest.mark.asyncio
 async def test_validate_paths_destination_not_found(transcription_service, caplog):
-    """Prueba que _validate_paths lanza FileNotFoundError si el destino no existe."""
+    """Should raise FileNotFoundError when the destination directory is not found."""
     with patch('backend.brevio.services.transcription_service.exists', side_effect=[True, False]):
         with pytest.raises(FileNotFoundError) as exc_info:
             transcription_service._validate_paths("/valid/audio.mp3", "./backend/audios")
+        # Should include the expected error message in the exception.
         assert "Destination directory not found: ./backend/audios" in str(exc_info.value)
+        # Should also log the error message.
         assert "Destination directory not found: ./backend/audios" in caplog.text
 
 @pytest.mark.asyncio
 async def test_generate_transcription_success(transcription_service, caplog):
-    """Prueba un caso exitoso de transcripción."""
+    """Should successfully generate a transcription with valid segments."""
     mock_result = {
         "segments": [
             {"start": 0.0, "text": "Hola mundo"},
@@ -84,18 +95,24 @@ async def test_generate_transcription_success(transcription_service, caplog):
             language=LanguageType.SPANISH
         )
 
+        # Should return the transcription read from the directory manager.
         assert result == "transcripción leída"
+        # Should log the start of the transcription process with the correct language code.
         assert "Starting transcription for /audio.mp3 in es" in caplog.text
+        # Should log the successful transcription completion message.
         assert "Transcription completed successfully" in caplog.text
+        # Should log the file path where the transcription was written.
         assert f"Transcription written to {transcription_path}" in caplog.text
+        # Should call the transcribe method with the correct audio path and language.
         mock_model.transcribe.assert_called_once_with("/audio.mp3", language="es")
+        # Should write the correctly formatted transcription text to the file.
         mock_open.return_value.__enter__.return_value.write.assert_called_once_with(
             "[00:00:00] Hola mundo\n[00:00:02] Esto es una prueba"
         )
 
 @pytest.mark.asyncio
 async def test_generate_transcription_no_segments(transcription_service, caplog):
-    """Prueba transcripción cuando no hay segmentos."""
+    """Should handle transcription when no segments are returned by returning an empty string."""
     mock_result = {"segments": []}
     mock_model = Mock()
     mock_model.transcribe.return_value = mock_result
@@ -114,13 +131,16 @@ async def test_generate_transcription_no_segments(transcription_service, caplog)
             language=LanguageType.ENGLISH
         )
 
+        # Should return an empty string when no transcription segments are available.
         assert result == ""
+        # Should log the start of the transcription process with the correct language code.
         assert "Starting transcription for /audio.mp3 in en" in caplog.text
+        # Should write an empty string to the transcription file.
         mock_open.return_value.__enter__.return_value.write.assert_called_once_with("")
 
 @pytest.mark.asyncio
 async def test_generate_transcription_runtime_error(transcription_service, caplog):
-    """Prueba error de Whisper durante la transcripción."""
+    """Should raise a RuntimeError when the Whisper model fails during transcription."""
     mock_model = Mock()
     mock_model.transcribe.side_effect = RuntimeError("Whisper failed")
     destination_path = "./backend/audios"
@@ -135,12 +155,14 @@ async def test_generate_transcription_runtime_error(transcription_service, caplo
             language=LanguageType.SPANISH
         )
 
+    # Should log the error message indicating Whisper transcription failure.
     assert "Whisper transcription failed: Whisper failed" in caplog.text
+    # Should raise the RuntimeError with the correct error message.
     assert str(exc_info.value) == "Whisper failed"
 
 @pytest.mark.asyncio
 async def test_generate_transcription_io_error(transcription_service, caplog):
-    """Prueba error de IO al escribir el archivo."""
+    """Should raise an IOError when an IO error occurs while writing the transcription file."""
     mock_result = {"segments": [{"start": 0.0, "text": "Test"}]}
     mock_model = Mock()
     mock_model.transcribe.return_value = mock_result
@@ -159,12 +181,14 @@ async def test_generate_transcription_io_error(transcription_service, caplog):
             language=LanguageType.SPANISH
         )
 
+    # Should log the IO error message.
     assert "IO error during transcription: No space left" in caplog.text
+    # Should raise the IOError with the correct error message.
     assert str(exc_info.value) == "No space left"
 
 @pytest.mark.asyncio
 async def test_generate_transcription_unexpected_error(transcription_service, caplog):
-    """Prueba un error inesperado."""
+    """Should raise an unexpected error when an unknown error occurs during transcription."""
     mock_model = Mock()
     mock_model.transcribe.side_effect = ValueError("Invalid data")
     destination_path = "./backend/audios"
@@ -179,12 +203,14 @@ async def test_generate_transcription_unexpected_error(transcription_service, ca
             language=LanguageType.SPANISH
         )
 
+    # Should log the unexpected error message.
     assert "Unexpected error in transcription: Invalid data" in caplog.text
+    # Should raise the ValueError with the correct error message.
     assert str(exc_info.value) == "Invalid data"
 
 @pytest.mark.asyncio
 async def test_generate_transcription_custom_format_time(transcription_service, caplog):
-    """Prueba que format_time personalizado funciona."""
+    """Should use a custom time format when generating the transcription output."""
     mock_result = {"segments": [{"start": 1.5, "text": "Custom"}]}
     mock_model = Mock()
     mock_model.transcribe.return_value = mock_result
@@ -204,6 +230,9 @@ async def test_generate_transcription_custom_format_time(transcription_service, 
             language=LanguageType.SPANISH
         )
 
+        # Should return the transcription read from the directory manager.
         assert result == "custom text"
+        # Should call the _format_time method with the correct segment start time.
         mock_format_time.assert_called_once_with(1.5)
+        # Should write the custom formatted transcription to the file.
         mock_open.return_value.__enter__.return_value.write.assert_called_once_with("00:01:50 Custom")

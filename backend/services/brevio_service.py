@@ -72,12 +72,11 @@ class BrevioService:
             )
 
     async def generate(self, data: BrevioGenerate, _current_user_id: str) -> Dict:
-        try:
-            _current_folder_entry_id: str = self._user_service.create_folder_entry(
-                _current_user_id).id
-            _user_folder_id: str = self._user_service.get_user_by_id(
-                _current_user_id).folder.id
-            return await self._brevio.generate(data, self._user_service.create_data_result, _current_folder_entry_id, _user_folder_id, _current_user_id)
+        try: 
+            _current_folder_entry_id: str = self._user_service.create_folder_entry(_current_user_id).id
+            _user_folder_id: str = self._user_service.get_user_by_id(_current_user_id).folder.id
+            return await self._brevio.generate(data, self._user_service.create_data_result, 
+                                            _current_folder_entry_id, _user_folder_id, _current_user_id)
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

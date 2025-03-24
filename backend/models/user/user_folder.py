@@ -5,7 +5,7 @@ from .base_model import BaseModel
 from backend.models.user.folder_entry import FolderEntry
 
 class UserFolder(BaseModel):
-    id: Optional[ObjectId] = Field(default_factory=ObjectId)
+    id: Optional[ObjectId] = Field(default_factory=ObjectId, alias="_id")
     entries: Optional[List[FolderEntry]] = []
 
     def to_dict(self):

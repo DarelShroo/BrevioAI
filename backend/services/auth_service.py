@@ -1,4 +1,5 @@
 from datetime import timedelta
+from bson import ObjectId
 from pydantic import ValidationError
 from ..brevio.constants.constants import Constants
 from ..models.auth import RecoveryPassword, RecoveryPasswordOtp
@@ -175,11 +176,12 @@ class AuthService:
                 raise HTTPException(
                     status_code=400, detail="El código de recuperación es incorrecto.")
 
-            self._user_service.change_password(
+            await self._user_service.change_password(
                 user.email, recovery_password_otp.password)
 
-            EmailService(
-                user.email, "Confirmación de cambio de contraseña").send_password_changed_email()
+            email_service = EmailService(
+                user.email, "Confirmación de cambio de contraseña")
+            await email_service.send_password_changed_email()
 
             return {"detail": "Contraseña cambiada exitosamente."}
 
