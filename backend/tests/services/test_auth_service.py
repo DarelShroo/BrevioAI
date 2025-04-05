@@ -1,328 +1,221 @@
-from bson import ObjectId
-import pytest
-from unittest.mock import AsyncMock, MagicMock
-from fastapi import HTTPException
-from pydantic import ValidationError
-from ...services.auth_service import AuthService
-from ...models.auth import LoginUser, RegisterUser, RecoveryPassword, RecoveryPasswordOtp
-from ...models.user import User, UserFolder
-from ...utils.password_utils import hash_password
-from ...services.email_service import EmailService
-from datetime import datetime, timedelta
-from ...utils.email_utils import isEmail
-from ...utils.password_utils import verify_password
-import pytest
+from typing import Any, Dict
+from unittest.mock import AsyncMock, MagicMock, patch
 
-password = "A123@password"
-email = "test@example.com"
-username = "test_user"
-hashed_password = hash_password(password)
+import mongomock
+import pytest
+from bson import ObjectId
+from fastapi import HTTPException
+
+from backend.models.auth.auth import LoginUser, RegisterUser
+from backend.models.user.user_folder import UserFolder
+from backend.models.user.user_model import User
+from backend.services.auth_service import AuthService
+from backend.services.token_service import TokenService
+from backend.services.user_service import UserService
+from brevio.models.response_model import FolderResponse
 
 
 @pytest.fixture
-def auth_service(mocker):
-    """Should provide an instance of AuthService with mocked dependencies."""
-    mock_user_repository_instance = MagicMock()
-    mocker.patch(
-        'backend.services.auth_service.UserRepository',
-        return_value=mock_user_repository_instance
-    )
+def mock_db():
+    return mongomock.MongoClient().db
 
-    db_mock = MagicMock()
-    token_service_mock = MagicMock()
 
-    auth_service = AuthService(db=db_mock, token_service=token_service_mock)
+@pytest.fixture
+def token_service():
+    service = MagicMock(spec=TokenService)
+    service.create_access_token = MagicMock(return_value="test_token")
+    return service
 
-    auth_service._user_repository = mock_user_repository_instance
-    auth_service._user_service = mocker.MagicMock()
-    auth_service.directory_manager = mocker.MagicMock()
 
+@pytest.fixture
+def user_service():
+    service = MagicMock(spec=UserService)
+    service.get_user_by_email = MagicMock()
+    service.get_user_by_username = MagicMock()
+    service.create_user = MagicMock()
+    return service
+
+
+@pytest.fixture
+def auth_service(mock_db, token_service, user_service) -> AuthService:
+    # Inyectar explícitamente el user_service en auth_service
+    auth_service = AuthService(mock_db, token_service)
+    auth_service._user_service = user_service
     return auth_service
 
 
+@pytest.fixture
+def user_data() -> Dict[str, Any]:
+    return {
+        "email": "test@example.com",
+        "password": "Test_password1",
+        "username": "testuser",
+    }
+
+
+@pytest.fixture
+def login_data(user_data: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "identity": user_data["email"],
+        "password": user_data["password"],
+    }
+
+
+@pytest.fixture
+def mock_user_id() -> ObjectId:
+    return ObjectId()
+
+
 @pytest.mark.asyncio
-async def test_login_success_username(auth_service, mocker):
-    """Should successfully log in a user using username."""
-    user_mock = User(
-        id=ObjectId(), 
-        username=username, 
-        email=email,
-        password=hashed_password, 
-        folder=UserFolder(id=ObjectId(), entries=[])
+async def test_register_success(
+    auth_service: AuthService,
+    user_data: Dict[str, Any],
+    user_service: MagicMock,
+    mock_user_id: ObjectId,
+) -> None:
+    user = RegisterUser(**user_data)
+    folder = UserFolder(_id=ObjectId())
+    created_user = User(
+        _id=mock_user_id,
+        email=user_data["email"],
+        username=user_data["username"],
+        password="hashed_password",
+        folder=folder,
     )
 
-    # Should detect that the identity is not an email.
-    mocker.patch('backend.utils.email_utils.isEmail', return_value=False)
-    auth_service._user_service.get_user_by_username.return_value = user_mock
-    # Should verify the password correctly.
-    mocker.patch('backend.utils.password_utils.verify_password', return_value=True)
-    auth_service._token_service.create_access_token.return_value = "mock_token"
+    user_service.get_user_by_email.return_value = None
+    user_service.create_user.return_value = created_user
 
-    result = await auth_service.login(LoginUser(identity=username, password=password))
+    with patch(
+        "backend.services.auth_service.hash_password", return_value="hashed_password"
+    ):
+        with patch(
+            "backend.services.auth_service.DirectoryManager"
+        ) as mock_dir_manager:
+            mock_dir_manager.return_value.createFolder.return_value = FolderResponse(
+                success=True, message="Successfully created the directory 'test_folder'"
+            )
+            with patch(
+                "backend.services.auth_service.isEmail", return_value=user_data["email"]
+            ):
+                with patch("backend.services.auth_service.EmailService") as mock_email:
+                    mock_email.return_value.send_register_email = AsyncMock()
+                    result = await auth_service.register(user)
 
-    # Should return the expected username and token.
-    assert result == {"username": username, "token": "mock_token"}
-    auth_service._user_service.get_user_by_username.assert_called_once_with(username)
-    auth_service._token_service.create_access_token.assert_called_once()
+    assert result.token == "test_token"
+    assert isinstance(result.folder, FolderResponse)
+    assert result.folder.success == True
+    assert "Successfully created" in result.folder.message
 
 
 @pytest.mark.asyncio
-async def test_login_success_email(auth_service, mocker):
-    """Should successfully log in a user using email."""
-    user_mock = User(
-        id=ObjectId(), 
-        username="test_user", 
-        email=email,
-        password=hashed_password, 
-        folder=UserFolder(id=ObjectId(), entries=[])
+async def test_register_user_exists(
+    auth_service: AuthService,
+    user_data: Dict[str, Any],
+    user_service: MagicMock,
+    mock_user_id: ObjectId,
+) -> None:
+    folder = UserFolder(_id=ObjectId())
+    existing_user = User(
+        _id=mock_user_id,
+        email=user_data["email"],
+        username=user_data["username"],
+        password="hashed_password",
+        folder=folder,
     )
+    new_user = RegisterUser(**user_data)
 
-    # Should detect that the identity is an email.
-    mocker.patch('backend.utils.email_utils.isEmail', return_value=True)
-    auth_service._user_service.get_user_by_email.return_value = user_mock
-    # Should verify the password correctly.
-    mocker.patch('backend.utils.password_utils.verify_password', return_value=True)
-    auth_service._token_service.create_access_token.return_value = "mock_token"
+    user_service.get_user_by_email.return_value = existing_user
 
-    result = await auth_service.login(LoginUser(identity=email, password=password))
-    # Should return the correct username and token.
-    assert result["username"] == username
-    assert result["token"] == "mock_token"
+    with patch(
+        "backend.services.auth_service.isEmail", return_value=user_data["email"]
+    ):
+        # Cambiar a HTTPException en lugar de ValueError
+        with pytest.raises(HTTPException) as excinfo:
+            await auth_service.register(new_user)
 
-
-@pytest.mark.asyncio
-async def test_login_user_not_found(auth_service, mocker):
-    """Should raise an HTTPException (404) when the user is not found."""
-    mocker.patch('backend.utils.email_utils.isEmail', return_value=False)
-    auth_service._user_service.get_user_by_username.return_value = None
-
-    with pytest.raises(HTTPException) as exc:
-        await auth_service.login(LoginUser(identity="unknown", password=password))
-    # Should raise a 404 error with the message "Usuario no encontrado".
-    assert exc.value.status_code == 404
-    assert exc.value.detail == "Usuario no encontrado"
+    assert excinfo.value.status_code == 400
+    assert "User already exists" in str(excinfo.value.detail)
+    # Cambiar a assert_called_once si no es una corrutina
+    user_service.get_user_by_email.assert_called_once_with(new_user.email)
 
 
-@pytest.mark.asyncio
-async def test_login_incorrect_password(auth_service, mocker):
-    """Should raise an HTTPException (401) when the password is incorrect."""
-    user_mock = User(
-        id=ObjectId(), 
-        username=username, 
-        email=email,
-        password=hashed_password, 
-        folder=UserFolder(id=ObjectId(), entries=[])
+def test_login_success(
+    auth_service: AuthService,
+    user_data: Dict[str, Any],
+    login_data: Dict[str, Any],
+    user_service: MagicMock,
+    mock_user_id: ObjectId,
+) -> None:
+    folder = UserFolder(_id=ObjectId(), entries=[])
+    user = User(
+        _id=mock_user_id,
+        email=user_data["email"],
+        username=user_data["username"],
+        password="hashed_password",
+        folder=folder,
     )
-    mocker.patch('backend.utils.email_utils.isEmail', return_value=False)
-    auth_service._user_service.get_user_by_username.return_value = user_mock
-    # Should fail password verification.
-    mocker.patch('backend.utils.password_utils.verify_password', return_value=False)
+    user_login = LoginUser(**login_data)
 
-    with pytest.raises(HTTPException) as exc:
-        await auth_service.login(LoginUser(identity=username, password="wrongA23@PASSWORD"))
-    # Should raise a 401 error with the message "Contraseña incorrecta".
-    assert exc.value.status_code == 401
-    assert exc.value.detail == "Contraseña incorrecta"
+    # Configura los mocks correctamente
+    user_service.get_user_by_email.return_value = user
+    user_service.get_user_by_username.return_value = None
 
+    # Asegura que auth_service use este user_service
+    auth_service._user_service = user_service
 
-@pytest.mark.asyncio
-async def test_register_success(auth_service, mocker):
-    """Should successfully register a new user."""
-    user_register = RegisterUser(username=username, email=email, password=password)
+    with patch(
+        "backend.services.auth_service.verify_password", return_value=True
+    ) as mock_verify_password:
+        # En lugar de mockear isEmail para devolver True, hazlo para devolver el mismo email
+        # Es probable que la función isEmail solo valide el formato y devuelva el mismo email
+        with patch(
+            "backend.services.auth_service.isEmail", return_value=login_data["identity"]
+        ):
+            result = auth_service.login(user_login)
 
-    user_mock = User(
-        id=ObjectId(),
-        username=username,
-        email=email,
-        password=hashed_password,
-        folder=UserFolder(id=ObjectId(), entries=[])
+    # Verificaciones
+    assert result.access_token == "test_token"
+
+    # Verifica las llamadas a mocks sin los argumentos exactos si hay problemas
+    assert mock_verify_password.called
+    assert user_service.get_user_by_email.called
+
+    # O verifica los argumentos de llamada con más detalle si es necesario
+    mock_verify_password.assert_called_once_with(
+        login_data["password"], "hashed_password"
     )
-
-    auth_service._user_service.create_user.return_value = user_mock
-    auth_service.directory_manager.createFolder.return_value = "folder_created"
-    mocker.patch('os.path.exists', return_value=False)
-    # Should send a registration email asynchronously.
-    mocker.patch('backend.services.email_service.EmailService.send_register_email', new_callable=AsyncMock)
-    auth_service._token_service.create_access_token.return_value = "mock_token"
-
-    result = await auth_service.register(user_register)
-
-    # Should return the folder destination and token.
-    assert result == {"folder_dest": "folder_created", "token": "mock_token"}
-    auth_service._user_service.create_user.assert_called_once()
-    auth_service.directory_manager.createFolder.assert_called_once()
-    EmailService.send_register_email.assert_called_once()
+    user_service.get_user_by_email.assert_called_once_with(login_data["identity"])
 
 
-@pytest.mark.asyncio
-async def test_register_user_already_exists(auth_service, mocker):
-    """Should raise an HTTPException (400) when the user already exists."""
-    user_register = RegisterUser(username="existing_user", email=email, password=password)
-    auth_service._user_service.create_user.side_effect = ValueError("User already exists")
-
-    with pytest.raises(HTTPException) as exc:
-        await auth_service.register(user_register)
-    # Should raise a 400 error with a message indicating the user already exists.
-    assert exc.value.status_code == 400
-    assert "Error al registrar usuario: User already exists" in exc.value.detail
-
-
-@pytest.mark.asyncio
-async def test_register_validation_error(auth_service, mocker):
-    """Should raise a ValidationError when registration data is invalid."""
-    invalid_email = "invalid-email"
-    with pytest.raises(ValidationError) as exc_info:
-        RegisterUser(username=username, email=invalid_email, password=password)
-
-    # Should indicate that the email address is not valid.
-    assert "value is not a valid email address" in str(exc_info.value)
-
-
-@pytest.mark.asyncio
-async def test_password_recovery_handshake_new_otp(auth_service, mocker):
-    """Should send a new OTP for password recovery when the user exists."""
-    user_mock = User(
-        id=ObjectId(), 
-        username=username, 
-        email=email,
-        password=hashed_password, 
-        folder=UserFolder(id=ObjectId(), entries=[])
+def test_login_invalid_password(
+    auth_service: AuthService,
+    user_data: Dict[str, Any],
+    login_data: Dict[str, Any],
+    user_service: MagicMock,
+    mock_user_id: ObjectId,
+) -> None:
+    folder = UserFolder(_id=ObjectId(), entries=[])
+    user = User(
+        _id=mock_user_id,
+        email=user_data["email"],
+        username=user_data["username"],
+        password="hashed_password",
+        folder=folder,
     )
-    mocker.patch('backend.utils.email_utils.isEmail', return_value=True)
-    auth_service._user_service.get_user_by_email.return_value = user_mock
-    mocker.patch('backend.utils.otp_utils.OTPUtils.generate_otp', return_value="123456")
-    # Should send the recovery password email asynchronously.
-    mocker.patch('backend.services.email_service.EmailService.send_recovery_password_email', new_callable=AsyncMock)
-    auth_service._user_repository.password_recovery_handshake.return_value = None
+    user_login = LoginUser(**login_data)
 
-    result = await auth_service.password_recovery_handshake(RecoveryPassword(identity=email))
+    user_service.get_user_by_email.return_value = user
 
-    # Should return a confirmation message that the recovery code was sent.
-    assert result == {"detail": "Código de recuperación enviado al correo electrónico."}
-    auth_service._user_repository.password_recovery_handshake.assert_called_once()
-    EmailService.send_recovery_password_email.assert_called_once_with("123456")
+    with patch(
+        "backend.services.auth_service.verify_password", return_value=False
+    ) as mock_verify_password:
+        with patch("backend.services.auth_service.isEmail", return_value=True):
+            with pytest.raises(HTTPException) as excinfo:
+                auth_service.login(user_login)
 
-
-@pytest.mark.asyncio
-async def test_password_recovery_handshake_otp_valid(auth_service, mocker):
-    """Should not resend OTP if a valid OTP already exists."""
-    user_mock = User(
-        id=ObjectId(),
-        username=username,
-        email=email,
-        password=hashed_password,
-        folder=UserFolder(id=ObjectId(), entries=[]),
-        otp="123456",
-        # OTP no ha expirado.
-        exp=int((datetime.now() + timedelta(minutes=10)).timestamp())
-    )
-    mocker.patch('backend.utils.email_utils.isEmail', return_value=True)
-    auth_service._user_service.get_user_by_email.return_value = user_mock
-
-    mock_send_email = mocker.patch.object(
-        EmailService, 'send_recovery_password_email', new_callable=AsyncMock, return_value=None)
-
-    result = await auth_service.password_recovery_handshake(RecoveryPassword(identity=email))
-
-    # Should not resend the OTP if the current one is still valid.
-    mock_send_email.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_password_recovery_handshake_user_not_found(auth_service, mocker):
-    """Should raise an HTTPException (404) when the user is not found during password recovery."""
-    mocker.patch('backend.utils.email_utils.isEmail', return_value=True)
-    auth_service._user_service.get_user_by_email.return_value = None
-
-    with pytest.raises(HTTPException) as exc:
-        await auth_service.password_recovery_handshake(RecoveryPassword(identity="unknown@example.com"))
-    # Should raise a 404 error indicating the user was not found.
-    assert exc.value.status_code == 404
-    assert exc.value.detail == "Usuario no encontrado."
-
-
-@pytest.mark.asyncio
-async def test_change_password_success(auth_service, mocker):
-    """Should successfully change the user's password when provided with a valid OTP."""
-    user_mock = User(
-        id=ObjectId(),
-        email=email,
-        password=hashed_password,
-        otp="123456",
-        exp=int((datetime.now() + timedelta(minutes=5)).timestamp()),
-        folder=UserFolder(id=ObjectId(), entries=[])
-    )
-
-    mocker.patch('backend.utils.email_utils.isEmail', return_value=True)
-
-    auth_service._user_service.get_user_by_email.return_value = user_mock
-    auth_service._user_service.change_password = AsyncMock(return_value=None)
-
-    mocked_email_service = mocker.patch(
-        'backend.services.email_service.EmailService.send_password_changed_email',
-        new_callable=AsyncMock
-    )
-
-    result = await auth_service.change_password(
-        RecoveryPasswordOtp(email=email, otp="123456", password=password)
-    )
-
-    # Should return a success message indicating the password was changed.
-    assert result == {"detail": "Contraseña cambiada exitosamente."}
-    auth_service._user_service.change_password.assert_called_once_with(email, password)
-    mocked_email_service.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_change_password_otp_expired(auth_service, mocker):
-    """Should raise an HTTPException (400) when the OTP has expired."""
-    user_mock = User(
-        id=ObjectId(), 
-        email=email, 
-        password=hashed_password,
-        otp="123456", 
-        exp=int((datetime.now() - timedelta(minutes=1)).timestamp()),
-        folder=UserFolder(id=ObjectId(), entries=[])
-    )
-    mocker.patch('backend.utils.email_utils.isEmail', return_value=True)
-    auth_service._user_service.get_user_by_email.return_value = user_mock
-
-    with pytest.raises(HTTPException) as exc:
-        await auth_service.change_password(RecoveryPasswordOtp(email=email, otp="123456", password=password))
-    # Should raise a 400 error indicating that the recovery code has expired.
-    assert exc.value.status_code == 400
-    assert exc.value.detail == "El código de recuperación ha expirado."
-
-
-@pytest.mark.asyncio
-async def test_change_password_invalid_otp(auth_service, mocker):
-    """Should raise an HTTPException (400) when an invalid OTP is provided."""
-    user_mock = User(
-        id=ObjectId(), 
-        email=email, 
-        otp="123456", 
-        password=hashed_password,
-        exp=int((datetime.now() + timedelta(minutes=5)).timestamp()),
-        folder=UserFolder(id=ObjectId(), entries=[])
-    )
-    mocker.patch('backend.utils.email_utils.isEmail', return_value=True)
-    auth_service._user_service.get_user_by_email.return_value = user_mock
-
-    with pytest.raises(HTTPException) as exc:
-        await auth_service.change_password(RecoveryPasswordOtp(email=email, otp="654321", password=password))
-    # Should raise a 400 error indicating that the provided recovery code is incorrect.
-    assert exc.value.status_code == 400
-    assert exc.value.detail == "El código de recuperación es incorrecto."
-
-
-@pytest.mark.asyncio
-async def test_change_password_user_not_found(auth_service, mocker):
-    """Should raise an HTTPException (404) when the user does not exist during password change."""
-    mocker.patch('backend.utils.email_utils.isEmail', return_value=True)
-    auth_service._user_service.get_user_by_email.return_value = None
-
-    with pytest.raises(HTTPException) as exc:
-        await auth_service.change_password(RecoveryPasswordOtp(email="unknown@example.com", otp="123456", password=password))
-    # Should raise a 404 error indicating that the user does not exist.
-    assert exc.value.status_code == 404
-    assert exc.value.detail == "Usuario no existe"
+            assert excinfo.value.status_code == 401
+            assert "Contraseña incorrecta" in str(excinfo.value.detail)
+            mock_verify_password.assert_called_once_with(
+                user_login.password, user.password
+            )

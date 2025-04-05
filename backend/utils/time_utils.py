@@ -1,4 +1,4 @@
-def format_time(self, seconds: float) -> str:
+def format_time(seconds: float) -> str:
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
     seconds = int(seconds % 60)

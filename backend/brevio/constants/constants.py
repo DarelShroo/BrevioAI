@@ -4,4 +4,3 @@ class Constants:
     ALL_TRANSCRIPTIONS = "all_transcriptions.txt"
     ALL_SUMMARIES = "all_summaries.md"
     DESTINATION_FOLDER = "data"
-   

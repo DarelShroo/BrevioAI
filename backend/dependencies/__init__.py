@@ -9,5 +9,5 @@ __all__ = [
     "get_auth_service",
     "get_db",
     "get_token_service",
-    "get_current_user"
+    "get_current_user",
 ]

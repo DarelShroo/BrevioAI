@@ -1,5 +1,7 @@
 from typing import Optional
-from pydantic import BaseModel
+
+from models.user.base_model import BaseModel
+
 
 class FileConfig(BaseModel):
     transcription_path: Optional[str] = None

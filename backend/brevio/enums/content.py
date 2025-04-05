@@ -1,7 +1,21 @@
 from enum import Enum
-from ..constants.contents import Contents
+
+from brevio.constants.contents import Contents
+
 
 class ContentType(Enum):
+    """Enum for different content types"""
+
+    TEXT = "text"
+    AUDIO = "audio"
+    VIDEO = "video"
+    PDF = "pdf"
+    URL = "url"
+
+
+class ContentCategory(Enum):
+    """Enum for different content categories"""
+
     PROGRAMMING_CONTENT = Contents.PROGRAMMING_CONTENT
     SCIENTIFIC_CONTENT = Contents.SCIENTIFIC_CONTENT
     BUSINESS_CONTENT = Contents.BUSINESS_CONTENT

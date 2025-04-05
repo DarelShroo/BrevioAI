@@ -1,8 +1,11 @@
-from typing import Optional
+from typing import Any, Dict, Optional
+
 from bson import ObjectId
 from pydantic import EmailStr, Field
+
 from .base_model import BaseModel
-from backend.models.user.user_folder import UserFolder
+from .user_folder import UserFolder
+
 
 class User(BaseModel):
     id: ObjectId = Field(default_factory=ObjectId, alias="_id")
@@ -13,16 +16,14 @@ class User(BaseModel):
     otp: Optional[int] = None
     exp: Optional[int] = None
 
-    def to_dict(self):
-        user_dict = {
+    def to_dict(self) -> Dict[str, Any]:
+        user_dict: Dict[str, Any] = {
             "username": self.username,
             "email": self.email,
             "password": self.password,
             "folder": self.folder.model_dump(),
             "otp": self.otp,
-            "exp": self.exp
+            "exp": self.exp,
         }
-        if self.id is not None:
-            user_dict["_id"] = self.id
+        user_dict["_id"] = self.id
         return user_dict
-

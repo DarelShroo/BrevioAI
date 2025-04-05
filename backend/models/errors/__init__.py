@@ -7,5 +7,5 @@ __all__ = [
     "AuthServiceException",
     "AuthenticationError",
     "ConnectionError",
-    "InvalidFileExtension"
+    "InvalidFileExtension",
 ]

@@ -1,10 +1,11 @@
+from .content import ContentCategory, ContentType
 from .extension import ExtensionType
 from .language import LanguageType
 from .model import ModelType
-from .role import RoleType
-from .content import ContentType
-from .source_type import SourceType
 from .output_format_type import OutputFormatType
+from .role import RoleType
+from .source_type import SourceType
+
 __all__ = [
     "ExtensionType",
     "LanguageType",
@@ -12,5 +13,5 @@ __all__ = [
     "RoleType",
     "ContentType",
     "SourceType",
-    "OutputFormatType"
+    "OutputFormatType",
 ]

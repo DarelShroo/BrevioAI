@@ -1,20 +1,35 @@
 from os import path
-from typing import List
+from typing import List, Optional, cast
+
 from fastapi import HTTPException, UploadFile
-from backend.models.errors.invalid_file_extension import InvalidFileExtension
 
-def validate_file_extension(file: UploadFile, allowed_extensions: List[str]):
+from models.errors.invalid_file_extension import InvalidFileExtension
+
+
+def validate_file_extension(
+    file: UploadFile, allowed_extensions: List[str]
+) -> UploadFile:
     try:
-        filename, ext = path.splitext(file.filename)
-        ext = ext[1:].lower()
+        if file.filename is None:
+            raise ValueError("Filename cannot be None")
 
-        if ext not in allowed_extensions:
-            raise InvalidFileExtension(filename=file.filename, allowed_extensions=allowed_extensions)
-        
+        filename = cast(str, file.filename)
+        _, ext = path.splitext(filename)
+
+        ext = ext[1:].lower() if ext else ""
+
+        if not ext or ext not in allowed_extensions:
+            raise InvalidFileExtension(
+                filename=filename, allowed_extensions=allowed_extensions
+            )
+
         return file
 
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except InvalidFileExtension:
+        raise
     except Exception as e:
         raise HTTPException(
-            status_code=400,
-            detail=f"Error validating file extension: {str(e)}"
+            status_code=400, detail=f"Error validating file extension: {str(e)}"
         )

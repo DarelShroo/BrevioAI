@@ -1,5 +1,5 @@
+from .auth import LoginUser, RecoveryPassword, RecoveryPasswordOtp, RegisterUser
 from .auth_base import AuthWithPassword, IdentityBase
-from .auth import LoginUser, RegisterUser, RecoveryPassword, RecoveryPasswordOtp
 
 __all__ = [
     "AuthWithPassword",
@@ -7,5 +7,5 @@ __all__ = [
     "LoginUser",
     "RegisterUser",
     "RecoveryPassword",
-    "RecoveryPasswordOtp"
+    "RecoveryPasswordOtp",
 ]

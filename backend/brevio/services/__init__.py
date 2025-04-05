@@ -1,13 +1,15 @@
+"""Services package initialization."""
 
-from .yt_service import YTService
-from .transcription_service import TranscriptionService
-from .summary_service import SummaryService
 from .advanced_content_generator import AdvancedContentGenerator
-from . import yt_service
+from .audio_service import AudioService
+from .summary_service import SummaryService
+from .transcription_service import TranscriptionService
+from .yt_service import YTService
+
 __all__ = [
-    "YTService",
-    "TranscriptionService",
-    "SummaryService",
     "AdvancedContentGenerator",
-    "yt_service"
+    "AudioService",
+    "SummaryService",
+    "TranscriptionService",
+    "YTService",
 ]

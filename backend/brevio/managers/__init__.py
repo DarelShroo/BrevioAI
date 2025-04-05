@@ -1,3 +1,7 @@
 from .directory_manager import DirectoryManager
 
-__all__ = ["DirectoryManager"]
+managers = {
+    "directory_manager": DirectoryManager,
+}
+
+__all__ = ["DirectoryManager", "managers"]

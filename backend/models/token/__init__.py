@@ -1,5 +1,3 @@
 from .token import Token
 
-__all__ = [
-    "Token"
-]
+__all__ = ["Token"]

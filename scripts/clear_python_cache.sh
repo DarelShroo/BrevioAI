@@ -1,26 +1,42 @@
 #!/bin/bash
 
+# Script para limpiar caché de Python
+# Uso: ./clear_python_cache.sh /ruta/a/tu/carpeta
+
+# Verificar si se proporcionó un argumento
 if [ -z "$1" ]; then
   echo "Error: Debes proporcionar la ruta del directorio."
-  echo "Uso: ./clear_python_cache.sh /ruta/a/tu/carpeta"
+  echo "Uso: $0 /ruta/a/tu/carpeta"
   exit 1
 fi
 
-# Especifica el directorio en el que quieres ejecutar el script
-DIRECTORIO_ESPECIFICO="$1"
+DIRECTORIO="$1"
 
-# Verifica si el directorio existe
-if [ ! -d "$DIRECTORIO_ESPECIFICO" ]; then
-  echo "Error: El directorio $DIRECTORIO_ESPECIFICO no existe."
+# Verificar si el directorio existe
+if [ ! -d "$DIRECTORIO" ]; then
+  echo "Error: El directorio '$DIRECTORIO' no existe."
   exit 1
 fi
 
-echo "Eliminando caché de Python en $DIRECTORIO_ESPECIFICO..."
+echo "Eliminando caché de Python en $DIRECTORIO..."
 
-# Buscar y eliminar todas las carpetas __pycache__ y archivos .pyc/.pyo recursivamente en el directorio especificado
-find "$DIRECTORIO_ESPECIFICO" -type d -name "__pycache__" -exec rm -rf {} + 
-find "$DIRECTORIO_ESPECIFICO" -type f -name "*.pyc" -delete
-find "$DIRECTORIO_ESPECIFICO" -type f -name "*.pyo" -delete
+# Eliminar directorios de caché
+find "$DIRECTORIO" -type d \( \
+  -name "__pycache__" \
+  -o -name ".mypy_cache" \
+  -o -name ".pytest_cache" \
+  -o -name ".ipynb_checkpoints" \
+\) -exec rm -rf {} + 2>/dev/null
 
-echo "Caché de Python eliminado con éxito en $DIRECTORIO_ESPECIFICO. 🚀"
+# Eliminar archivos compilados de Python
+find "$DIRECTORIO" -type f \( \
+  -name "*.pyc" \
+  -o -name "*.pyo" \
+  -o -name "*.pyd" \
+  -o -name "*.py.class" \
+\) -delete 2>/dev/null
 
+echo -e "\n✅ Caché de Python eliminada con éxito en $DIRECTORIO"
+echo "Se eliminó:"
+echo "  - Directorios __pycache__, .mypy_cache, .pytest_cache"
+echo "  - Archivos *.pyc, *.pyo y otros archivos compilados"

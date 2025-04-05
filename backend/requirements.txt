@@ -19,5 +19,8 @@ pytest-asyncio
 pytest-mock
 mongomock
 pre-commit
-
-
+black
+isort
+mypy
+types-Markdown
+pytest-cov

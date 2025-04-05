@@ -1,10 +1,11 @@
-import os
-import time
-import asyncio
-import pytest
 import logging
+import time
 from unittest.mock import patch
+
+import pytest
+
 from backend.brevio.services.summary_service import SummaryService
+
 
 @pytest.fixture(autouse=True)
 def set_env_vars(monkeypatch):
@@ -15,10 +16,12 @@ def set_env_vars(monkeypatch):
     monkeypatch.setenv("TEMPERATURE", "0.7")
     monkeypatch.setenv("OPENAI_API_KEY", "fake_api_key")
 
+
 @pytest.fixture
 def summary_service():
     """Should provide an instance of SummaryService for testing."""
     return SummaryService()
+
 
 def test_chunk_text(summary_service):
     """Should correctly split text into chunks."""
@@ -26,19 +29,20 @@ def test_chunk_text(summary_service):
     chunk_size = 30
     overlap = 5
     chunks = summary_service.chunk_text(text, chunk_size, overlap)
-    
+
     # Should produce 5 chunks
     assert len(chunks) == 5
     # Should ensure each chunk (except possibly the last) does not exceed the chunk size
     for chunk in chunks[:-1]:
         assert len(chunk) <= chunk_size
     assert len(chunks[-1]) <= chunk_size
-    
+
     # Should reconstruct the original text from the chunks considering the overlap
     reconstructed = chunks[0]
     for chunk in chunks[1:]:
         reconstructed += chunk[overlap:]
-    assert text.startswith(reconstructed[:len(text)])
+    assert text.startswith(reconstructed[: len(text)])
+
 
 @pytest.mark.asyncio
 async def test_check_token_limit_true(summary_service):
@@ -48,6 +52,7 @@ async def test_check_token_limit_true(summary_service):
     result = await summary_service._check_token_limit(200)
     assert result is True
 
+
 @pytest.mark.asyncio
 async def test_check_token_limit_false(summary_service):
     """Should return False when there are not enough tokens."""
@@ -56,10 +61,11 @@ async def test_check_token_limit_false(summary_service):
     result = await summary_service._check_token_limit(200)
     assert result is False
 
+
 @pytest.mark.asyncio
 async def test_generate_summary_chunk_success(summary_service, caplog):
     """Should successfully generate a summary for a chunk with a mocked response."""
-    logger = logging.getLogger('backend.brevio.services.summary_service')
+    logger = logging.getLogger("backend.brevio.services.summary_service")
     logger.setLevel(logging.DEBUG)
     caplog.set_level(logging.DEBUG)
 
@@ -83,7 +89,9 @@ async def test_generate_summary_chunk_success(summary_service, caplog):
     async def mock_create(*args, **kwargs):
         return mock_response
 
-    with patch.object(summary_service.client.chat.completions, "create", new=mock_create):
+    with patch.object(
+        summary_service.client.chat.completions, "create", new=mock_create
+    ):
         index, summary, tokens_used = await summary_service.generate_summary_chunk(
             0, "Texto de prueba", "Prompt de prueba", "Resumen acumulado"
         )
@@ -97,10 +105,15 @@ async def test_generate_summary_chunk_success(summary_service, caplog):
         # Optionally, should log a message indicating the chunk was processed
         # assert any("Chunk 0 processed" in record.getMessage() for record in caplog.records if record.levelname == "INFO")
 
+
 @pytest.mark.asyncio
 async def test_generate_summary_chunk_failure(summary_service):
     """Should handle errors in generate_summary_chunk and return appropriate values."""
-    with patch.object(summary_service.client.chat.completions, "create", side_effect=Exception("Error API")):
+    with patch.object(
+        summary_service.client.chat.completions,
+        "create",
+        side_effect=Exception("Error API"),
+    ):
         index, summary, tokens_used = await summary_service.generate_summary_chunk(
             1, "Otro texto", "Prompt", "Acumulado"
         )
@@ -109,25 +122,33 @@ async def test_generate_summary_chunk_failure(summary_service):
         assert "Error procesando chunk" in summary
         assert tokens_used == 0
 
+
 @pytest.mark.asyncio
 async def test_process_chunks_in_groups(summary_service):
     """Should process text chunks in groups and aggregate the summaries correctly."""
     chunks = ["Chunk 1", "Chunk 2"]
     prompt = "Prompt de prueba"
-    
+
     async def fake_generate_summary_chunk(index, chunk, prompt, acc):
         # Should simulate generating a summary by returning a formatted summary and token count equal to the length of the chunk
         return index, f"Resumen: {chunk}", len(chunk)
-    
-    with patch.object(summary_service, "generate_summary_chunk", side_effect=fake_generate_summary_chunk), \
-         patch.object(summary_service, "_check_token_limit", return_value=True):
-        full_summary, total_tokens_used = await summary_service.process_chunks_in_groups(chunks, prompt)
-        
+
+    with patch.object(
+        summary_service,
+        "generate_summary_chunk",
+        side_effect=fake_generate_summary_chunk,
+    ), patch.object(summary_service, "_check_token_limit", return_value=True):
+        (
+            full_summary,
+            total_tokens_used,
+        ) = await summary_service.process_chunks_in_groups(chunks, prompt)
+
         # Should include the summaries from both chunks
         assert "Resumen: Chunk 1" in full_summary
         assert "Resumen: Chunk 2" in full_summary
         # Should sum the tokens used from both chunks correctly
         assert total_tokens_used == len("Chunk 1") + len("Chunk 2")
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

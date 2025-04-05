@@ -1,8 +1,9 @@
 from datetime import timedelta
 
-def parse_duration(duration):
+
+def parse_duration(duration: str) -> timedelta:
     time_parts = duration.split(":")
-        
+
     if len(time_parts) == 2:
         minutes, seconds = map(int, time_parts)
         hours = 0
@@ -11,10 +12,12 @@ def parse_duration(duration):
     else:
         print("Formato de duración no válido:", duration)
         return timedelta()
-        
+
     return timedelta(hours=hours, minutes=minutes, seconds=seconds)
 
+
 def format_time(seconds: float) -> str:
+    """Format seconds to [HH:MM:SS] format."""
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
     seconds = int(seconds % 60)

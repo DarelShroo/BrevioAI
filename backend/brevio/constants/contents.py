@@ -1,3 +1,25 @@
+class ContentsType:
+    """Constants for content-related messages and values"""
+
+    MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
+    SUPPORTED_AUDIO_FORMATS = [".mp3", ".wav", ".m4a", ".mp4"]
+    SUPPORTED_VIDEO_FORMATS = [".mp4", ".avi", ".mov"]
+    SUPPORTED_TEXT_FORMATS = [".txt", ".doc", ".docx"]
+    SUPPORTED_PDF_FORMAT = ".pdf"
+
+    # Content type constants
+    PROGRAMMING_CONTENT = "programming"
+    SCIENTIFIC_CONTENT = "scientific"
+    BUSINESS_CONTENT = "business"
+    EDUCATIONAL_CONTENT = "educational"
+    CULTURAL_CONTENT = "cultural"
+    DEPORTIVE_CONTENT = "deportive"
+    POLITICAL_CONTENT = "political"
+    LEGAL_CONTENT = "legal"
+    HEALTH_CONTENT = "health"
+    ENTERTAINMENT_CONTENT = "entertainment"
+
+
 class Contents:
     PROGRAMMING_CONTENT = """
 Genera un resumen detallado en formato Markdown del siguiente texto, con un enfoque técnico preciso, siguiendo estas directrices:

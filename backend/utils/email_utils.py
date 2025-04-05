@@ -1,12 +1,13 @@
 from pydantic import BaseModel, EmailStr, ValidationError
 
+
 class EmailValidator(BaseModel):
     email: EmailStr
 
-def isEmail(email: str) -> bool:
+
+def isEmail(email: str) -> str:
     try:
         EmailValidator(email=email)
-        return True
+        return email
     except ValidationError:
-        return False
-
+        raise ValueError("El formato del correo electrónico es inválido")

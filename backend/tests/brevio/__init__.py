@@ -1,4 +1,4 @@
-from brevio import services, models, managers
+from brevio import managers, models, services
 
 __all__ = [
     "services",

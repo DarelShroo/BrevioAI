@@ -1,7 +1,9 @@
-from typing import Optional
+from typing import Optional, Type, TypeVar
 
-@staticmethod
-def generate_obj_if_data_exist(data: Optional[dict], obj: type) -> Optional[object]:
+T = TypeVar("T")
+
+
+def generate_obj_if_data_exist(data: Optional[dict], obj: Type[T]) -> Optional[T]:
     if data:
         return obj(**data)
     return None
