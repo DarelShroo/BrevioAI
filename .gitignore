@@ -68,3 +68,4 @@ env/
 .venv/
 
 backend/audios/
+backend/data

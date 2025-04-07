@@ -13,10 +13,15 @@ from fastapi import (
 )
 from pydantic import BaseModel
 
-from backend.brevio.enums.language import LanguageType
+from backend.brevio.enums.language import LanguageType, parse_language_type
 from backend.brevio.enums.model import ModelType
 from backend.brevio.enums.output_format_type import OutputFormatType
 from models.brevio.brevio_generate import BrevioGenerate
+from models.brevio.responses.brevio_responses import (
+    LanguagesResponse,
+    ModelsResponse,
+    ProcessingResponse,
+)
 
 from ..brevio.enums import ExtensionType, SourceType
 from ..brevio.models import PromptConfig
@@ -25,22 +30,6 @@ from ..dependencies.brevio_service_dependency import get_brevio_service
 from ..models.brevio.url_yt import UrlYT
 from ..services.brevio_service import BrevioService
 from ..utils.extension_validator import validate_file_extension
-
-
-class LanguagesResponse(BaseModel):
-    languages: List[str]
-
-
-class ModelsResponse(BaseModel):
-    models: List[str]
-
-
-class CategoryStylesResponse(BaseModel):
-    categories_styles: Dict[str, List[str]]
-
-
-class ProcessingResponse(BaseModel):
-    message: str
 
 
 class BrevioRoutes:
@@ -142,7 +131,7 @@ class BrevioRoutes:
         )
         async def generate_summary_media(
             files: List[UploadFile] = File(...),
-            language: LanguageType = Form(...),
+            language: LanguageType = Depends(parse_language_type),
             model: ModelType = Form(...),
             category: str = Form(...),
             style: str = Form(...),
@@ -183,7 +172,7 @@ class BrevioRoutes:
         )
         async def generate_summary_documents(
             files: List[UploadFile] = File(...),
-            language: LanguageType = Form(...),
+            language: LanguageType = Depends(parse_language_type),
             model: ModelType = Form(...),
             category: str = Form(...),
             style: str = Form(...),
@@ -233,7 +222,7 @@ class BrevioRoutes:
                 category=category,
                 style=style,
                 format=format.value,
-                language=language.value,
+                language=language.name,
                 source_types=source_types.value,
             )
 

@@ -58,7 +58,6 @@ class BrevioService:
         for category, styles in raw_data.items():
             if not isinstance(category, str):
                 continue
-            # Si styles es una cadena, la convertimos en lista; si es una lista, filtramos solo str
             if isinstance(styles, str):
                 styles_list = [styles]
             elif isinstance(styles, list):
@@ -129,10 +128,12 @@ class BrevioService:
 
         saved_files: List[MediaEntry] = []
 
-        tasks = []
+        tasks: list[CoroutineType] = []
         for index, (filename, file_content) in enumerate(files_data):
             file_path = uploads_dir / str(index) / f"{filename}"
-            tasks.append(self.save_media(file_content, file_path))
+            await self.save_media(file_content, file_path)
+
+            saved_files.append(MediaEntry(path=file_path))
 
         _data = BrevioGenerate(
             data=saved_files, prompt_config=_prompt_config.model_dump()
@@ -190,8 +191,7 @@ class BrevioService:
 
         for index, (filename, file_content) in enumerate(files_data):
             file_path = uploads_dir / str(index) / f"{filename}"
-            task = loop.run_in_executor(None, self.save_media, file_content, file_path)
-            tasks.append(task)
+            tasks.append(self.save_media(file_content, file_path))
 
         await asyncio.gather(*tasks)
 

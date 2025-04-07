@@ -62,9 +62,9 @@ class PromptConfig(BaseModel):
 
         return value
 
-    @field_validator("model", "language", mode="before")
+    @field_validator("model", mode="before")
     @classmethod
-    def convert_enum(cls, value: Any, info: Any) -> Any:
+    def convert_model_enum(cls, value: Any, info: Any) -> Any:
         field_info = cls.model_fields.get(info.field_name)
 
         if field_info is None or field_info.annotation is None:
@@ -78,6 +78,27 @@ class PromptConfig(BaseModel):
         if isinstance(value, str):
             for member in enum_type:
                 if member.value == value:
+                    return member
+            raise ValueError(f"Invalid {info.field_name}: {value}")
+
+        return value
+
+    @field_validator("language", mode="before")
+    @classmethod
+    def convert_language_enum(cls, value: Any, info: Any) -> Any:
+        field_info = cls.model_fields.get(info.field_name)
+
+        if field_info is None or field_info.annotation is None:
+            raise ValueError(f"Invalid field: {info.field_name}")
+
+        enum_type: Type[Enum] = field_info.annotation
+
+        if not issubclass(enum_type, Enum):
+            raise ValueError(f"Field {info.field_name} is not an Enum type")
+
+        if isinstance(value, str):
+            for member in enum_type:
+                if member.name == value.upper():
                     return member
             raise ValueError(f"Invalid {info.field_name}: {value}")
 

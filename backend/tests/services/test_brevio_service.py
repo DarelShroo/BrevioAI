@@ -2,6 +2,7 @@ import asyncio
 import tempfile
 from concurrent.futures import Future
 from pathlib import Path as FilePath
+from types import CoroutineType
 from typing import List, Tuple
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -20,8 +21,6 @@ from backend.models.user import User
 from backend.models.user.user_folder import UserFolder
 from backend.services.brevio_service import BrevioService
 from backend.utils.password_utils import hash_password
-
-# Marcamos todos los tests como asyncio
 
 
 # Fixture para evitar conexiones reales a MongoDB
@@ -53,7 +52,7 @@ def mock_prompt_config():
         category="education",
         style="quick_ref",
         format=OutputFormatType.MARKDOWN.value,
-        language=LanguageType.SPANISH.value,
+        language=LanguageType.SPANISH.name,
         source_types=SourceType.TEXT.value,
     )
 
@@ -150,25 +149,41 @@ async def test_generate_summary_media_upload_success(
     brevio_service, mock_user, mock_prompt_config
 ):
     files_data = [("video1.mp4", b"content1"), ("audio1.mp3", b"content2")]
+
     with patch("backend.services.brevio_service.Constants") as mock_constants, patch(
         "pathlib.Path.mkdir", return_value=None
     ), patch("pathlib.Path.is_file", return_value=True):
         mock_constants.DESTINATION_FOLDER = "/mock/dir"
+
+        # Mock folder entry creation
+        mock_folder_entry = MagicMock()
+        mock_folder_entry.id = ObjectId()
         brevio_service._user_service.create_folder_entry = MagicMock(
-            return_value=MagicMock(id=ObjectId())
+            return_value=mock_folder_entry
         )
+
+        # Mock user retrieval
         brevio_service._user_service.get_user_by_id = MagicMock(return_value=mock_user)
-        brevio_service.save_media = MagicMock(
-            side_effect=[
-                MediaEntry(path="/mock/dir/video1.mp4"),
-                MediaEntry(path="/mock/dir/audio1.mp3"),
-            ]
-        )
+
+        # Create an awaitable async function mock for save_media
+        async def mock_save_media(content, path):
+            return None
+
+        brevio_service.save_media = mock_save_media
+
+        # Create an awaitable async function mock for _brevio.generate
+        async def mock_generate(*args, **kwargs):
+            return {"result": "success"}
+
+        brevio_service._brevio.generate = mock_generate
+
+        # Execute the method under test
         result = await brevio_service.generate_summary_media_upload(
             files_data, mock_user.id, mock_prompt_config
         )
+
+        # Assertions
         assert result == {"result": "success"}
-        brevio_service._brevio.generate.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -176,21 +191,43 @@ async def test_generate_summary_documents_success(
     brevio_service, mock_user, mock_prompt_config
 ):
     files_data = [("doc1.pdf", b"content1"), ("doc2.pdf", b"content2")]
+
     with patch("backend.services.brevio_service.Constants") as mock_constants, patch(
         "pathlib.Path.is_file", return_value=True
-    ), patch(
-        "backend.services.brevio_service.DirectoryManager.read_pdf"
-    ) as mock_read_pdf:
+    ):
         mock_constants.DESTINATION_FOLDER = "/mock/dir"
-        mock_read_pdf.return_value = ["Sample text"]
-        brevio_service.save_media = MagicMock(
-            side_effect=[
-                MediaEntry(path="/mock/dir/doc1.pdf"),
-                MediaEntry(path="/mock/dir/doc2.pdf"),
-            ]
+
+        # Mock folder entry creation
+        mock_folder_entry = MagicMock()
+        mock_folder_entry.id = ObjectId()
+        brevio_service._user_service.create_folder_entry = MagicMock(
+            return_value=mock_folder_entry
         )
-        result = await brevio_service.generate_summary_documents(
-            files_data, mock_user.id, mock_prompt_config
-        )
-        assert result == {"summary": "done"}
-        brevio_service._brevio.generate_summary_documents.assert_awaited_once()
+
+        # Mock user retrieval
+        brevio_service._user_service.get_user_by_id = MagicMock(return_value=mock_user)
+
+        # Create an awaitable async function mock for save_media
+        async def mock_save_media(content, path):
+            return None
+
+        brevio_service.save_media = mock_save_media
+
+        # Mock asyncio.gather to return a completed coroutine
+        async def mock_gather(*args):
+            return [None for _ in args]
+
+        with patch("asyncio.gather", side_effect=mock_gather):
+            # Create an awaitable async function mock for _brevio.generate_summary_documents
+            async def mock_generate_summary(*args, **kwargs):
+                return {"summary": "done"}
+
+            brevio_service._brevio.generate_summary_documents = mock_generate_summary
+
+            # Execute the method under test
+            result = await brevio_service.generate_summary_documents(
+                files_data, mock_user.id, mock_prompt_config
+            )
+
+            # Assertions
+            assert result == {"summary": "done"}

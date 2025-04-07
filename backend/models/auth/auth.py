@@ -20,7 +20,7 @@ class RegisterUser(AuthWithPassword):
             raise ValueError("El nombre de usuario debe tener al menos 6 caracteres.")
         return values
 
-    def to_dict(self) -> Dict[str, Any]:  # Fixed annotation at line 32
+    def to_dict(self) -> Dict[str, Any]:
         return self.model_dump(exclude_unset=True)
 
 

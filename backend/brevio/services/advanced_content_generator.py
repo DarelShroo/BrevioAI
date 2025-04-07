@@ -743,7 +743,7 @@ class AdvancedContentGenerator:
         if lang != "en":
             translator = Translator()
             try:
-                translated = await translator.translate(prompt_text, dest=lang)
+                translated = await translator.translate(prompt_text, dest=lang.value)
                 prompt_text = self.sanitize_markdown(translated.text)
             except Exception as e:
                 print(f"Translation error: {e}")

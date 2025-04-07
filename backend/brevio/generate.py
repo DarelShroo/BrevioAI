@@ -8,10 +8,6 @@ from typing import Any, Callable, Dict, Optional, overload
 import torch
 from bson import ObjectId
 
-backend_path = path.abspath(path.join(path.dirname(__file__), "../.."))
-if backend_path not in sys.path:
-    sys.path.append(backend_path)
-
 from backend.models.brevio.brevio_generate import BrevioGenerate, MediaEntry
 from backend.models.user.data_result import DataResult
 from brevio.models.file_config_model import FileConfig
@@ -23,6 +19,11 @@ from .models.response_model import SummaryResponse, TranscriptionResponse
 from .services.summary_service import SummaryService
 from .services.transcription_service import TranscriptionService
 from .services.yt_service import YTService
+
+backend_path = path.abspath(path.join(path.dirname(__file__), "../.."))
+if backend_path not in sys.path:
+    sys.path.append(backend_path)
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -138,7 +139,7 @@ class Generate:
                 if not await self._verify_file_exists(audio_path):
                     raise FileNotFoundError(f"Downloaded file not found: {audio_path}")
 
-                # Corregido: Manejo adecuado de funciones síncronas/asíncronas
+                # Generación de transcripción con verificación
                 async with transcription_sem:
                     if asyncio.iscoroutinefunction(
                         self._transcription_service.generate_transcription
@@ -147,22 +148,36 @@ class Generate:
                             audio_path, destination_path, data.prompt_config.language
                         )
                     else:
-                        result = await asyncio.to_thread(
-                            self._transcription_service.generate_transcription,
+                        await self._transcription_service.generate_transcription(
                             audio_path,
                             destination_path,
                             data.prompt_config.language,
                         )
-                    await self._verify_file_exists(transcription_path)
+
+                    if not await self._verify_file_exists(transcription_path):
+                        raise FileNotFoundError(
+                            f"Transcription file not created: {transcription_path}"
+                        )
                     logger.debug(f"Transcription completed for video {index}")
 
                 async with summary_sem:
-                    summary_result = await self._summary_service.generate_summary(
-                        prompt_config=data.prompt_config, file_config=_file_config
-                    )
+                    if asyncio.iscoroutinefunction(
+                        self._summary_service.generate_summary
+                    ):
+                        await self._summary_service.generate_summary(
+                            prompt_config=data.prompt_config, file_config=_file_config
+                        )
+                    else:
+                        await self._summary_service.generate_summary(
+                            prompt_config=data.prompt_config,
+                            file_config=_file_config,
+                        )
+                    if not await self._verify_file_exists(summary_path):
+                        raise FileNotFoundError(
+                            f"Summary file not created: {summary_path}"
+                        )
                     logger.debug(f"Summary completed for video {index}")
 
-                # Limpieza de memoria GPU en el executor para no bloquear el event loop
                 await asyncio.get_event_loop().run_in_executor(
                     self.executor, torch.cuda.empty_cache
                 )
@@ -198,14 +213,17 @@ class Generate:
                 raise
 
         try:
-            tasks = [
-                process_video(index, video) for index, video in enumerate(data.data)
-            ]
+            tasks = []
+            for index, video in enumerate(data.data):
+                task = process_video(index, video)
+                tasks.append(task)
+
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            # Manejo de errores en los resultados
-            if any(isinstance(r, Exception) for r in results):
-                raise RuntimeError("Some video processing tasks failed")
+            for result in results:
+                if isinstance(result, Exception):
+                    logger.error(f"Task failed with exception: {str(result)}")
+                    raise result
 
             return {
                 "folder_response": {
