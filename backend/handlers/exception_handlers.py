@@ -6,6 +6,9 @@ from pydantic import ValidationError
 
 from backend.models.errors.invalid_file_extension import InvalidFileExtension
 from models.errors.auth_service_exception import AuthServiceException
+from models.responses.signature_response import SignatureResponse
+
+SIGNATURE = SignatureResponse()
 
 
 async def pydantic_validation_exception_handler(
@@ -27,11 +30,7 @@ async def pydantic_validation_exception_handler(
             "status": "error",
             "message": "Se han encontrado errores de validación.",
             "errors": errors,
-            "signature": {
-                "brand": "Brevio",
-                "version": "v1.0",
-                "contact": "support@brevio.com",
-            },
+            "signature": SIGNATURE.model_dump(),
         },
     )
 
@@ -55,11 +54,7 @@ async def request_validation_exception_handler(
             "status": "error",
             "message": "Se han encontrado errores de validación.",
             "errors": errors,
-            "signature": {
-                "brand": "Brevio",
-                "version": "v1.0",
-                "contact": "support@brevio.com",
-            },
+            "signature": SIGNATURE.model_dump(),
         },
     )
 
@@ -80,11 +75,7 @@ async def invalid_file_extension_exception_handler(
                     "allowed_extensions": exc.allowed_extensions,
                 }
             ],
-            "signature": {
-                "brand": "Brevio",
-                "version": "v1.0",
-                "contact": "support@brevio.com",
-            },
+            "signature": SIGNATURE.model_dump(),
         },
     )
 
@@ -97,11 +88,7 @@ async def expired_signature_exception_handler(
         content={
             "status": "error",
             "message": "Token de autenticación expirado.",
-            "signature": {
-                "brand": "Brevio",
-                "version": "v1.0",
-                "contact": "support@brevio.com",
-            },
+            "signature": SIGNATURE.model_dump(),
         },
     )
 
@@ -112,11 +99,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
         content={
             "status": "error",
             "message": exc.detail,
-            "signature": {
-                "brand": "Brevio",
-                "version": "v1.0",
-                "contact": "support@brevio.com",
-            },
+            "signature": SIGNATURE.model_dump(),
         },
     )
 
@@ -128,11 +111,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
         content={
             "status": "error",
             "message": "Ocurrió un error inesperado. Por favor, inténtelo más tarde.",
-            "signature": {
-                "brand": "Brevio",
-                "version": "v1.0",
-                "contact": "support@brevio.com",
-            },
+            "signature": SIGNATURE.model_dump(),
         },
     )
 
@@ -144,12 +123,8 @@ async def value_error_exception_handler(
         status_code=400,
         content={
             "status": "error",
-            "message": f"Valor inválido en alguno de los campos. Por favor, revisa los datos proporcionados.",
-            "signature": {
-                "brand": "Brevio",
-                "version": "v1.0",
-                "contact": "support@brevio.com",
-            },
+            "message": "Valor inválido en alguno de los campos. Por favor, revisa los datos proporcionados.",
+            "signature": SIGNATURE.model_dump(),
         },
     )
 
@@ -162,11 +137,7 @@ async def auth_service_exception_handler(
         content={
             "status": "error",
             "message": f"Error en el servicio de autenticación: {str(exc)}",
-            "signature": {
-                "brand": "Brevio",
-                "version": "v1.0",
-                "contact": "support@brevio.com",
-            },
+            "signature": SIGNATURE.model_dump(),
         },
     )
 
@@ -179,10 +150,6 @@ async def jwt_error_exception_handler(
         content={
             "status": "error",
             "message": "Token de autenticación no válido.",
-            "signature": {
-                "brand": "Brevio",
-                "version": "v1.0",
-                "contact": "support@brevio.com",
-            },
+            "signature": SIGNATURE.model_dump(),
         },
     )

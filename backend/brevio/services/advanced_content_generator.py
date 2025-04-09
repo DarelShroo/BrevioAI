@@ -1,6 +1,6 @@
 import html
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from googletrans import Translator
 
@@ -803,9 +803,14 @@ class AdvancedContentGenerator:
             self.TEMPLATES[category]["needs"] = needs
         return f"Template '{category}' successfully created with {len(structures)} structures and {len(styles)} styles."
 
-    def get_all_category_style_combinations(self) -> List[tuple[str, str]]:
+    def get_all_category_style_combinations(self) -> list:
         combinations = []
         for category, template_data in self.TEMPLATES.items():
             for style_name in template_data["styles"].keys():
-                combinations.append((category, style_name))
+                source_types: list[SourceType] = template_data["styles"][style_name][
+                    "source_types"
+                ]
+                combinations.append(
+                    (category, style_name, [st.value for st in source_types])
+                )
         return combinations

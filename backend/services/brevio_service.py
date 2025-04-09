@@ -9,12 +9,13 @@ from fastapi import HTTPException, status
 from backend.brevio.__main__ import Main as Brevio
 from backend.brevio.constants.constants import Constants
 from backend.brevio.managers import DirectoryManager
-from backend.brevio.models import CategoryStyle, PromptConfig
+from backend.brevio.models import PromptConfig
 from backend.core.database import DB
 from backend.models.brevio.brevio_generate import BrevioGenerate, MediaEntry
 from backend.repositories import UserRepository
 from backend.repositories.folder_entry_repository import FolderEntryRepository
 from backend.services.user_service import UserService
+from brevio.enums.language import LanguageType
 
 
 class BrevioService:
@@ -46,27 +47,11 @@ class BrevioService:
                 status_code=500, detail="Error retrieving media duration"
             ) from e
 
-    def get_languages(self) -> List[str]:
+    def get_languages(self) -> List[LanguageType]:
         return self._brevio.get_languages()
 
-    def get_all_category_style_combinations(self) -> List[CategoryStyle]:
-        raw_data = self._brevio.get_all_category_style_combinations()
-        if not isinstance(raw_data, dict):
-            return []
-
-        result: List[CategoryStyle] = []
-        for category, styles in raw_data.items():
-            if not isinstance(category, str):
-                continue
-            if isinstance(styles, str):
-                styles_list = [styles]
-            elif isinstance(styles, list):
-                styles_list = [s for s in styles if isinstance(s, str)]
-            else:
-                styles_list = []
-            result.append({"category": category, "styles": styles_list})
-
-        return result
+    def get_all_category_style_combinations(self) -> Any:
+        return self._brevio.get_all_category_style_combinations()
 
     def get_models(self) -> List[str]:
         return self._brevio.get_models()

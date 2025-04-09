@@ -1,4 +1,4 @@
-from .category_style import CategoryStyle
+from .category_style import Style
 from .config_model import ConfigModel
 from .file_config_model import FileConfig
 from .prompt_config_model import PromptConfig
@@ -12,4 +12,5 @@ __all__ = [
     "SummaryResponse",
     "SummaryConfig",
     "CategoryStyle",
+    "Style",
 ]

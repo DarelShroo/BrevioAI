@@ -1,6 +1,9 @@
-from typing import List, TypedDict
+from dataclasses import dataclass
+from typing import Dict, List
+
+from pydantic import BaseModel
 
 
-class CategoryStyle(TypedDict):
-    category: str
-    styles: List[str]
+class Style(BaseModel):
+    style: str
+    source_types: List[str]

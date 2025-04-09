@@ -7,6 +7,7 @@ from fastapi import (
     Depends,
     File,
     Form,
+    HTTPException,
     Request,
     UploadFile,
     status,
@@ -18,9 +19,18 @@ from backend.brevio.enums.model import ModelType
 from backend.brevio.enums.output_format_type import OutputFormatType
 from models.brevio.brevio_generate import BrevioGenerate
 from models.brevio.responses.brevio_responses import (
+    CategoryStyles,
+    CategoryStylesDataResponse,
+    CountMediaDataResponse,
+    CountMediaResponse,
+    CountMediaTimeDataResponse,
+    CountMediaTimeResponse,
+    LanguagesDataResponse,
     LanguagesResponse,
+    ModelsDataResponse,
     ModelsResponse,
-    ProcessingResponse,
+    ProcessingMessageData,
+    ProcessingMessageResponse,
 )
 
 from ..brevio.enums import ExtensionType, SourceType
@@ -40,7 +50,7 @@ class BrevioRoutes:
     def _register_routes(self) -> None:
         @self.router.get(
             "/languages",
-            response_model=LanguagesResponse,
+            response_model=LanguagesDataResponse,
             description="Get a list of supported languages for processing",
             status_code=status.HTTP_200_OK,
             responses={401: {"description": "Invalid API key"}},
@@ -48,12 +58,16 @@ class BrevioRoutes:
         async def get_languages(
             verify_api_key: str = Depends(verify_api_key),
             brevio_service: BrevioService = Depends(get_brevio_service),
-        ) -> dict:
-            return {"languages": brevio_service.get_languages()}
+        ) -> LanguagesDataResponse:
+            languages: List[LanguageType] = brevio_service.get_languages()
+            response = LanguagesDataResponse(
+                data=LanguagesResponse(languages=languages),
+            )
+            return response
 
         @self.router.get(
             "/models",
-            response_model=ModelsResponse,
+            response_model=ModelsDataResponse,
             description="Get a list of available AI models",
             status_code=status.HTTP_200_OK,
             responses={401: {"description": "Invalid API key"}},
@@ -61,12 +75,16 @@ class BrevioRoutes:
         async def get_models(
             verify_api_key: str = Depends(verify_api_key),
             brevio_service: BrevioService = Depends(get_brevio_service),
-        ) -> dict:
-            return {"models": brevio_service.get_models()}
+        ) -> ModelsDataResponse:
+            models = brevio_service.get_models()
+            response = ModelsDataResponse(
+                data=ModelsResponse(models=models),
+            )
+            return response
 
         @self.router.get(
             "/categories-styles",
-            # response_model=CategoryStylesResponse,
+            response_model=CategoryStylesDataResponse,
             description="Get available categories and their associated styles",
             status_code=status.HTTP_200_OK,
             responses={401: {"description": "Invalid API key"}},
@@ -75,13 +93,18 @@ class BrevioRoutes:
             verify_api_key: str = Depends(verify_api_key),
             brevio_service: BrevioService = Depends(get_brevio_service),
         ) -> dict:
-            return {
-                "categories_styles": brevio_service.get_all_category_style_combinations()
-            }
+            all_categories_styles = brevio_service.get_all_category_style_combinations()
+            categories_styles: CategoryStyles = CategoryStyles(
+                advanced_content_combinations=categories_styles
+            )
+            response = CategoryStylesDataResponse(
+                data=categories_styles.model_dump(),
+            )
+            return response
 
         @self.router.post(
             "/count-yt-videos",
-            response_model=int,
+            response_model=CountMediaDataResponse,
             description="Count the number of videos in a YouTube playlist",
             status_code=status.HTTP_200_OK,
             responses={
@@ -93,13 +116,21 @@ class BrevioRoutes:
             request: UrlYT,
             verify_api_key: str = Depends(verify_api_key),
             brevio_service: BrevioService = Depends(get_brevio_service),
-        ) -> int:
+        ) -> CountMediaDataResponse:
             result = await brevio_service.count_media_in_yt_playlist(request.url)
-            return int(result)
+            if not isinstance(result, int):
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Invalid response format from brevio service",
+                )
+            response = CountMediaDataResponse(
+                data=CountMediaResponse(count=result),
+            )
+            return response
 
         @self.router.post(
             "/count-time-yt-video",
-            response_model=int,
+            response_model=CountMediaTimeDataResponse,
             description="Get the total duration of a YouTube video in seconds",
             status_code=status.HTTP_200_OK,
             responses={
@@ -111,13 +142,22 @@ class BrevioRoutes:
             request: UrlYT,
             verify_api_key: str = Depends(verify_api_key),
             brevio_service: BrevioService = Depends(get_brevio_service),
-        ) -> int:
+        ) -> CountMediaTimeDataResponse:
             duration_data = await brevio_service.get_total_duration(request.url)
-            return await brevio_service.get_total_duration(request.url)
+            if not isinstance(duration_data, int):
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Invalid response format from brevio service",
+                )
+
+            response = CountMediaTimeDataResponse(
+                data=CountMediaTimeResponse(time=duration_data).model_dump(),
+            )
+            return response
 
         @self.router.post(
             "/summary-media",
-            response_model=ProcessingResponse,
+            response_model=ProcessingMessageResponse,
             description="""
             Generate summaries from media files (MP3).
             The process runs in the background and results will be available asynchronously.
@@ -140,7 +180,7 @@ class BrevioRoutes:
             background_tasks: BackgroundTasks = BackgroundTasks(),
             _current_user: ObjectId = Depends(get_current_user),
             brevio_service: BrevioService = Depends(get_brevio_service),
-        ) -> dict:
+        ) -> ProcessingMessageResponse:
             return await process_summary(
                 files,
                 language,
@@ -158,7 +198,7 @@ class BrevioRoutes:
 
         @self.router.post(
             "/summary-documents",
-            response_model=ProcessingResponse,
+            response_model=ProcessingMessageResponse,
             description="""
             Generate summaries from document files (PDF, DOCX).
             The process runs in the background and results will be available asynchronously.
@@ -181,7 +221,7 @@ class BrevioRoutes:
             background_tasks: BackgroundTasks = BackgroundTasks(),
             _current_user: ObjectId = Depends(get_current_user),
             brevio_service: BrevioService = Depends(get_brevio_service),
-        ) -> dict:
+        ) -> ProcessingMessageResponse:
             return await process_summary(
                 files,
                 language,
@@ -210,7 +250,7 @@ class BrevioRoutes:
             brevio_service: "BrevioService",
             allowed_extensions: List[str],
             is_media: bool = False,
-        ) -> dict:
+        ) -> ProcessingMessageResponse:
             files_data = [
                 (file.filename or "unknown", await file.read())
                 for file in files
@@ -239,9 +279,8 @@ class BrevioRoutes:
                 prompt_config,
             )
 
-            return {
-                "message": "La generación de resúmenes se está procesando en segundo plano."
-            }
+            response = ProcessingMessageResponse(data=ProcessingMessageData())
+            return response
 
         @self.router.post("/summary-yt-playlist")
         async def generate_summary_yt_playlist(
@@ -249,13 +288,12 @@ class BrevioRoutes:
             background_tasks: BackgroundTasks = BackgroundTasks(),
             brevio_service: BrevioService = Depends(get_brevio_service),
             _current_user: ObjectId = Depends(get_current_user),
-        ):
+        ) -> ProcessingMessageResponse:
             background_tasks.add_task(
                 brevio_service.generate, brevio_generate, _current_user
             )
-            return {
-                "message": "La generación de resúmenes se está procesando en segundo plano."
-            }
+            response = ProcessingMessageResponse(data=ProcessingMessageData())
+            return response
 
 
 brevio_router = BrevioRoutes().router

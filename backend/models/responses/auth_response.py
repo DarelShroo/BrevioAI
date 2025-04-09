@@ -4,12 +4,34 @@ from bson import ObjectId
 from pydantic import BaseModel, Field
 
 from brevio.models.response_model import FolderResponse
+from models.responses.base_response import BaseResponse
 from models.user.folder_entry import FolderEntry
 from models.user.folder_entry_ref import FolderEntryRef
 
 
 class LoginResponse(BaseModel):
     access_token: str
+
+
+class LoginDataResponse(BaseResponse):
+    data: LoginResponse
+
+
+class RegisterResponse(BaseModel):
+    folder: FolderResponse
+    token: str
+
+
+class RegisterDataResponse(BaseResponse):
+    data: RegisterResponse
+
+
+class PasswordRecoveryResponse(BaseModel):
+    message: str
+
+
+class PasswordRecoveryDataResponse(BaseResponse):
+    data: PasswordRecoveryResponse
 
 
 class UserEntriesRequest(BaseModel):
@@ -33,12 +55,3 @@ class EntriesResponse(BaseModel):
     entries: List[FolderEntry] = Field(
         ..., description="List of processed entries with details"
     )
-
-
-class RegisterResponse(BaseModel):
-    folder: FolderResponse
-    token: str
-
-
-class PasswordRecoveryResponse(BaseModel):
-    message: str

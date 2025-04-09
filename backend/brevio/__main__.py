@@ -2,13 +2,15 @@ import logging
 import os
 import sys
 from os import path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from bson import ObjectId
+from fastapi import HTTPException
 
-sys.path.append(os.path.abspath(os.path.dirname(__file__) + "/.."))
+sys.path.append(os.path.abspath(os.path.dirname(__file__) + "./.."))
 
 from backend.models.brevio.brevio_generate import BrevioGenerate
+from brevio.enums.source_type import SourceType
 from brevio.services.advanced_content_generator import AdvancedContentGenerator
 
 from .enums.language import LanguageType
@@ -84,25 +86,30 @@ class Main:
 
     @staticmethod
     def get_all_category_style_combinations() -> (
-        Dict[str, List[str]]
-    ):  # Specified List type
+        Dict[str, List[Dict[str, Union[str, List[str]]]]]
+    ):
         try:
             acg = AdvancedContentGenerator()
-            combinations = acg.get_all_category_style_combinations()
-            dic_combinations: Dict[str, List[str]] = {}
+            combinations: List[
+                Tuple[str, str, List[SourceType]]
+            ] = acg.get_all_category_style_combinations()
 
-            for category, style in combinations:
-                if category not in dic_combinations:
-                    dic_combinations[category] = []
-                dic_combinations[category].append(style)
+            logger.debug(f"Combinations fetched: {combinations}")
 
-            logger.debug(f"Generated {len(dic_combinations)} category combinations")
+            dic_combinations: Dict[str, List[Dict[str, Union[str, List[str]]]]] = {}
+
+            for category, style, source_types in combinations:
+                dic_combinations.setdefault(category, []).append(
+                    {"style": style, "source_types": source_types}
+                )
+
             return dic_combinations
+
         except Exception as e:
             logger.error(
                 f"Unexpected error getting combinations: {str(e)}", exc_info=True
             )
-            raise Exception(f"Unexpected error getting combinations: {str(e)}")
+            raise HTTPException(500, f"Unexpected error getting combinations")
 
     async def generate(
         self,

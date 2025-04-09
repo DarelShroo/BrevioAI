@@ -222,10 +222,16 @@ def test_get_all_category_style_combinations(generator):
     combinations = generator.get_all_category_style_combinations()
     assert isinstance(combinations, list)
     assert len(combinations) > 0
-    for category, style in combinations:
+    for category, style, source_types in combinations:
+        assert isinstance(category, str)
+        assert isinstance(style, str)
+        assert isinstance(source_types, list)
         assert category in generator.TEMPLATES
         assert style in generator.TEMPLATES[category]["styles"]
-    assert ("journalism", "news_wire") in combinations
+    assert any(
+        category == "journalism" and style == "news_wire"
+        for category, style, _ in combinations
+    )
 
 
 def test_sanitize_markdown(generator):
