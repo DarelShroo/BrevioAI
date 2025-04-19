@@ -1,9 +1,7 @@
 #!/bin/bash
-
-# Script para limpiar caché de Python
-# Uso: ./clear_python_cache.sh /ruta/a/tu/carpeta
-
-# Verificar si se proporcionó un argumento
+# Script para eliminar caché de Python y carpetas específicas
+# Este script elimina los directorios de caché de Python y archivos compilados
+# en un directorio específico"
 if [ -z "$1" ]; then
   echo "Error: Debes proporcionar la ruta del directorio."
   echo "Uso: $0 /ruta/a/tu/carpeta"
@@ -38,5 +36,21 @@ find "$DIRECTORIO" -type f \( \
 
 echo -e "\n✅ Caché de Python eliminada con éxito en $DIRECTORIO"
 echo "Se eliminó:"
-echo "  - Directorios __pycache__, .mypy_cache, .pytest_cache"
-echo "  - Archivos *.pyc, *.pyo y otros archivos compilados"
+echo "  - Directorios: __pycache__, .mypy_cache, .pytest_cache, .ipynb_checkpoints"
+echo "  - Archivos: *.pyc, *.pyo, *.pyd, *.py.class"
+
+# Eliminar la carpeta "data" si existe
+if [ -d "$DIRECTORIO/data" ]; then
+  rm -rf "$DIRECTORIO/data"
+  echo -e "\n✅ Carpeta 'data' eliminada de $DIRECTORIO"
+else
+  echo -e "\nℹ️  La carpeta 'data' no existe en $DIRECTORIO"
+fi
+
+# Eliminar la carpeta "backend/audios" si existe
+if [ -d "$DIRECTORIO/backend/audios" ]; then
+  rm -rf "$DIRECTORIO/backend/audios"
+  echo -e "\n✅ Carpeta 'backend/audios' eliminada de $DIRECTORIO/backend"
+else
+  echo -e "\nℹ️  La carpeta 'backend/audios' no existe en $DIRECTORIO/backend"
+fi

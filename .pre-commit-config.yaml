@@ -5,12 +5,14 @@ repos:
       - id: black
         name: Format with Black
         language_version: python3
+        files: ^core/.*\.py$
 
   - repo: https://github.com/pycqa/isort
     rev: 5.13.0
     hooks:
       - id: isort
         name: Sort imports with isort
+        files: ^core/.*\.py$
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v0.990
@@ -19,6 +21,7 @@ repos:
         name: Type check with mypy
         language: system
         types: [python]
+        files: ^core/.*\.py$
 
   - repo: local
     hooks:
@@ -27,13 +30,15 @@ repos:
         entry: bash -c 'PYTHONPATH=. pytest --import-mode=importlib -v'
         language: system
         types: [python]
+        files: ^core/.*
         pass_filenames: false
-
+        
   - repo: local
     hooks:
       - id: run-clear-cache
         name: Clear cache
-        entry: ./scripts/clear_python_cache.sh
+        entry: scripts/clear_python_cache.sh
         args: ["./.."]
         language: script
         types: [python]
+

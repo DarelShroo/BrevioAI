@@ -1,0 +1,42 @@
+from typing import Annotated, Any, Dict, Optional
+
+from bson import ObjectId
+from pydantic import BaseModel as PydanticBaseModel
+from pydantic import ConfigDict, Field, PlainSerializer
+
+
+def serialize_object_id(value: ObjectId) -> str:
+    return str(value)
+
+
+SerializedObjectId = Annotated[
+    ObjectId, PlainSerializer(serialize_object_id, return_type=str)
+]
+
+
+class BaseModel(PydanticBaseModel):
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        populate_by_name=True,
+    )
+
+    id: Optional[SerializedObjectId] = Field(
+        default_factory=ObjectId,
+        alias="_id",
+        description="Unique identifier for the model",
+    )
+
+    def model_dump(self, **kwargs: Any) -> Dict[str, Any]:
+        kwargs.setdefault("by_alias", True)
+        return super().model_dump(**kwargs)
+
+    def model_dump_json(self, **kwargs: Any) -> str:
+        kwargs.setdefault("by_alias", True)
+        return super().model_dump_json(**kwargs)
+
+    def to_mongo(self) -> Dict[str, Any]:
+        data = self.__dict__.copy()
+        if "_id" not in data and "id" in data:
+            data["_id"] = data["id"]
+        data.pop("id", None)
+        return {k: v for k, v in data.items() if v is not None}
