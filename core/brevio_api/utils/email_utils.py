@@ -1,3 +1,4 @@
+from fastapi import HTTPException
 from pydantic import BaseModel, EmailStr, ValidationError
 
 
@@ -9,5 +10,5 @@ def isEmail(email: str) -> str:
     try:
         EmailValidator(email=email)
         return email
-    except ValidationError:
-        raise ValueError("El formato del correo electrónico es inválido")
+    except ValidationError as e:
+        raise

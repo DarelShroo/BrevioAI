@@ -86,7 +86,7 @@ async def test_get_video_urls_from_playlist(yt_service: YTService) -> None:
         mock_instance = mock_yt.return_value.__enter__.return_value
         mock_instance.extract_info.return_value = mock_info
         urls = await yt_service.get_video_urls_from_playlist(
-            "https://www.youtube.com/playlist?list=PL123"
+            HttpUrl("https://www.youtube.com/playlist?list=PL123")
         )
         expected_urls = [
             "https://www.youtube.com/watch?v=abc",
@@ -114,7 +114,7 @@ async def test_get_media_duration_playlist(yt_service: YTService) -> None:
         ],
     ), patch.object(yt_service, "get_video_duration", side_effect=[300, 450]):
         result = await yt_service.get_media_duration(
-            "https://www.youtube.com/playlist?list=PL123"
+            HttpUrl("https://www.youtube.com/playlist?list=PL123")
         )
         assert result == {"durations": mock_durations}
 
@@ -135,7 +135,7 @@ async def test_count_media_in_yt_playlist(yt_service: YTService) -> None:
         mock_instance = mock_yt.return_value.__enter__.return_value
         mock_instance.extract_info.return_value = mock_info
         count = await yt_service.count_media_in_yt_playlist(
-            "https://www.youtube.com/playlist?list=PL123"
+            HttpUrl("https://www.youtube.com/playlist?list=PL123")
         )
         assert count == 5
         mock_instance.extract_info.assert_called_once_with(
@@ -151,7 +151,7 @@ async def test_get_video_duration(yt_service: YTService) -> None:
         mock_instance = mock_yt.return_value.__enter__.return_value
         mock_instance.extract_info.return_value = mock_info
         duration = await yt_service.get_video_duration(
-            "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+            HttpUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
         )
         assert duration == 300
         mock_instance.extract_info.assert_called_once_with(
@@ -167,7 +167,7 @@ async def test_get_media_duration_video(yt_service: YTService) -> None:
         mock_instance = mock_yt.return_value.__enter__.return_value
         mock_instance.extract_info.return_value = mock_info
         result = await yt_service.get_media_duration(
-            "https://www.youtube.com/watch?v=abc"
+            HttpUrl("https://www.youtube.com/watch?v=abc")
         )
         assert result == {
             "durations": [
@@ -179,7 +179,7 @@ async def test_get_media_duration_video(yt_service: YTService) -> None:
 @pytest.mark.asyncio
 async def test_is_youtube_playlist_true(yt_service: YTService) -> None:
     """Should return True when the URL is a YouTube playlist."""
-    url = "https://www.youtube.com/playlist?list=PL123"
+    url = HttpUrl("https://www.youtube.com/playlist?list=PL123")
     result = await yt_service.is_youtube_playlist(url)
     assert result is True
 
@@ -187,6 +187,6 @@ async def test_is_youtube_playlist_true(yt_service: YTService) -> None:
 @pytest.mark.asyncio
 async def test_is_youtube_playlist_false(yt_service: YTService) -> None:
     """Should return False when the URL is not a YouTube playlist."""
-    url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    url = HttpUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
     result = await yt_service.is_youtube_playlist(url)
     assert result is False

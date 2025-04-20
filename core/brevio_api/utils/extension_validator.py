@@ -1,7 +1,7 @@
 from os import path
 from typing import List, cast
 
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException, UploadFile, status
 
 from core.brevio_api.models.errors.invalid_file_extension import InvalidFileExtension
 
@@ -26,10 +26,13 @@ def validate_file_extension(
         return file
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except InvalidFileExtension:
-        raise
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except InvalidFileExtension as e:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=str(e)
+        )
     except Exception as e:
         raise HTTPException(
-            status_code=400, detail=f"Error validating file extension: {str(e)}"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error validating file extension",
         )

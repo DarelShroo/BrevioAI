@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Tuple
 
 from bson import ObjectId
 from fastapi import HTTPException, status
+from pydantic import HttpUrl
 
 from core.brevio.__main__ import Main
 from core.brevio.constants.constants import Constants
@@ -34,19 +35,18 @@ class BrevioService:
         self.directory_manager = DirectoryManager()
         self._main = Main()
 
-    async def count_media_in_yt_playlist(self, url: str) -> int:
+    async def count_media_in_yt_playlist(self, url: HttpUrl) -> int:
         return await self._main.count_media_in_yt_playlist(url)
 
-    async def get_total_duration(self, url: str) -> int:
+    async def get_total_duration(self, url: HttpUrl) -> int:
         duration_data = await self._main.get_media_duration(url)
+
         if not isinstance(duration_data, dict) or "durations" not in duration_data:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Invalid duration data format",
-            )
+            raise ValueError("Invalid duration data format")
+
         return sum(int(item["duration"]) for item in duration_data["durations"])
 
-    async def get_media_duration(self, url: str) -> Dict[str, Any]:
+    async def get_media_duration(self, url: HttpUrl) -> Dict[str, Any]:
         try:
             return await self._main.get_media_duration(url)
         except Exception as e:
@@ -54,7 +54,7 @@ class BrevioService:
                 status_code=500, detail="Error retrieving media duration"
             ) from e
 
-    def get_languages(self) -> List[LanguageType]:
+    def get_languages(self) -> List[str]:
         return self._main.get_languages()
 
     def get_all_category_style_combinations(self) -> Any:

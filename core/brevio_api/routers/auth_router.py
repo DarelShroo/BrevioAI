@@ -1,6 +1,8 @@
 from typing import Dict
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
 from core.brevio_api.dependencies.auth_service_dependency import get_auth_service
 from core.brevio_api.models.auth.auth import (
@@ -40,7 +42,7 @@ class AuthRoutes:
         async def login(
             login_user: LoginUser,
             auth_service: AuthService = Depends(get_auth_service),
-        ) -> LoginDataResponse:
+        ) -> JSONResponse:
             login_data: LoginResponse = auth_service.login(login_user)
 
             response: LoginDataResponse = LoginDataResponse(
@@ -48,7 +50,10 @@ class AuthRoutes:
                 data=login_data,
             )
 
-            return response
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content=response.model_dump(),
+            )
 
         @self.router.post(
             "/register",
@@ -63,7 +68,7 @@ class AuthRoutes:
         async def register(
             register_user: RegisterUser,
             auth_service: AuthService = Depends(get_auth_service),
-        ) -> RegisterDataResponse:
+        ) -> JSONResponse:
             register_data: RegisterResponse = await auth_service.register(register_user)
 
             response = RegisterDataResponse(
@@ -71,7 +76,10 @@ class AuthRoutes:
                 data=register_data,
             )
 
-            return response
+            return JSONResponse(
+                status_code=status.HTTP_201_CREATED,
+                content=response.model_dump(),
+            )
 
         @self.router.post(
             "/password-recovery-handshake",
@@ -84,23 +92,29 @@ class AuthRoutes:
             },
         )
         async def password_send_otp_recovery(
-            identity: UserIdentity,
+            identity: RecoveryPassword,
             auth_service: AuthService = Depends(get_auth_service),
         ) -> PasswordRecoveryDataResponse:
-            recovery_password: RecoveryPassword = RecoveryPassword.model_validate(
-                identity
-            )
+            try:
+                recovery_password: RecoveryPassword = RecoveryPassword.model_validate(
+                    identity
+                )
 
-            password_recovery_response: PasswordRecoveryResponse = (
-                await auth_service.password_recovery_handshake(recovery_password)
-            )
+                password_recovery_response: PasswordRecoveryResponse = (
+                    await auth_service.password_recovery_handshake(recovery_password)
+                )
 
-            response: PasswordRecoveryDataResponse = PasswordRecoveryDataResponse(
-                status="success",
-                data=password_recovery_response,
-            )
+                response: PasswordRecoveryDataResponse = PasswordRecoveryDataResponse(
+                    status="success",
+                    data=password_recovery_response,
+                )
 
-            return response
+                return response
+            except ValidationError:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Invalid user data",
+                )
 
         @self.router.post(
             "/password-recovery-verify",

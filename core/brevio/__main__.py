@@ -3,6 +3,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from bson import ObjectId
 from fastapi.exceptions import HTTPException
+from pydantic import HttpUrl
 
 from core.brevio.enums import LanguageType, ModelType, SourceType
 from core.brevio.services.advanced_content_generator import AdvancedContentGenerator
@@ -27,7 +28,7 @@ class Main:
             logger.error(f"Failed to initialize Main class: {str(e)}", exc_info=True)
             raise RuntimeError(f"Initialization failed: {str(e)}")
 
-    async def count_media_in_yt_playlist(self, url: str) -> int:
+    async def count_media_in_yt_playlist(self, url: HttpUrl) -> int:
         try:
             result: int = await self._yt_service.count_media_in_yt_playlist(url)
             logger.debug(f"Successfully counted media in playlist: {url}")
@@ -39,7 +40,7 @@ class Main:
             )
             raise Exception(f"Unexpected error counting media: {str(e)}")
 
-    async def get_media_duration(self, url: str) -> Dict[str, Any]:
+    async def get_media_duration(self, url: HttpUrl) -> Dict[str, Any]:
         try:
             result: Dict[str, Any] = await self._yt_service.get_media_duration(url)
             logger.debug(f"Successfully got duration for media: {url}")
@@ -51,12 +52,16 @@ class Main:
             logger.error(
                 f"Unexpected error getting duration for {url}: {str(e)}", exc_info=True
             )
-            raise Exception(f"Unexpected error getting duration: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail=f"Unexpected error getting duration"
+            )
 
     @staticmethod
-    def get_languages() -> List[LanguageType]:
+    def get_languages() -> List[str]:
         try:
-            languages = list(LanguageType)
+            languages = [language.name for language in LanguageType]
+
+            print(languages)
             logger.debug(f"Retrieved {len(languages)} languages")
             return languages
         except Exception as e:

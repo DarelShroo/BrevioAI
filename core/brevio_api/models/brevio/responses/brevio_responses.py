@@ -1,6 +1,8 @@
 from typing import Dict, List
 
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from starlette import status
 
 from core.brevio.enums.language import LanguageType
 from core.brevio.models.category_style import Style
@@ -8,7 +10,7 @@ from core.brevio_api.models.responses.base_response import BaseResponse
 
 
 class LanguagesResponse(BaseModel):
-    languages: List[LanguageType]
+    languages: List[str]
 
 
 class LanguagesDataResponse(BaseResponse):

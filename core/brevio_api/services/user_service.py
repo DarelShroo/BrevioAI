@@ -77,12 +77,8 @@ class UserService:
     def get_user_by_username(self, username: str) -> User | None:
         try:
             logger.debug(f"Fetching user with username: {username}")
+
             user = self.user_repo.get_user_by_field("username", username)
-            if not user:
-                logger.warning(f"No user found with username: {username}")
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-                )
 
             logger.info(f"User found with username: {username}")
 
@@ -93,7 +89,7 @@ class UserService:
             )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error retrieving user by username: {str(e)}",
+                detail=f"Error retrieving user by username",
             )
 
     def create_user(self, user: User) -> User:

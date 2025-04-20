@@ -1,8 +1,10 @@
+import logging
 from datetime import datetime, timedelta
 from os import path
 from typing import Optional
 
 from fastapi import HTTPException, status
+from pydantic import ValidationError
 from pymongo.database import Database
 
 from core.brevio.constants.constants import Constants
@@ -30,6 +32,13 @@ from core.brevio_api.utils.email_utils import isEmail
 from core.brevio_api.utils.otp_utils import OTPUtils
 from core.brevio_api.utils.password_utils import hash_password, verify_password
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()],
+)
+logger = logging.getLogger(__name__)
+
 
 class AuthService:
     def __init__(self, db: Database, token_service: TokenService):
@@ -47,7 +56,7 @@ class AuthService:
         try:
             validated_email = isEmail(user_login.identity)
             user = self._user_service.get_user_by_email(validated_email)
-        except ValueError:
+        except ValidationError:
             user = self._user_service.get_user_by_username(user_login.identity)
 
         if not user:
@@ -61,14 +70,12 @@ class AuthService:
             )
 
         token = self._token_service.create_access_token(
-            {
-                "id": str(user.id),
-                "folder_id": str(user.folder.id if user.folder else None),
-            },
+            {"id": str(user.id)},
             timedelta(hours=1),
         )
 
         response = LoginResponse(access_token=token)
+
         return response
 
     async def register(self, user_register: RegisterUser) -> RegisterResponse:
@@ -136,41 +143,43 @@ class AuthService:
         self, recovery_password_user: RecoveryPassword
     ) -> PasswordRecoveryResponse:
         user = None
-        if isEmail(recovery_password_user.identity):
-            user = self._user_service.get_user_by_email(recovery_password_user.identity)
-        else:
-            user = self._user_service.get_user_by_username(
-                recovery_password_user.identity
-            )
 
-        if not user:
-            raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+        try:
+            if isEmail(recovery_password_user.identity):
+                user = self._user_service.get_user_by_email(
+                    recovery_password_user.identity
+                )
+            else:
+                user = self._user_service.get_user_by_username(
+                    recovery_password_user.identity
+                )
 
-        now = datetime.now()
+            if user:
+                now = datetime.now()
+                if not user.otp or not user.exp or user.exp < int(now.timestamp()):
+                    otp = OTPUtils.generate_otp()
+                    new_time = now + timedelta(minutes=10)
 
-        if not user.otp or not user.exp or user.exp < int(now.timestamp()):
-            otp = OTPUtils.generate_otp()
-            new_time = now + timedelta(minutes=10)
+                    self._user_repository.update_user(
+                        user.id, {"otp": otp, "exp": int(new_time.timestamp())}
+                    )
 
-            self._user_repository.update_user(
-                user.id, {"otp": otp, "exp": int(new_time.timestamp())}
-            )
+                    email_service = EmailService(
+                        user.email, "Recuperación de contraseña"
+                    )
 
-            email_service = EmailService(user.email, "Recuperación de contraseña")
-
-            await email_service.send_recovery_password_email(str(otp))
+                    await email_service.send_recovery_password_email(str(otp))
 
             response = PasswordRecoveryResponse(
                 message="Código de recuperación enviado al correo electrónico."
             )
 
             return response
-
-        response = PasswordRecoveryResponse(
-            message="El código de recuperación ya fue enviado."
-        )
-
-        return response
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error creating user: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Unexpected error")
 
     async def change_password(
         self, recovery_password_otp: RecoveryPasswordOtp

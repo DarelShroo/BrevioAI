@@ -112,7 +112,7 @@ class YTService:
         await asyncio.gather(*tasks)
         self.logger.info("Procesamiento de videos completado")
 
-    async def count_media_in_yt_playlist(self, url: str) -> int:
+    async def count_media_in_yt_playlist(self, url: HttpUrl) -> int:
         try:
             self.logger.info(f"Contando medios en la lista de reproducción: {url}")
             ydl_opts = {
@@ -122,13 +122,15 @@ class YTService:
                 "ignoreerrors": True,
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = await asyncio.to_thread(ydl.extract_info, url, download=False)
+                info = await asyncio.to_thread(
+                    ydl.extract_info, str(url), download=False
+                )
                 return len(info.get("entries", [])) if info and "entries" in info else 1
         except Exception as e:
             self.logger.error(f"Error contando medios: {str(e)}")
             raise
 
-    async def get_video_duration(self, url: str) -> Optional[float]:
+    async def get_video_duration(self, url: HttpUrl) -> Optional[float]:
         try:
             ydl_opts = {
                 "quiet": True,
@@ -136,46 +138,48 @@ class YTService:
                 "ignoreerrors": True,
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = await asyncio.to_thread(ydl.extract_info, url, download=False)
+                info = await asyncio.to_thread(
+                    ydl.extract_info, str(url), download=False
+                )
                 duration = info.get("duration") if info else None
                 return float(duration) if duration and duration > 0 else None
         except Exception as e:
             self.logger.error(f"Error obteniendo duración de {url}: {e}")
             return None
 
-    async def get_media_duration(self, url: str) -> Dict[str, List[Dict[str, Any]]]:
+    async def get_media_duration(self, url: HttpUrl) -> Dict[str, List[Dict[str, Any]]]:
         durations: List[Dict[str, Any]] = []
 
         if await self.is_youtube_playlist(url):
             urls = await self.get_video_urls_from_playlist(url)
             if urls:
                 duration_results = await asyncio.gather(
-                    *[self.get_video_duration(u) for u in urls]
+                    *[self.get_video_duration(HttpUrl(u)) for u in urls]
                 )
                 for u, d in zip(urls, duration_results):
                     if d is not None and d > 0:
-                        durations.append({"url": u, "duration": d})
+                        durations.append({"url": str(u), "duration": d})
         else:
             duration = await self.get_video_duration(url)
             if duration is not None and duration > 0:
-                durations.append({"url": url, "duration": duration})
+                durations.append({"url": str(url), "duration": duration})
 
         if not durations:
             raise ValueError("No se pudieron obtener duraciones válidas de los medios.")
 
         return {"durations": durations}
 
-    async def is_youtube_playlist(self, url: str) -> bool:
-        return "list=" in url
+    async def is_youtube_playlist(self, url: HttpUrl) -> bool:
+        return "list=" in str(url)
 
-    async def get_video_urls_from_playlist(self, url: str) -> List[str]:
+    async def get_video_urls_from_playlist(self, url: HttpUrl) -> List[str]:
         ydl_opts = {
             "quiet": True,
             "extract_flat": "in_playlist",
             "ignoreerrors": True,
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = await asyncio.to_thread(ydl.extract_info, url, download=False)
+            info = await asyncio.to_thread(ydl.extract_info, str(url), download=False)
             return [
                 entry["url"]
                 for entry in (info.get("entries", []) if info else [])

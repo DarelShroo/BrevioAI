@@ -36,7 +36,7 @@ class UserRepository:
             if field == "_id" and isinstance(value, str):
                 try:
                     value = ObjectId(value)
-                except InvalidId:
+                except (InvalidId, TypeError):
                     logger.error(f"Invalid ObjectId format: {value}")
                     raise HTTPException(status_code=400, detail="Invalid ID format")
 
@@ -63,7 +63,7 @@ class UserRepository:
                 logger.error(f"Validation error: {str(e)}")
                 raise HTTPException(
                     status_code=422,
-                    detail={"message": "Invalid user data structure", "errors": str(e)},
+                    detail={"message": "Invalid user data structure"},
                 )
 
         except HTTPException:
@@ -72,13 +72,13 @@ class UserRepository:
             logger.error(f"Database error while fetching user: {str(e)}")
             raise HTTPException(
                 status_code=500,
-                detail=f"Database error while fetching user: {str(e)}",
+                detail=f"Database error while fetching user",
             )
         except Exception as e:
             logger.error(f"Unexpected error: {str(e)}")
             raise HTTPException(
                 status_code=500,
-                detail=f"Internal server error while processing user data: {str(e)}",
+                detail=f"Internal server error while processing user data",
             )
 
     def create_user(self, user: User) -> User:
@@ -105,31 +105,56 @@ class UserRepository:
 
     def update_user(self, user_id: ObjectId, fields: Dict[str, Any]) -> Optional[User]:
         try:
+            if isinstance(user_id, str):
+                try:
+                    user_id = ObjectId(user_id)
+                except (InvalidId, TypeError):
+                    logger.error(f"Invalid user_id format: {user_id}")
+                    raise HTTPException(
+                        status_code=400, detail="Invalid user ID format"
+                    )
+
             for key, value in fields.items():
                 if isinstance(value, str) and key.endswith("_id"):
-                    fields[key] = ObjectId(value)
-
-            if isinstance(user_id, str):
-                user_id = ObjectId(user_id)
+                    try:
+                        fields[key] = ObjectId(value)
+                    except (InvalidId, TypeError):
+                        logger.error(f"Invalid ObjectId format: {value}")
+                        raise HTTPException(status_code=400, detail="Invalid ID format")
 
             existing = self.collection.find_one({"_id": user_id})
+
             if not existing:
                 raise HTTPException(status_code=404, detail="User not found")
 
             result = self.collection.update_one({"_id": user_id}, {"$set": fields})
 
             updated_user = self.collection.find_one({"_id": user_id})
-            if not updated_user:
-                raise PyMongoError("Failed to retrieve updated user")
 
-            return User(**updated_user)
-        except InvalidId:
-            raise HTTPException(status_code=400, detail="Invalid user ID format")
+            if not updated_user:
+                raise HTTPException(
+                    status_code=500, detail="Failed to retrieve updated user"
+                )
+
+            try:
+                user_updated_obj = User.model_validate(updated_user)
+
+                return user_updated_obj
+            except ValidationError as e:
+                logger.error(f"Validation error: {str(e)}")
+                raise HTTPException(
+                    status_code=422,
+                    detail={"message": "Invalid user data structure"},
+                )
+
         except HTTPException:
             raise
         except PyMongoError as e:
             logger.error(f"Database error updating user: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        except Exception as e:
+            logger.error(f"Unexpected error updating user: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Unexpected error")
 
     def delete_user(self, id: Union[ObjectId, str]) -> dict:
         try:

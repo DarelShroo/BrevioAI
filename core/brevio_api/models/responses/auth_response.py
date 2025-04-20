@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from bson import ObjectId
 from pydantic import Field
@@ -7,6 +7,7 @@ from core.brevio.models.response_model import FolderResponse
 from core.brevio_api.models.responses.base_response import BaseResponse
 from core.brevio_api.models.responses.base_response_model import BaseResponseModel
 from core.brevio_api.models.user.folder_entry import FolderEntry
+from core.brevio_api.models.user.user_folder import UserFolder
 
 
 class LoginResponse(BaseResponseModel):

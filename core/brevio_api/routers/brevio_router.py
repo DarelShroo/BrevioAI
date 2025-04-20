@@ -12,6 +12,8 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi.responses import JSONResponse
+from pydantic import HttpUrl, ValidationError
 
 from core.brevio.enums.extension import ExtensionType
 from core.brevio.enums.language import LanguageType
@@ -60,7 +62,7 @@ class BrevioRoutes:
             verify_api_key: str = Depends(verify_api_key),
             brevio_service: BrevioService = Depends(get_brevio_service),
         ) -> LanguagesDataResponse:
-            languages: List[LanguageType] = brevio_service.get_languages()
+            languages: List[str] = brevio_service.get_languages()
             response = LanguagesDataResponse(
                 data=LanguagesResponse(languages=languages),
             )
@@ -116,7 +118,9 @@ class BrevioRoutes:
             verify_api_key: str = Depends(verify_api_key),
             brevio_service: BrevioService = Depends(get_brevio_service),
         ) -> CountMediaDataResponse:
-            result = await brevio_service.count_media_in_yt_playlist(request.url)
+            result = await brevio_service.count_media_in_yt_playlist(
+                HttpUrl(request.url)
+            )
             if not isinstance(result, int):
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -142,17 +146,27 @@ class BrevioRoutes:
             verify_api_key: str = Depends(verify_api_key),
             brevio_service: BrevioService = Depends(get_brevio_service),
         ) -> CountMediaTimeDataResponse:
-            duration_data = await brevio_service.get_total_duration(request.url)
-            if not isinstance(duration_data, int):
+            try:
+                duration_data = await brevio_service.get_total_duration(request.url)
+
+                if not isinstance(duration_data, int):
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Invalid response format from brevio service",
+                    )
+
+                return CountMediaTimeDataResponse(
+                    data=CountMediaTimeResponse(time=duration_data),
+                )
+            except ValueError as ve:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve)
+                )
+            except Exception as e:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Invalid response format from brevio service",
+                    detail="An unexpected error occurred",
                 )
-
-            response = CountMediaTimeDataResponse(
-                data=CountMediaTimeResponse(time=duration_data),
-            )
-            return response
 
         @self.router.post(
             "/summary-media",
@@ -179,7 +193,7 @@ class BrevioRoutes:
             background_tasks: BackgroundTasks = BackgroundTasks(),
             _current_user: ObjectId = Depends(get_current_user),
             brevio_service: BrevioService = Depends(get_brevio_service),
-        ) -> ProcessingMessageResponse:
+        ) -> JSONResponse:
             return await process_summary(
                 files,
                 language,
@@ -220,7 +234,7 @@ class BrevioRoutes:
             background_tasks: BackgroundTasks = BackgroundTasks(),
             _current_user: ObjectId = Depends(get_current_user),
             brevio_service: BrevioService = Depends(get_brevio_service),
-        ) -> ProcessingMessageResponse:
+        ) -> JSONResponse:
             return await process_summary(
                 files,
                 language,
@@ -249,7 +263,7 @@ class BrevioRoutes:
             brevio_service: "BrevioService",
             allowed_extensions: List[str],
             is_media: bool = False,
-        ) -> ProcessingMessageResponse:
+        ) -> JSONResponse:
             files_data = [
                 (file.filename or "unknown", await file.read())
                 for file in files
@@ -279,7 +293,10 @@ class BrevioRoutes:
             )
 
             response = ProcessingMessageResponse(data=ProcessingMessageData())
-            return response
+
+            return JSONResponse(
+                content=response.model_dump(), status_code=status.HTTP_202_ACCEPTED
+            )
 
         @self.router.post("/summary-yt-playlist")
         async def generate_summary_yt_playlist(
@@ -287,7 +304,7 @@ class BrevioRoutes:
             background_tasks: BackgroundTasks = BackgroundTasks(),
             brevio_service: BrevioService = Depends(get_brevio_service),
             _current_user: ObjectId = Depends(get_current_user),
-        ) -> ProcessingMessageResponse:
+        ) -> JSONResponse:
             print(_current_user)
             background_tasks.add_task(
                 brevio_service.generate, brevio_generate, _current_user
@@ -295,7 +312,9 @@ class BrevioRoutes:
 
             response = ProcessingMessageResponse(data=ProcessingMessageData())
 
-            return response
+            return JSONResponse(
+                content=response.model_dump(), status_code=status.HTTP_202_ACCEPTED
+            )
 
 
 brevio_router = BrevioRoutes().router

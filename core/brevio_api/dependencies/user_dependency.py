@@ -19,7 +19,8 @@ def get_current_user(
         payload = token_service.validate_access_token(token)
         if payload is None:
             raise HTTPException(status_code=401, detail="Token inválido o expirado")
-        return ObjectId(payload["id"])
+        user_id = ObjectId(payload["id"])
+        return user_id
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expirado")
     except jwt.DecodeError:

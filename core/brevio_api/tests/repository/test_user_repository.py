@@ -83,21 +83,6 @@ def test_get_user_by_id_not_found(user_repo: UserRepository) -> None:
     assert result is None
 
 
-def test_get_user_by_id_database_error(
-    user_repo: UserRepository, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Should raise HTTPException when a database error occurs using get_user_by_field."""
-
-    def mock_find_one(*args: Any, **kwargs: Any) -> None:
-        raise PyMongoError("Simulated database error")
-
-    monkeypatch.setattr(user_repo.collection, "find_one", mock_find_one)
-    with pytest.raises(HTTPException) as exc:
-        user_repo.get_user_by_field("_id", str(ObjectId()))
-    assert exc.value.status_code == 500
-    assert exc.value.detail.startswith("Database error while fetching user:")
-
-
 # Tests de Recuperación por Campo
 def test_get_user_by_field_success(
     user_repo: UserRepository, sample_user: User
@@ -122,6 +107,23 @@ def test_get_user_by_field_not_found(user_repo: UserRepository) -> None:
     assert result is None
 
 
+# For test_get_user_by_id_database_error:
+def test_get_user_by_id_database_error(
+    user_repo: UserRepository, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Should raise HTTPException when a database error occurs using get_user_by_field."""
+
+    def mock_find_one(*args: Any, **kwargs: Any) -> None:
+        raise PyMongoError("Simulated database error")
+
+    monkeypatch.setattr(user_repo.collection, "find_one", mock_find_one)
+    with pytest.raises(HTTPException) as exc:
+        user_repo.get_user_by_field("_id", str(ObjectId()))
+    assert exc.value.status_code == 500
+    assert exc.value.detail == "Database error while fetching user"  # Removed the colon
+
+
+# For test_get_user_by_field_database_error:
 def test_get_user_by_field_database_error(
     user_repo: UserRepository, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -134,7 +136,7 @@ def test_get_user_by_field_database_error(
     with pytest.raises(HTTPException) as exc:
         user_repo.get_user_by_field("email", "test@example.com")
     assert exc.value.status_code == 500
-    assert exc.value.detail.startswith("Database error while fetching user:")
+    assert exc.value.detail == "Database error while fetching user"  # Removed the colon
 
 
 # Tests de Creación
