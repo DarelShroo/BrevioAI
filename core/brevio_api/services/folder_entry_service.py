@@ -20,7 +20,7 @@ class FolderEntryService:
     def __init__(self, folder_entry_repo: FolderEntryRepository):
         self._folder_entry_repo = folder_entry_repo
 
-    def get_entries(
+    async def get_entries(
         self, _user_id: ObjectId, _entries_refs: List[str]
     ) -> List[FolderEntry]:
         _entries_refs_obj_ids = []
@@ -33,7 +33,7 @@ class FolderEntryService:
                         status_code=400, detail=f"Invalid ObjectId format: {entry_id}"
                     )
 
-            user_entries = self._folder_entry_repo.get_entries_ids_by_user_id(
+            user_entries = await self._folder_entry_repo.get_entries_ids_by_user_id(
                 _user_id, _entries_refs_obj_ids
             )
 

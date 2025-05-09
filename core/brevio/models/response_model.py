@@ -2,8 +2,8 @@ import json
 from typing import Dict, List, Union
 
 from core.brevio.enums.language import LanguageType
-from core.brevio.enums.model import ModelType
 from core.brevio.models.base_model import BaseModel
+from core.shared.enums.model import ModelType
 
 
 class SummaryResponse:

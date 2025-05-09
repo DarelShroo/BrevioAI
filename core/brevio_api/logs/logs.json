@@ -1,0 +1,27 @@
+[
+    {
+        "model": "gpt-4",
+        "language_input": "en",
+        "language_output": "es",
+        "category": "education",
+        "style": "guide",
+        "output_format": "markdown",
+        "source_type": "text",
+        "summary_level": "very_concise",
+        "num_tokens_file": 15017,
+        "num_chars_file": 42080,
+        "num_tokens_summary_input": 17360,
+        "num_tokens_summary_output": 4569,
+        "num_tokens_postprocess_output": 2163,
+        "num_tokens_postprocess_input": 4676,
+        "num_total_tokens": 28768,
+        "num_tokens_summary_predict_input": 2196,
+        "num_tokens_summary_predict_output": 325,
+        "num_tokens_postprocess_predict_input": 325,
+        "num_tokens_postprocess_predict_output": 149,
+        "num_total_tokens_predict": 2995,
+        "input_factor": 0.0812,
+        "output_factor_map_summary": 0.1193,
+        "timestamp": "2025-05-08 11:43:47"
+    }
+]

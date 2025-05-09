@@ -46,7 +46,7 @@ def dummy_entry() -> FolderEntry:
     return FolderEntry(name="Test Entry", user_id=ObjectId())
 
 
-def test_create_folder_entry_success(
+async def test_create_folder_entry_success(
     folder_entry_repository: FolderEntryRepository,
     dummy_entry: FolderEntry,
     mock_db: MagicMock,
@@ -56,7 +56,7 @@ def test_create_folder_entry_success(
     mock_result.inserted_id = ObjectId()
     mock_db.__getitem__.return_value.insert_one.return_value = mock_result
 
-    result = folder_entry_repository.create_folder_entry(dummy_entry)
+    result = await folder_entry_repository.create_folder_entry(dummy_entry)
 
     assert isinstance(result.id, ObjectId)
     assert result.name == dummy_entry.name
@@ -64,7 +64,7 @@ def test_create_folder_entry_success(
     mock_db.__getitem__.return_value.insert_one.assert_called_once()
 
 
-def test_get_folder_entry_success(
+async def test_get_folder_entry_success(
     folder_entry_repository: FolderEntryRepository,
     folder_entry_data: dict,
     mock_db: MagicMock,
@@ -76,7 +76,7 @@ def test_get_folder_entry_success(
         "_id": entry_id,
     }
 
-    retrieved = folder_entry_repository.get_folder_entry_by_id(entry_id)
+    retrieved = await folder_entry_repository.get_folder_entry_by_id(entry_id)
 
     assert retrieved is not None
     assert retrieved.id == entry_id
@@ -84,18 +84,18 @@ def test_get_folder_entry_success(
     assert retrieved.user_id == folder_entry_data["user_id"]
 
 
-def test_get_folder_entry_not_found(
+async def test_get_folder_entry_not_found(
     folder_entry_repository: FolderEntryRepository, mock_db: MagicMock
 ) -> None:
     """Should raise HTTPException with status 404 when FolderEntry is not found."""
     mock_db.__getitem__.return_value.find_one.return_value = None
 
     with pytest.raises(HTTPException) as exc:
-        folder_entry_repository.get_folder_entry_by_id(ObjectId())
+        await folder_entry_repository.get_folder_entry_by_id(ObjectId())
     assert exc.value.status_code == 404
 
 
-def test_update_folder_entry_success(
+async def test_update_folder_entry_success(
     folder_entry_repository: FolderEntryRepository,
     folder_entry_data: dict,
     mock_db: MagicMock,
@@ -113,14 +113,14 @@ def test_update_folder_entry_success(
         "name": "Updated Name",
     }
 
-    updated = folder_entry_repository.update_folder_entry(entry_id, update_data)
+    updated = await folder_entry_repository.update_folder_entry(entry_id, update_data)
 
     assert updated is not None
     assert updated.name == "Updated Name"
     assert updated.id == entry_id
 
 
-def test_delete_folder_entry_success(
+async def test_delete_folder_entry_success(
     folder_entry_repository: FolderEntryRepository, mock_db: MagicMock
 ) -> None:
     """Should delete the FolderEntry successfully and confirm deletion."""
@@ -129,12 +129,12 @@ def test_delete_folder_entry_success(
     delete_result.deleted_count = 1
     mock_db.__getitem__.return_value.delete_one.return_value = delete_result
 
-    result = folder_entry_repository.delete_folder_entry(entry_id)
+    result = await folder_entry_repository.delete_folder_entry(entry_id)
     assert result["message"] == "FolderEntry eliminado exitosamente"
     mock_db.__getitem__.return_value.delete_one.assert_called_once()
 
 
-def test_get_entries_by_user_success(
+async def test_get_entries_by_user_success(
     folder_entry_repository: FolderEntryRepository,
     folder_entry_data: dict,
     mock_db: MagicMock,
@@ -145,12 +145,12 @@ def test_get_entries_by_user_success(
         {**folder_entry_data, "user_id": user_id}
     ]
 
-    entries = folder_entry_repository.get_entries_by_user(user_id)
+    entries = await folder_entry_repository.get_entries_by_user(user_id)
     assert len(entries) == 1
     assert entries[0].user_id == user_id
 
 
-def test_create_entry_database_error(
+async def test_create_entry_database_error(
     folder_entry_repository: FolderEntryRepository,
     dummy_entry: FolderEntry,
     mock_db: MagicMock,
@@ -161,11 +161,11 @@ def test_create_entry_database_error(
     )
 
     with pytest.raises(HTTPException) as exc:
-        folder_entry_repository.create_folder_entry(dummy_entry)
+        await folder_entry_repository.create_folder_entry(dummy_entry)
     assert exc.value.status_code == 500
 
 
-def test_get_entries_ids_by_user_id_success(
+async def test_get_entries_ids_by_user_id_success(
     folder_entry_repository: FolderEntryRepository,
     folder_entry_data: dict,
     mock_db: MagicMock,
@@ -184,7 +184,9 @@ def test_get_entries_ids_by_user_id_success(
     ]
 
     # Call the method
-    entries = folder_entry_repository.get_entries_ids_by_user_id(user_id, entries_refs)
+    entries = await folder_entry_repository.get_entries_ids_by_user_id(
+        user_id, entries_refs
+    )
 
     # Assertions
     assert len(entries) == 2
@@ -193,21 +195,24 @@ def test_get_entries_ids_by_user_id_success(
     mock_db.__getitem__.return_value.find.assert_called_once()
 
 
-def test_get_entries_ids_by_user_id_empty_list(
+async def test_get_entries_ids_by_user_id_empty_list(
     folder_entry_repository: FolderEntryRepository,
     mock_db: MagicMock,
 ) -> None:
     """Should return empty list when no IDs are provided."""
     user_id = ObjectId()
-    # Call with empty list
-    entries = folder_entry_repository.get_entries_ids_by_user_id(user_id, [])
+    # Mock database response for empty list
+    mock_db.__getitem__.return_value.find.return_value = []
+
+    # Call with empty list - need to await the coroutine
+    entries = await folder_entry_repository.get_entries_ids_by_user_id(user_id, [])
 
     # Assertions
     assert entries == []
     mock_db.__getitem__.return_value.find.assert_called_once()
 
 
-def test_get_entries_ids_by_user_id_db_error(
+async def test_get_entries_ids_by_user_id_db_error(
     folder_entry_repository: FolderEntryRepository,
     mock_db: MagicMock,
 ) -> None:
@@ -223,12 +228,12 @@ def test_get_entries_ids_by_user_id_db_error(
 
     # Assertions
     with pytest.raises(HTTPException) as exc:
-        folder_entry_repository.get_entries_ids_by_user_id(user_id, [entry_id])
+        await folder_entry_repository.get_entries_ids_by_user_id(user_id, [entry_id])
     assert exc.value.status_code == 500
     assert "Database error" in exc.value.detail
 
 
-def test_get_entries_ids_by_user_id_unexpected_error(
+async def test_get_entries_ids_by_user_id_unexpected_error(
     folder_entry_repository: FolderEntryRepository,
     mock_db: MagicMock,
 ) -> None:
@@ -242,12 +247,12 @@ def test_get_entries_ids_by_user_id_unexpected_error(
 
     # Assertions
     with pytest.raises(HTTPException) as exc:
-        folder_entry_repository.get_entries_ids_by_user_id(user_id, [entry_id])
+        await folder_entry_repository.get_entries_ids_by_user_id(user_id, [entry_id])
     assert exc.value.status_code == 500
     assert "Unexpected error" in exc.value.detail
 
 
-def test_get_entries_ids_by_user_id_multiple_users(
+async def test_get_entries_ids_by_user_id_multiple_users(
     folder_entry_repository: FolderEntryRepository, mock_db: MagicMock
 ) -> None:
     """Should retrieve entries by user ID successfully for multiple entries."""
@@ -264,7 +269,7 @@ def test_get_entries_ids_by_user_id_multiple_users(
     mock_db.__getitem__.return_value.find.return_value = mock_entries
 
     # Call the method
-    entries = folder_entry_repository.get_entries_ids_by_user_id(
+    entries = await folder_entry_repository.get_entries_ids_by_user_id(
         user_id, [entry_id1, entry_id2]
     )
 
@@ -277,7 +282,7 @@ def test_get_entries_ids_by_user_id_multiple_users(
     )
 
 
-def test_get_entries_ids_by_user_id_validation_error(
+async def test_get_entries_ids_by_user_id_validation_error(
     folder_entry_repository: FolderEntryRepository, mock_db: MagicMock
 ) -> None:
     """Should raise HTTPException when entry data contains an invalid user_id."""
@@ -295,12 +300,12 @@ def test_get_entries_ids_by_user_id_validation_error(
     ]
 
     with pytest.raises(HTTPException) as exc:
-        folder_entry_repository.get_entries_ids_by_user_id(user_id, [entry_id])
+        await folder_entry_repository.get_entries_ids_by_user_id(user_id, [entry_id])
     assert exc.value.status_code == 400
     assert "Invalid folder entry data" in exc.value.detail
 
 
-def test_get_entries_ids_by_user_id_no_valid_ids(
+async def test_get_entries_ids_by_user_id_no_valid_ids(
     folder_entry_repository: FolderEntryRepository, mock_db: MagicMock
 ) -> None:
     """Should return empty list when no entries are found."""
@@ -311,7 +316,8 @@ def test_get_entries_ids_by_user_id_no_valid_ids(
     # Mock empty response (no entries found)
     mock_db.__getitem__.return_value.find.return_value = []
 
-    entries = folder_entry_repository.get_entries_ids_by_user_id(
+    # Need to await the coroutine
+    entries = await folder_entry_repository.get_entries_ids_by_user_id(
         user_id, [entry_id1, entry_id2]
     )
     assert entries == []

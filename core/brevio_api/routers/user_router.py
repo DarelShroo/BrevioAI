@@ -1,3 +1,4 @@
+import logging
 from typing import List
 
 from bson import ObjectId
@@ -11,6 +12,8 @@ from core.brevio_api.models.responses.folder_entry_response import GetEntriesRes
 from core.brevio_api.models.user.entry_ref import EntryRef
 from core.brevio_api.models.user.folder_entry import FolderEntry
 from core.brevio_api.services.folder_entry_service import FolderEntryService
+
+logger = logging.getLogger(__name__)
 
 
 class UserRouter:
@@ -45,7 +48,7 @@ class UserRouter:
             ),
         ) -> GetEntriesResponse:
             try:
-                result: List[FolderEntry] = folder_entry_service.get_entries(
+                result = await folder_entry_service.get_entries(
                     _user_id=_current_user, _entries_refs=entry_data.entries_refs
                 )
                 return GetEntriesResponse(entries=result)
@@ -53,8 +56,12 @@ class UserRouter:
             except HTTPException:
                 raise
             except Exception as e:
+                logger.error(
+                    f"Unexpected error in get_user_entries: {str(e)}", exc_info=True
+                )
                 raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Unexpected error occurred",
                 )
 
 

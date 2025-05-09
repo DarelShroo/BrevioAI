@@ -3,24 +3,25 @@ import pytest
 from core.brevio.enums.language import LanguageType
 from core.brevio.enums.output_format_type import OutputFormatType
 from core.brevio.enums.source_type import SourceType
-from core.brevio.services.advanced_content_generator import AdvancedContentGenerator
+from core.brevio.enums.summary_level import SummaryLevel
+from core.brevio.services.advanced_content_generator import AdvancedPromptGenerator
 
 
 @pytest.fixture
-def generator() -> AdvancedContentGenerator:
-    """Fixture that provides an AdvancedContentGenerator instance."""
-    return AdvancedContentGenerator()
+def generator() -> AdvancedPromptGenerator:
+    """Fixture that provides an AdvancedPromptGenerator instance."""
+    return AdvancedPromptGenerator()
 
 
 @pytest.mark.asyncio
-async def test_generate_prompt_valid_input(generator: AdvancedContentGenerator) -> None:
+async def test_generate_prompt_valid_input(generator: AdvancedPromptGenerator) -> None:
     """Should generate a prompt successfully with valid inputs."""
     category = "journalism"
     style = "news_wire"
-    output_format = OutputFormatType.MARKDOWN.value
+    output_format = OutputFormatType.MARKDOWN
     lang = LanguageType.ENGLISH
     source_type = SourceType.TEXT
-    content_length = 5
+    summary_level = SummaryLevel.DETAILED  # Use DETAILED for a longer summary
 
     prompt = await generator.generate_prompt(
         category=category,
@@ -28,39 +29,42 @@ async def test_generate_prompt_valid_input(generator: AdvancedContentGenerator) 
         output_format=output_format,
         lang=lang,
         source_type=source_type,
-        content_length=content_length,
+        summary_level=summary_level,
     )
 
     assert isinstance(prompt, str)
     assert f"# Prompt for {category.title()} - {style.title()}" in prompt
     assert "**Style:** News_Wire (Direct, informative)" in prompt
-    assert "- Summarize a 5-page document comprehensively" in prompt
+    assert (
+        "- Summarize the document comprehensively, capturing main themes, key points, and overall purpose in approximately 400 words."
+        in prompt
+    )
 
 
 @pytest.mark.asyncio
 async def test_generate_prompt_invalid_category(
-    generator: AdvancedContentGenerator,
+    generator: AdvancedPromptGenerator,
 ) -> None:
     """Should raise an error when an invalid category is provided."""
     with pytest.raises(ValueError, match="Category 'invalid_category' not found"):
         await generator.generate_prompt(
             category="invalid_category",
             style="news_wire",
-            output_format="markdown",
+            output_format=OutputFormatType.MARKDOWN,
             lang=LanguageType.ENGLISH,
         )
 
 
 @pytest.mark.asyncio
 async def test_generate_prompt_empty_category(
-    generator: AdvancedContentGenerator,
+    generator: AdvancedPromptGenerator,
 ) -> None:
     """Should raise an error when an empty category is provided."""
     with pytest.raises(ValueError, match="Category cannot be empty"):
         await generator.generate_prompt(
             category="",
             style="news_wire",
-            output_format="markdown",
+            output_format=OutputFormatType.MARKDOWN,
             lang=LanguageType.ENGLISH,
             source_type=SourceType.TEXT,
         )
@@ -68,7 +72,7 @@ async def test_generate_prompt_empty_category(
 
 @pytest.mark.asyncio
 async def test_generate_prompt_invalid_style(
-    generator: AdvancedContentGenerator,
+    generator: AdvancedPromptGenerator,
 ) -> None:
     """Should raise an error when an invalid style is provided for the given category."""
     with pytest.raises(
@@ -77,20 +81,20 @@ async def test_generate_prompt_invalid_style(
         await generator.generate_prompt(
             category="journalism",
             style="invalid_style",
-            output_format="markdown",
+            output_format=OutputFormatType.MARKDOWN,
             lang=LanguageType.ENGLISH,
             source_type=SourceType.TEXT,
         )
 
 
 @pytest.mark.asyncio
-async def test_generate_prompt_empty_style(generator: AdvancedContentGenerator) -> None:
+async def test_generate_prompt_empty_style(generator: AdvancedPromptGenerator) -> None:
     """Should raise an error when an empty style is provided."""
     with pytest.raises(ValueError, match="Style cannot be empty"):
         await generator.generate_prompt(
             category="journalism",
             style="",
-            output_format="markdown",
+            output_format=OutputFormatType.MARKDOWN,
             lang=LanguageType.ENGLISH,
             source_type=SourceType.TEXT,
         )
@@ -98,14 +102,14 @@ async def test_generate_prompt_empty_style(generator: AdvancedContentGenerator) 
 
 @pytest.mark.asyncio
 async def test_generate_prompt_invalid_source_type(
-    generator: AdvancedContentGenerator,
+    generator: AdvancedPromptGenerator,
 ) -> None:
     """Should raise an error when an unsupported source type is provided."""
     with pytest.raises(ValueError) as exc_info:
         await generator.generate_prompt(
             category="journalism",
             style="news_wire",
-            output_format="markdown",
+            output_format=OutputFormatType.MARKDOWN,
             lang=LanguageType.ENGLISH,
             source_type=SourceType.MEDIA,
         )
@@ -116,37 +120,19 @@ async def test_generate_prompt_invalid_source_type(
     assert "journalism" in error_message
 
 
-@pytest.mark.asyncio
-async def test_generate_prompt_invalid_content_length(
-    generator: AdvancedContentGenerator,
-) -> None:
-    """Should raise an error when a non-positive content_length is provided."""
-    with pytest.raises(ValueError, match="Content length must be a positive integer"):
-        await generator.generate_prompt(
-            category="journalism",
-            style="news_wire",
-            output_format="markdown",
-            lang=LanguageType.ENGLISH,
-            source_type=SourceType.TEXT,
-            content_length=-1,
-        )
-
-
-def test_get_available_templates(generator: AdvancedContentGenerator) -> None:
+def test_get_available_templates(generator: AdvancedPromptGenerator) -> None:
     """Should return a correct summary of the available templates."""
     templates_summary = generator.get_available_templates()
-    # Should be a dictionary containing available categories
     assert isinstance(templates_summary, dict)
     assert "journalism" in templates_summary
     assert "health" in templates_summary
-    # Should include at least one style for journalism category
     assert len(templates_summary["journalism"]) > 0
     assert any(
         style["category"] == "news_wire" for style in templates_summary["journalism"]
     )
 
 
-def test_add_custom_template(generator: AdvancedContentGenerator) -> None:
+def test_add_custom_template(generator: AdvancedPromptGenerator) -> None:
     """Should add a new custom template correctly."""
     category = "custom_category"
     structures = {"custom_structure": ["# Custom Structure"]}
@@ -170,19 +156,17 @@ def test_add_custom_template(generator: AdvancedContentGenerator) -> None:
         needs=needs,
     )
 
-    # Should return a success message indicating the creation of the template
     assert (
         result
         == "Template 'custom_category' successfully created with 1 structures and 1 styles."
     )
-    # Should update the TEMPLATES with the new category and its details
     assert category in generator.TEMPLATES
     assert "custom_structure" in generator.TEMPLATES[category]["structures"]
     assert "custom_style" in generator.TEMPLATES[category]["styles"]
 
 
 def test_add_custom_template_empty_structures(
-    generator: AdvancedContentGenerator,
+    generator: AdvancedPromptGenerator,
 ) -> None:
     """Should raise an error if the provided structures are empty."""
     with pytest.raises(ValueError, match="Structures cannot be empty"):
@@ -202,7 +186,7 @@ def test_add_custom_template_empty_structures(
         )
 
 
-def test_add_custom_template_empty_styles(generator: AdvancedContentGenerator) -> None:
+def test_add_custom_template_empty_styles(generator: AdvancedPromptGenerator) -> None:
     """Should raise an error if the provided styles are empty."""
     with pytest.raises(ValueError, match="Styles cannot be empty"):
         generator.add_custom_template(
@@ -216,7 +200,7 @@ def test_add_custom_template_empty_styles(generator: AdvancedContentGenerator) -
 
 
 def test_add_custom_template_duplicate_category(
-    generator: AdvancedContentGenerator,
+    generator: AdvancedPromptGenerator,
 ) -> None:
     """Should raise an error when attempting to add a template with an existing category."""
     category = "journalism"
@@ -236,7 +220,7 @@ def test_add_custom_template_duplicate_category(
 
 
 def test_get_all_category_style_combinations(
-    generator: AdvancedContentGenerator,
+    generator: AdvancedPromptGenerator,
 ) -> None:
     """Should return all valid combinations of categories and styles."""
     combinations = generator.get_all_category_style_combinations()
@@ -254,10 +238,9 @@ def test_get_all_category_style_combinations(
     )
 
 
-def test_sanitize_markdown(generator: AdvancedContentGenerator) -> None:
+def test_sanitize_markdown(generator: AdvancedPromptGenerator) -> None:
     """Should sanitize the Markdown text by escaping potentially harmful tags."""
     raw_text = "Text with <script>alert('xss')</script> and *unclosed Markdown"
     sanitized_text = generator.sanitize_markdown(raw_text)
     expected_text = "Text with &lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt; and *unclosed Markdown"
-    # Should return the expected sanitized text
     assert sanitized_text == expected_text

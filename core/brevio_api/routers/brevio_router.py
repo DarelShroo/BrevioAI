@@ -17,14 +17,16 @@ from pydantic import HttpUrl, ValidationError
 
 from core.brevio.enums.extension import ExtensionType
 from core.brevio.enums.language import LanguageType
-from core.brevio.enums.model import ModelType
 from core.brevio.enums.output_format_type import OutputFormatType
 from core.brevio.enums.source_type import SourceType
+from core.brevio.enums.summary_level import SummaryLevel
 from core.brevio.models.prompt_config_model import PromptConfig
 from core.brevio_api.dependencies.api_key_dependency import verify_api_key
 from core.brevio_api.dependencies.brevio_service_dependency import get_brevio_service
+from core.brevio_api.dependencies.usage_cost_tracker_dependency import (
+    get_cost_token_tracker,
+)
 from core.brevio_api.dependencies.user_dependency import get_current_user
-from core.brevio_api.models.brevio.brevio_generate import BrevioGenerate
 from core.brevio_api.models.brevio.responses.brevio_responses import (
     CategoryStyles,
     CategoryStylesDataResponse,
@@ -40,9 +42,12 @@ from core.brevio_api.models.brevio.responses.brevio_responses import (
     ProcessingMessageResponse,
 )
 from core.brevio_api.models.brevio.url_yt import UrlYT
+from core.brevio_api.services.billing.usage_cost_tracker import UsageCostTracker
 from core.brevio_api.services.brevio_service import BrevioService
 from core.brevio_api.utils.extension_validator import validate_file_extension
-from core.brevio_api.utils.language_utils import parse_language_type
+from core.brevio_api.utils.language_utils import language_from_form
+from core.shared.enums.model import ModelType
+from core.shared.models.brevio.brevio_generate import BrevioGenerate
 
 
 class BrevioRoutes:
@@ -184,16 +189,18 @@ class BrevioRoutes:
         )
         async def generate_summary_media(
             files: List[UploadFile] = File(...),
-            language: LanguageType = Depends(parse_language_type),
+            language: LanguageType = Depends(language_from_form),
             model: ModelType = Form(...),
             category: str = Form(...),
             style: str = Form(...),
             format: OutputFormatType = Form(...),
             source_types: SourceType = Form(...),
+            summary_level: SummaryLevel = Form(...),
             background_tasks: BackgroundTasks = BackgroundTasks(),
             _current_user: ObjectId = Depends(get_current_user),
             brevio_service: BrevioService = Depends(get_brevio_service),
         ) -> JSONResponse:
+            _usage_cost_tracker: UsageCostTracker = UsageCostTracker()
             return await process_summary(
                 files,
                 language,
@@ -202,10 +209,12 @@ class BrevioRoutes:
                 style,
                 format,
                 source_types,
+                summary_level,
                 background_tasks,
                 _current_user,
                 brevio_service,
                 [ExtensionType.MP3.value],
+                _usage_cost_tracker,
                 is_media=True,
             )
 
@@ -225,16 +234,18 @@ class BrevioRoutes:
         )
         async def generate_summary_documents(
             files: List[UploadFile] = File(...),
-            language: LanguageType = Depends(parse_language_type),
+            language: LanguageType = Depends(language_from_form),
             model: ModelType = Form(...),
             category: str = Form(...),
             style: str = Form(...),
             format: OutputFormatType = Form(...),
             source_types: SourceType = Form(...),
+            summary_level: SummaryLevel = Form(...),
             background_tasks: BackgroundTasks = BackgroundTasks(),
             _current_user: ObjectId = Depends(get_current_user),
             brevio_service: BrevioService = Depends(get_brevio_service),
         ) -> JSONResponse:
+            _usage_cost_tracker: UsageCostTracker = UsageCostTracker()
             return await process_summary(
                 files,
                 language,
@@ -243,10 +254,12 @@ class BrevioRoutes:
                 style,
                 format,
                 source_types,
+                summary_level,
                 background_tasks,
                 _current_user,
                 brevio_service,
                 [ExtensionType.DOCX.value, ExtensionType.PDF.value],
+                _usage_cost_tracker,
                 is_media=False,
             )
 
@@ -258,16 +271,18 @@ class BrevioRoutes:
             style: str,
             format: OutputFormatType,
             source_types: SourceType,
+            summary_level: SummaryLevel,
             background_tasks: BackgroundTasks,
             _current_user: ObjectId,
-            brevio_service: "BrevioService",
+            brevio_service: BrevioService,
             allowed_extensions: List[str],
+            _usage_cost_tracker: UsageCostTracker,
             is_media: bool = False,
         ) -> JSONResponse:
             files_data = [
                 (file.filename or "unknown", await file.read())
                 for file in files
-                if validate_file_extension(file, allowed_extensions)
+                if await validate_file_extension(file, allowed_extensions)
             ]
 
             prompt_config = PromptConfig(
@@ -277,6 +292,7 @@ class BrevioRoutes:
                 format=format,
                 language=language,
                 source_types=source_types,
+                summary_level=summary_level,
             )
 
             service_method = (
@@ -290,6 +306,7 @@ class BrevioRoutes:
                 files_data,
                 _current_user,
                 prompt_config,
+                _usage_cost_tracker,
             )
 
             response = ProcessingMessageResponse(data=ProcessingMessageData())
@@ -304,10 +321,13 @@ class BrevioRoutes:
             background_tasks: BackgroundTasks = BackgroundTasks(),
             brevio_service: BrevioService = Depends(get_brevio_service),
             _current_user: ObjectId = Depends(get_current_user),
+            _usage_cost_tracker: UsageCostTracker = Depends(get_cost_token_tracker),
         ) -> JSONResponse:
-            print(_current_user)
             background_tasks.add_task(
-                brevio_service.generate, brevio_generate, _current_user
+                brevio_service.generate,
+                brevio_generate,
+                _current_user,
+                _usage_cost_tracker,
             )
 
             response = ProcessingMessageResponse(data=ProcessingMessageData())

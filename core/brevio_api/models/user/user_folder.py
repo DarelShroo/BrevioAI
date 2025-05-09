@@ -3,7 +3,7 @@ from typing import List, Optional
 from bson import ObjectId
 from pydantic import Field
 
-from .base_model import BaseModel
+from ....shared.models.user.base_model import BaseModel
 
 
 class UserFolder(BaseModel):

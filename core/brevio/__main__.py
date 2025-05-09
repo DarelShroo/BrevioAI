@@ -5,8 +5,8 @@ from bson import ObjectId
 from fastapi.exceptions import HTTPException
 from pydantic import HttpUrl
 
-from core.brevio.enums import LanguageType, ModelType, SourceType
-from core.brevio.services.advanced_content_generator import AdvancedContentGenerator
+from core.brevio.enums import LanguageType, ModelType
+from core.brevio.services.advanced_content_generator import AdvancedPromptGenerator
 
 from .generate import Generate
 
@@ -83,8 +83,7 @@ class Main:
         Dict[str, List[Dict[str, Union[str, List[str]]]]]
     ):
         try:
-            acg = AdvancedContentGenerator()
-            # Type hint reflects that source_types is a list of strings
+            acg = AdvancedPromptGenerator()
             combinations: List[
                 Tuple[str, str, List[str]]
             ] = acg.get_all_category_style_combinations()
@@ -113,6 +112,7 @@ class Main:
         current_folder_entry_id: ObjectId,
         _user_folder_id: ObjectId,
         user_id: ObjectId,
+        _usage_cost_tracker: Any,
     ) -> Dict[str, Any]:
         try:
             result: Dict[str, Any] = await self._generate._process_online_audio_data(
@@ -121,6 +121,7 @@ class Main:
                 current_folder_entry_id,
                 _user_folder_id,
                 user_id,
+                _usage_cost_tracker,
             )
             logger.debug(f"Successfully generated audio data for user {user_id}")
             return result
@@ -137,6 +138,7 @@ class Main:
         _user_folder_id: ObjectId,
         user_id: ObjectId,
         _create_data_result: Optional[Callable] = None,
+        _usage_cost_tracker: Any = None,
     ) -> Dict[str, Any]:
         try:
             result: Dict[str, Any] = await self._generate._process_documents(
@@ -145,6 +147,7 @@ class Main:
                 _user_folder_id,
                 user_id,
                 _create_data_result,
+                _usage_cost_tracker,
             )
             logger.debug(f"Successfully generated summary for user {user_id}")
             return result
@@ -152,4 +155,6 @@ class Main:
             logger.error(
                 f"Unexpected error generating summary: {str(e)}", exc_info=True
             )
-            raise Exception(f"Unexpected error generating summary: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail=f"Unexpected error generating summary"
+            )

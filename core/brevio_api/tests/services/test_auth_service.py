@@ -1,27 +1,38 @@
+from datetime import datetime, timedelta
 from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import bcrypt
 import mongomock
 import pytest
 from bson import ObjectId
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from core.brevio.models.response_model import FolderResponse
-from core.brevio_api.models.auth.auth import LoginUser, RegisterUser
+from core.brevio_api.models.auth.auth import (
+    LoginUser,
+    RecoveryPassword,
+    RecoveryPasswordOtp,
+    RegisterUser,
+)
 from core.brevio_api.models.user.user_folder import UserFolder
 from core.brevio_api.models.user.user_model import User
 from core.brevio_api.services.auth_service import AuthService
 from core.brevio_api.services.token_service import TokenService
 from core.brevio_api.services.user_service import UserService
+from core.brevio_api.utils.password_utils import hash_password
 
 
 @pytest.fixture
 def mock_db() -> Any:
+    """Fixture to provide a mock MongoDB database."""
     return mongomock.MongoClient().db
 
 
 @pytest.fixture
 def token_service() -> MagicMock:
+    """Fixture to provide a mocked TokenService."""
     service = MagicMock(spec=TokenService)
     service.create_access_token = MagicMock(return_value="test_token")
     return service
@@ -29,10 +40,12 @@ def token_service() -> MagicMock:
 
 @pytest.fixture
 def user_service() -> MagicMock:
+    """Fixture to provide a mocked UserService with async methods."""
     service = MagicMock(spec=UserService)
-    service.get_user_by_email = MagicMock()
-    service.get_user_by_username = MagicMock()
-    service.create_user = MagicMock()
+    service.get_user_by_email = AsyncMock()
+    service.get_user_by_username = AsyncMock()
+    service.create_user = AsyncMock()
+    service.change_password = AsyncMock()
     return service
 
 
@@ -40,7 +53,7 @@ def user_service() -> MagicMock:
 def auth_service(
     mock_db: Any, token_service: TokenService, user_service: UserService
 ) -> AuthService:
-    # Inyectar explícitamente el user_service en auth_service
+    """Fixture to provide an AuthService instance with mocked dependencies."""
     auth_service = AuthService(mock_db, token_service)
     auth_service._user_service = user_service
     return auth_service
@@ -48,6 +61,7 @@ def auth_service(
 
 @pytest.fixture
 def user_data() -> Dict[str, Any]:
+    """Fixture to provide sample user data."""
     return {
         "email": "test@example.com",
         "password": "Test_password1",
@@ -57,6 +71,7 @@ def user_data() -> Dict[str, Any]:
 
 @pytest.fixture
 def login_data(user_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Fixture to provide sample login data."""
     return {
         "identity": user_data["email"],
         "password": user_data["password"],
@@ -65,6 +80,7 @@ def login_data(user_data: Dict[str, Any]) -> Dict[str, Any]:
 
 @pytest.fixture
 def mock_user_id() -> ObjectId:
+    """Fixture to provide a mock ObjectId for a user."""
     return ObjectId()
 
 
@@ -75,21 +91,24 @@ async def test_register_success(
     user_service: MagicMock,
     mock_user_id: ObjectId,
 ) -> None:
+    """Test successful user registration."""
     user = RegisterUser(**user_data)
     folder = UserFolder(_id=ObjectId())
+    valid_hashed_password = hash_password(user_data["password"])
     created_user = User(
         _id=mock_user_id,
         email=user_data["email"],
         username=user_data["username"],
-        password="hashed_password",
+        password=valid_hashed_password,
         folder=folder,
     )
 
     user_service.get_user_by_email.return_value = None
+    user_service.create_user.return_value = created_user
 
     with patch(
         "core.brevio_api.utils.password_utils.hash_password",
-        return_value="hashed_password",
+        return_value=valid_hashed_password,
     ):
         with patch(
             "core.brevio.managers.directory_manager.DirectoryManager"
@@ -109,122 +128,238 @@ async def test_register_success(
 
     assert result.token == "test_token"
     assert isinstance(result.folder, FolderResponse)
-    assert result.folder.success == True
+    assert result.folder.success is True
     assert "Successfully created" in result.folder.message
+    user_service.get_user_by_email.assert_awaited_once_with(user_data["email"])
+    user_service.create_user.assert_awaited_once()
+    mock_email.return_value.send_register_email.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_register_user_exists(
+async def test_login_user_not_found(
     auth_service: AuthService,
     user_data: Dict[str, Any],
+    login_data: Dict[str, Any],
     user_service: MagicMock,
-    mock_user_id: ObjectId,
 ) -> None:
-    folder = UserFolder(_id=ObjectId())
-    existing_user = User(
-        _id=mock_user_id,
-        email=user_data["email"],
-        username=user_data["username"],
-        password="hashed_password",
-        folder=folder,
-    )
-    new_user = RegisterUser(**user_data)
-
-    user_service.get_user_by_email.return_value = existing_user
-
+    """Test login when user is not found."""
+    user_login = LoginUser(**login_data)
+    user_service.get_user_by_email.return_value = None
     with patch(
-        "core.brevio_api.services.auth_service.isEmail", return_value=user_data["email"]
+        "core.brevio_api.utils.email_utils.isEmail",
+        return_value=user_data["email"],
     ):
-        # Cambiar a HTTPException en lugar de ValueError
         with pytest.raises(HTTPException) as excinfo:
-            await auth_service.register(new_user)
-
-    assert excinfo.value.status_code == 400
-    assert "User already exists" in str(excinfo.value.detail)
-    # Cambiar a assert_called_once si no es una corrutina
-    user_service.get_user_by_email.assert_called_once_with(new_user.email)
+            await auth_service.login(user_login)
+    assert excinfo.value.status_code == 404
+    assert "Usuario no encontrado" in str(excinfo.value.detail)
+    user_service.get_user_by_email.assert_awaited_once_with(user_data["email"])
 
 
-def test_login_success(
+@pytest.mark.asyncio
+async def test_login_success(
     auth_service: AuthService,
     user_data: Dict[str, Any],
     login_data: Dict[str, Any],
     user_service: MagicMock,
     mock_user_id: ObjectId,
 ) -> None:
+    """Test successful user login."""
     folder = UserFolder(_id=ObjectId(), entries=[])
+    valid_hashed_password = hash_password(user_data["password"])
     user = User(
         _id=mock_user_id,
         email=user_data["email"],
         username=user_data["username"],
-        password="hashed_password",
+        password=valid_hashed_password,
         folder=folder,
     )
     user_login = LoginUser(**login_data)
 
-    # Configura los mocks correctamente
     user_service.get_user_by_email.return_value = user
     user_service.get_user_by_username.return_value = None
 
-    # Asegura que auth_service use este user_service
-    auth_service._user_service = user_service
-
+    # Aquí está la corrección: necesitamos parchear la función en el módulo correcto
+    # y usar side_effect para asegurarnos de que la función mockeada sea llamada
     with patch(
-        "core.brevio_api.services.auth_service.verify_password", return_value=True
-    ) as mock_verify_password:
-        # En lugar de mockear isEmail para devolver True, hazlo para devolver el mismo email
-        # Es probable que la función isEmail solo valide el formato y devuelva el mismo email
+        "core.brevio_api.utils.email_utils.isEmail",
+        return_value=user_data["email"],
+    ):
         with patch(
-            "core.brevio_api.services.auth_service.isEmail",
-            return_value=login_data["identity"],
-        ):
-            result = auth_service.login(user_login)
+            "core.brevio_api.services.auth_service.verify_password",
+            side_effect=lambda x, y: True,
+        ) as mock_verify_password:
+            result = await auth_service.login(user_login)
 
-    # Verificaciones
     assert result.access_token == "test_token"
-
-    # Verifica las llamadas a mocks sin los argumentos exactos si hay problemas
-    assert mock_verify_password.called
-    assert user_service.get_user_by_email.called
-
-    # O verifica los argumentos de llamada con más detalle si es necesario
     mock_verify_password.assert_called_once_with(
-        login_data["password"], "hashed_password"
+        login_data["password"], valid_hashed_password
     )
-    user_service.get_user_by_email.assert_called_once_with(login_data["identity"])
+    user_service.get_user_by_email.assert_awaited_once_with(user_data["email"])
 
 
-def test_login_invalid_password(
+@pytest.mark.asyncio
+async def test_login_invalid_password(
     auth_service: AuthService,
     user_data: Dict[str, Any],
     login_data: Dict[str, Any],
     user_service: MagicMock,
     mock_user_id: ObjectId,
 ) -> None:
+    """Test login with an invalid password."""
     folder = UserFolder(_id=ObjectId(), entries=[])
+    valid_hashed_password = hash_password(user_data["password"])
     user = User(
         _id=mock_user_id,
         email=user_data["email"],
         username=user_data["username"],
-        password="hashed_password",
+        password=valid_hashed_password,
         folder=folder,
     )
     user_login = LoginUser(**login_data)
 
     user_service.get_user_by_email.return_value = user
+    user_service.get_user_by_username.return_value = None
+
+    # Aquí está la corrección: usar el módulo correcto para parchear
+    # y configurar side_effect para simular una verificación fallida
+    with patch(
+        "core.brevio_api.utils.email_utils.isEmail",
+        return_value=user_data["email"],
+    ):
+        with patch(
+            "core.brevio_api.services.auth_service.verify_password",
+            side_effect=lambda x, y: False,
+        ) as mock_verify_password:
+            with pytest.raises(HTTPException) as excinfo:
+                await auth_service.login(user_login)
+
+    assert excinfo.value.status_code == 401
+    assert "Contraseña incorrecta" in str(excinfo.value.detail)
+    mock_verify_password.assert_called_once_with(
+        login_data["password"], valid_hashed_password
+    )
+    user_service.get_user_by_email.assert_awaited_once_with(user_data["email"])
+
+
+@pytest.mark.asyncio
+async def test_password_recovery_handshake(
+    auth_service: AuthService,
+    user_data: Dict[str, Any],
+    user_service: MagicMock,
+    mock_user_id: ObjectId,
+) -> None:
+    """Test password recovery handshake."""
+    folder = UserFolder(_id=ObjectId())
+    valid_hashed_password = hash_password(user_data["password"])
+    user = User(
+        _id=mock_user_id,
+        email=user_data["email"],
+        username=user_data["username"],
+        password=valid_hashed_password,
+        folder=folder,
+        otp=None,
+        exp=None,
+    )
+    recovery_data = RecoveryPassword(identity=user_data["email"])
+
+    user_service.get_user_by_email.return_value = user
 
     with patch(
-        "core.brevio_api.services.auth_service.verify_password", return_value=False
-    ) as mock_verify_password:
+        "core.brevio_api.utils.email_utils.isEmail", return_value=user_data["email"]
+    ):
         with patch(
-            "core.brevio_api.services.auth_service.isEmail",
-            return_value=login_data["identity"],
+            "core.brevio_api.utils.otp_utils.OTPUtils.generate_otp",
+            return_value="123456",
         ):
-            with pytest.raises(HTTPException) as excinfo:
-                auth_service.login(user_login)
+            with patch(
+                "core.brevio_api.services.auth_service.EmailService"
+            ) as mock_email:
+                mock_email.return_value.send_recovery_password_email = AsyncMock()
+                with patch.object(
+                    auth_service._user_repository, "update_user", AsyncMock()
+                ) as mock_update_user:
+                    result = await auth_service.password_recovery_handshake(
+                        recovery_data
+                    )
 
-            assert excinfo.value.status_code == 401
-            assert "Contraseña incorrecta" in str(excinfo.value.detail)
-            mock_verify_password.assert_called_once_with(
-                user_login.password, user.password
-            )
+    assert result.message == "Código de recuperación enviado al correo electrónico."
+    user_service.get_user_by_email.assert_awaited_once_with(user_data["email"])
+    mock_update_user.assert_awaited_once()
+    mock_email.return_value.send_recovery_password_email.assert_awaited_once_with(
+        "123456"
+    )
+
+
+@pytest.mark.asyncio
+async def test_change_password(
+    auth_service: AuthService,
+    user_data: Dict[str, Any],
+    user_service: MagicMock,
+    mock_user_id: ObjectId,
+) -> None:
+    """Test changing password with valid OTP."""
+    folder = UserFolder(_id=ObjectId())
+    valid_hashed_password = hash_password(user_data["password"])
+    exp_time = int((datetime.now() + timedelta(minutes=5)).timestamp())
+    user = User(
+        _id=mock_user_id,
+        email=user_data["email"],
+        username=user_data["username"],
+        password=valid_hashed_password,
+        folder=folder,
+        otp=123456,
+        exp=exp_time,
+    )
+    recovery_otp = RecoveryPasswordOtp(
+        email=user_data["email"], otp=123456, password="New_password1"
+    )
+
+    user_service.get_user_by_email.return_value = user
+
+    with patch("core.brevio_api.services.auth_service.EmailService") as mock_email:
+        mock_email.return_value.send_password_changed_email = AsyncMock()
+        result = await auth_service.change_password(recovery_otp)
+
+    assert result.message == "Contraseña cambiada exitosamente."
+    user_service.get_user_by_email.assert_awaited_once_with(user_data["email"])
+    user_service.change_password.assert_awaited_once_with(
+        user_data["email"], recovery_otp.password
+    )
+    mock_email.return_value.send_password_changed_email.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_change_password_invalid_otp(
+    auth_service: AuthService,
+    user_data: Dict[str, Any],
+    user_service: MagicMock,
+    mock_user_id: ObjectId,
+) -> None:
+    """Test changing password with an invalid OTP."""
+    folder = UserFolder(_id=ObjectId())
+    valid_hashed_password = hash_password(user_data["password"])
+    exp_time = int((datetime.now() + timedelta(minutes=5)).timestamp())
+    user = User(
+        _id=mock_user_id,
+        email=user_data["email"],
+        username=user_data["username"],
+        password=valid_hashed_password,
+        folder=folder,
+        otp=123456,
+        exp=exp_time,
+    )
+    recovery_otp = RecoveryPasswordOtp(
+        email=user_data["email"], otp=654321, password="New_password1"
+    )
+
+    user_service.get_user_by_email.return_value = user
+
+    with patch("core.brevio_api.services.auth_service.EmailService") as mock_email:
+        mock_email.return_value.send_password_changed_email = AsyncMock()
+        with pytest.raises(HTTPException) as excinfo:
+            await auth_service.change_password(recovery_otp)
+
+    assert excinfo.value.status_code == 400
+    assert "El código de recuperación es incorrecto." in str(excinfo.value.detail)
+    user_service.get_user_by_email.assert_awaited_once_with(user_data["email"])

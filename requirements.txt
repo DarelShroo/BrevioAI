@@ -9,7 +9,7 @@ isort
 markdown
 mongomock
 mypy
-openai==1.57.2
+openai
 openai-whisper==20240930
 passlib[bcrypt]
 pre-commit
@@ -24,4 +24,16 @@ python-dotenv
 python-multipart
 types-Markdown
 yt-dlp
+tenacity
+pandas
+matplotlib
+transformers==4.44.2
+types-transformers
+tiktoken==0.7.0
+scipy==1.14.1 
+numpy==2.1.1 
+pandas==2.2.3 
+pandas-stubs
+scikit-learn==1.5.2 
+matplotlib==3.9.2
 #setuptools

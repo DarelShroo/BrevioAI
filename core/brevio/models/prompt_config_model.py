@@ -4,10 +4,11 @@ from typing import TYPE_CHECKING, Any, Type
 from pydantic import field_validator
 
 from core.brevio.enums.language import LanguageType
-from core.brevio.enums.model import ModelType
 from core.brevio.enums.output_format_type import OutputFormatType
 from core.brevio.enums.source_type import SourceType
+from core.brevio.enums.summary_level import SummaryLevel
 from core.brevio.models.base_model import BaseModel
+from core.shared.enums.model import ModelType
 
 
 class PromptConfig(BaseModel):
@@ -17,16 +18,17 @@ class PromptConfig(BaseModel):
     format: OutputFormatType
     language: LanguageType
     source_types: SourceType
+    summary_level: SummaryLevel
 
     @field_validator("category", "style", "source_types")
     @classmethod
     def validate_category_and_style(cls, value: Any, info: Any) -> Any:
-        from ..services.advanced_content_generator import AdvancedContentGenerator
+        from ..services.advanced_content_generator import AdvancedPromptGenerator
 
         if value is None:
             return value
 
-        acg = AdvancedContentGenerator()
+        acg = AdvancedPromptGenerator()
         available_templates = acg.get_available_templates()
 
         if info.field_name == "category":

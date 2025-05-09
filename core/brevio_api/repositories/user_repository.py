@@ -27,7 +27,7 @@ class UserRepository:
                 status_code=500, detail=f"Database initialization error: {str(e)}"
             )
 
-    def get_user_by_field(
+    async def get_user_by_field(
         self, field: str, value: Union[ObjectId, str]
     ) -> Optional[User]:
         try:
@@ -81,7 +81,7 @@ class UserRepository:
                 detail=f"Internal server error while processing user data",
             )
 
-    def create_user(self, user: User) -> User:
+    async def create_user(self, user: User) -> User:
         try:
             logger.debug("Creating new user")
 
@@ -103,7 +103,9 @@ class UserRepository:
             logger.error(f"Unexpected error creating user: {str(e)}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
-    def update_user(self, user_id: ObjectId, fields: Dict[str, Any]) -> Optional[User]:
+    async def update_user(
+        self, user_id: ObjectId, fields: Dict[str, Any]
+    ) -> Optional[User]:
         try:
             if isinstance(user_id, str):
                 try:
@@ -156,7 +158,7 @@ class UserRepository:
             logger.error(f"Unexpected error updating user: {str(e)}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Unexpected error")
 
-    def delete_user(self, id: Union[ObjectId, str]) -> dict:
+    async def delete_user(self, id: Union[ObjectId, str]) -> dict:
         try:
             logger.debug(f"Attempting to delete user with ID: {id}")
             if isinstance(id, str):

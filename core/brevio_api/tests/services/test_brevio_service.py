@@ -7,17 +7,22 @@ import mongomock
 import pytest
 from bson import ObjectId
 from fastapi import HTTPException
+from pydantic import HttpUrl
 
 from core.brevio.enums.language import LanguageType
-from core.brevio.enums.model import ModelType
 from core.brevio.enums.output_format_type import OutputFormatType
 from core.brevio.enums.source_type import SourceType
+from core.brevio.enums.summary_level import SummaryLevel
 from core.brevio.models.prompt_config_model import PromptConfig
-from core.brevio_api.models.brevio.brevio_generate import BrevioGenerate, MediaEntry
 from core.brevio_api.models.user.user_folder import UserFolder
 from core.brevio_api.models.user.user_model import User
+from core.brevio_api.services.billing.usage_cost_tracker import UsageCostTracker
 from core.brevio_api.services.brevio_service import BrevioService
 from core.brevio_api.utils.password_utils import hash_password
+from core.shared.enums.model import ModelType
+from core.shared.models.brevio.brevio_generate import BrevioGenerate, MediaEntry
+
+usage_cost_tracker = UsageCostTracker()
 
 
 @pytest.fixture(autouse=True)
@@ -48,6 +53,7 @@ def mock_prompt_config() -> PromptConfig:
         format=OutputFormatType.MARKDOWN,
         language=LanguageType.SPANISH,
         source_types=SourceType.TEXT,
+        summary_level=SummaryLevel.CONCISE,
     )
 
 
@@ -83,9 +89,11 @@ def brevio_service(mock_user: User) -> Generator[BrevioService, None, None]:
 
         # Mock user service methods
         service._user_service = MagicMock()
-        service._user_service.create_folder_entry = MagicMock(return_value=ObjectId())
-        service._user_service.get_user_by_id = MagicMock(return_value=mock_user)
-        service._user_service.create_data_result = AsyncMock()
+        service._user_service.create_folder_entry = AsyncMock(
+            return_value=str(ObjectId())
+        )
+        service._user_service.get_user_by_id = AsyncMock(return_value=mock_user)
+        service._user_service.create_data_result = AsyncMock(return_value=None)
 
         yield service
 
@@ -94,18 +102,25 @@ def brevio_service(mock_user: User) -> Generator[BrevioService, None, None]:
 async def test_generate_success(
     brevio_service: BrevioService, mock_user: User, mock_prompt_config: PromptConfig
 ) -> None:
-    """Test para verificar que generate devuelve el resultado esperado."""
+    """Test para verificar que generate devuelva el resultado esperado."""
     with tempfile.NamedTemporaryFile(suffix=".mp3") as temp_file:
         test_file_path = FilePath(temp_file.name)
         data = BrevioGenerate(
-            data=[MediaEntry(path=test_file_path)],
+            data=[
+                MediaEntry(
+                    url=HttpUrl("http://example.com/test.mp3"), path=test_file_path
+                )
+            ],
             prompt_config=mock_prompt_config,
         )
 
         with patch("pathlib.Path.is_file", return_value=True), patch(
             "os.makedirs", return_value=None
-        ), patch("os.listdir", return_value=["test.mp3"]):
-            result = await brevio_service.generate(data, mock_user.id)
+        ), patch("os.listdir", return_value=["test.mp3"]), patch.object(
+            brevio_service, "get_total_duration", AsyncMock(return_value=60.0)
+        ):
+            user_id = ObjectId(mock_user.id)
+            result = await brevio_service.generate(data, user_id, usage_cost_tracker)
             assert result == {"result": "success"}
             mock_generate: AsyncMock = cast(AsyncMock, brevio_service._main.generate)
             mock_generate.assert_awaited_once()
@@ -119,21 +134,31 @@ async def test_generate_brevio_error(
     with tempfile.NamedTemporaryFile(suffix=".mp3") as temp_file:
         test_file_path = FilePath(temp_file.name)
         data = BrevioGenerate(
-            data=[MediaEntry(path=test_file_path)],
+            data=[
+                MediaEntry(
+                    url=HttpUrl("http://example.com/test.mp3"), path=test_file_path
+                )
+            ],
             prompt_config=mock_prompt_config,
         )
 
         mock_generate: AsyncMock = cast(AsyncMock, brevio_service._main.generate)
-        mock_generate.side_effect = Exception("Generation failed")
+        mock_generate.side_effect = Exception(
+            "object str can't be used in 'await' expression"
+        )
 
         with patch("pathlib.Path.is_file", return_value=True), patch(
             "os.makedirs", return_value=None
-        ), patch("os.listdir", return_value=["test.mp3"]):
+        ), patch("os.listdir", return_value=["test.mp3"]), patch.object(
+            brevio_service, "get_total_duration", AsyncMock(return_value=60.0)
+        ):
             with pytest.raises(HTTPException) as exc_info:
-                await brevio_service.generate(data, mock_user.id)
+                user_id = ObjectId(mock_user.id)
+                await brevio_service.generate(data, user_id, usage_cost_tracker)
             assert exc_info.value.status_code == 500
-            assert "Unexpected error during generation: Generation failed" in str(
-                exc_info.value.detail
+            assert (
+                "Unexpected error during generation: object str can't be used in 'await' expression"
+                == str(exc_info.value.detail)
             )
 
 
@@ -155,12 +180,19 @@ async def test_generate_summary_media_upload_success(
         "os.makedirs", return_value=None
     ), patch(
         "os.listdir", return_value=["video1.mp4", "audio1.mp3"]
+    ), patch.object(
+        brevio_service, "count_minutes_media", AsyncMock(return_value=1.0)
+    ), patch(
+        "core.brevio_api.services.brevio_service.wait_for_file",
+        AsyncMock(return_value=True),
+    ), patch(
+        "os.chmod", return_value=None
     ):
         mock_constants.DESTINATION_FOLDER = FilePath("/mock/dir")
         mock_write_file.return_value = None
-
+        user_id = ObjectId(mock_user.id)
         result = await brevio_service.generate_summary_media_upload(
-            files_data, mock_user.id, mock_prompt_config
+            files_data, user_id, mock_prompt_config, usage_cost_tracker
         )
         assert result == {"result": "success"}
         assert mock_write_file.call_count == len(files_data)
@@ -188,12 +220,17 @@ async def test_generate_summary_documents_success(
         "os.listdir", return_value=["doc1.pdf", "doc2.pdf"]
     ), patch(
         "builtins.open", create=True
+    ), patch(
+        "core.brevio_api.services.brevio_service.wait_for_file",
+        AsyncMock(return_value=True),
+    ), patch(
+        "os.chmod", return_value=None
     ):
         mock_constants.DESTINATION_FOLDER = FilePath("/mock/dir")
         mock_write_file.return_value = None
-
+        user_id = ObjectId(mock_user.id)
         result = await brevio_service.generate_summary_documents(
-            files_data, mock_user.id, mock_prompt_config
+            files_data, user_id, mock_prompt_config, usage_cost_tracker
         )
         assert result == {"summary": "done"}
         assert mock_write_file.call_count == len(files_data)

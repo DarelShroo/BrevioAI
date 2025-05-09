@@ -1,7 +1,7 @@
 from fastapi import Depends, HTTPException
 from fastapi.security import APIKeyHeader
 
-from core.brevio_api.config.config import API_KEY
+from core.brevio_api.config.dotenv import API_KEY
 
 api_key_header = APIKeyHeader(name="X-API-KEY")
 

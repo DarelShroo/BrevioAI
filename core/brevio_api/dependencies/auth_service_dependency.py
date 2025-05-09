@@ -25,10 +25,14 @@ def get_auth_service(
     try:
         if db is None:
             logger.error("Database dependency is None")
-            raise ValueError("Database dependency not provided")
+            raise HTTPException(
+                status_code=400, detail="Database dependency not provided"
+            )
         if token_service is None:
             logger.error("TokenService dependency is None")
-            raise ValueError("TokenService dependency not provided")
+            raise HTTPException(
+                status_code=400, detail="TokenService dependency not provided"
+            )
 
         logger.debug("Initializing AuthService with provided dependencies")
 

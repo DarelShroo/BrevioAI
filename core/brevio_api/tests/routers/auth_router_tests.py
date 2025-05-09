@@ -24,7 +24,7 @@ default_folder = FolderResponse(success=True, message="folder created")
 
 
 class StubAuthService:
-    def login(self, login_user: LoginUser) -> LoginResponse:
+    async def login(self, login_user: LoginUser) -> LoginResponse:
         return LoginResponse(access_token="testtoken")
 
     async def register(self, register_user: RegisterUser) -> RegisterResponse:
@@ -63,7 +63,7 @@ def test_login_success() -> None:
 
 def test_login_invalid_credentials() -> None:
     class ErrorAuthService(StubAuthService):
-        def login(self, login_user: LoginUser) -> LoginResponse:
+        async def login(self, login_user: LoginUser) -> LoginResponse:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Contraseña incorrecta"
             )
@@ -131,7 +131,6 @@ def test_register_validation_error_missing_field() -> None:
 def test_password_recovery_handshake_success() -> None:
     payload = {"identity": "user123"}
     response = client.post("/auth/password-recovery-handshake", json=payload)
-    print(response)
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert data["status"] == "success"

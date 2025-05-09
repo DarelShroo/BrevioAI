@@ -142,7 +142,10 @@ class YTService:
                     ydl.extract_info, str(url), download=False
                 )
                 duration = info.get("duration") if info else None
-                return float(duration) if duration and duration > 0 else None
+                if duration is None:
+                    raise ValueError("No se pudo obtener la duración del video.")
+
+                return float(duration) / 60
         except Exception as e:
             self.logger.error(f"Error obteniendo duración de {url}: {e}")
             return None

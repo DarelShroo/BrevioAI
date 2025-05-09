@@ -43,7 +43,7 @@ class AuthRoutes:
             login_user: LoginUser,
             auth_service: AuthService = Depends(get_auth_service),
         ) -> JSONResponse:
-            login_data: LoginResponse = auth_service.login(login_user)
+            login_data: LoginResponse = await auth_service.login(login_user)
 
             response: LoginDataResponse = LoginDataResponse(
                 status="success",

@@ -26,7 +26,12 @@ from core.brevio_api.handlers.exception_handlers import (
 )
 from core.brevio_api.models.errors.auth_service_exception import AuthServiceException
 from core.brevio_api.models.errors.invalid_file_extension import InvalidFileExtension
-from core.brevio_api.routers import auth_router, brevio_router, user_router
+from core.brevio_api.routers import (
+    auth_router,
+    billing_router,
+    brevio_router,
+    user_router,
+)
 
 load_dotenv()
 
@@ -83,6 +88,7 @@ app.add_exception_handler(PyJWTError, jwt_error_exception_handler)  # type: igno
 app.include_router(auth_router)
 app.include_router(brevio_router)
 app.include_router(user_router)
+app.include_router(billing_router)
 
 logging.basicConfig(
     level=logging.INFO,

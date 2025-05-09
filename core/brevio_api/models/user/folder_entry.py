@@ -3,8 +3,8 @@ from typing import List, Optional
 from bson import ObjectId
 from pydantic import Field
 
-from .base_model import BaseModel, SerializedObjectId
-from .data_result import DataResult
+from ....shared.models.user.base_model import BaseModel, SerializedObjectId
+from ....shared.models.user.data_result import DataResult
 
 
 class FolderEntry(BaseModel):

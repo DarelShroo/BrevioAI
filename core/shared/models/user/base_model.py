@@ -34,7 +34,7 @@ class BaseModel(PydanticBaseModel):
         kwargs.setdefault("by_alias", True)
         return super().model_dump_json(**kwargs)
 
-    def to_mongo(self) -> Dict[str, Any]:
+    async def to_mongo(self) -> Dict[str, Any]:
         data = self.__dict__.copy()
         if "_id" not in data and "id" in data:
             data["_id"] = data["id"]

@@ -6,14 +6,16 @@ from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 
 from core.brevio.enums.language import LanguageType
-from core.brevio.enums.model import ModelType
+from core.brevio.enums.output_format_type import OutputFormatType
 from core.brevio.enums.source_type import SourceType
+from core.brevio.enums.summary_level import SummaryLevel
 from core.brevio_api.__main__ import app
-from core.brevio_api.config.config import API_KEY
+from core.brevio_api.config.dotenv import API_KEY
 from core.brevio_api.dependencies.api_key_dependency import verify_api_key
 from core.brevio_api.dependencies.brevio_service_dependency import get_brevio_service
 from core.brevio_api.dependencies.user_dependency import get_current_user
 from core.brevio_api.services.brevio_service import BrevioService
+from core.shared.enums.model import ModelType
 
 # Cliente de prueba
 client = TestClient(app)
@@ -48,16 +50,26 @@ class MockBrevioService:
         # Actualizar para devolver un valor para cualquier URL válida
         return 3600
 
-    async def generate(self, data: Any, user_id: ObjectId) -> Dict[str, str]:
+    async def generate(
+        self, data: Any, user_id: ObjectId, _usage_cost_tracker: Any = None
+    ) -> Dict[str, str]:
         return {"status": "processing"}
 
     async def generate_summary_media_upload(
-        self, files_data: Any, user_id: ObjectId, prompt_config: Dict[str, Any]
+        self,
+        files_data: Any,
+        user_id: ObjectId,
+        prompt_config: Dict[str, Any],
+        _usage_cost_tracker: Any = None,
     ) -> Dict[str, str]:
         return {"status": "processing"}
 
     async def generate_summary_documents(
-        self, files_data: Any, user_id: ObjectId, prompt_config: Dict[str, Any]
+        self,
+        files_data: Any,
+        user_id: ObjectId,
+        prompt_config: Dict[str, Any],
+        _usage_cost_tracker: Any = None,
     ) -> Dict[str, str]:
         return {"status": "processing"}
 
@@ -217,6 +229,7 @@ def test_summary_yt_playlist_success() -> None:
     app.dependency_overrides[get_brevio_service] = lambda: MockBrevioService()
     app.dependency_overrides[verify_api_key] = lambda: API_KEY
     app.dependency_overrides[get_current_user] = lambda: ObjectId()
+
     payload = {
         "data": [{"url": "https://www.youtube.com/playlist?list=PL123456"}],
         "prompt_config": {
@@ -224,8 +237,9 @@ def test_summary_yt_playlist_success() -> None:
             "model": ModelType.GPT_4.value,
             "category": "journalism",
             "style": "news_wire",
-            "format": "markdown",
+            "format": OutputFormatType.MARKDOWN.value,
             "source_types": SourceType.TEXT.value,
+            "summary_level": SummaryLevel.DETAILED.value,  # Add missing required field
         },
     }
     response = client.post("/brevio/summary-yt-playlist", json=payload)
@@ -247,7 +261,7 @@ def test_summary_yt_playlist_invalid_url() -> None:
             "model": ModelType.GPT_4.value,
             "category": "journalism",
             "style": "news_wire",
-            "format": "markdown",
+            "format": OutputFormatType.MARKDOWN.value,
             "source_types": SourceType.TEXT.value,
         },
     }
@@ -265,8 +279,9 @@ def test_summary_yt_playlist_unauthorized() -> None:
             "model": ModelType.GPT_4.value,
             "category": "journalism",
             "style": "news_wire",
-            "format": "markdown",
+            "format": OutputFormatType.MARKDOWN.value,
             "source_types": SourceType.TEXT.value,
+            "summary_level": SummaryLevel.DETAILED.value,
         },
     }
     response = client.post("/brevio/summary-yt-playlist", json=payload)
@@ -290,8 +305,9 @@ def test_summary_media_success(tmp_path: Any) -> None:
                 "model": ModelType.GPT_4.value,
                 "category": "journalism",
                 "style": "news_wire",
-                "format": "markdown",
+                "format": OutputFormatType.MARKDOWN.value,
                 "source_types": SourceType.TEXT.value,
+                "summary_level": SummaryLevel.DETAILED.value,
             },
         )
     assert response.status_code == status.HTTP_202_ACCEPTED
@@ -316,8 +332,9 @@ def test_summary_media_unsupported_file(tmp_path: Any) -> None:
                 "model": ModelType.GPT_4.value,
                 "category": "journalism",
                 "style": "news_wire",
-                "format": "markdown",
+                "format": OutputFormatType.MARKDOWN.value,
                 "source_types": SourceType.TEXT.value,
+                "summary_level": SummaryLevel.DETAILED.value,
             },
         )
     assert response.status_code == status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
@@ -337,8 +354,9 @@ def test_summary_media_unauthorized(tmp_path: Any) -> None:
                 "model": ModelType.GPT_4.value,
                 "category": "journalism",
                 "style": "news_wire",
-                "format": "markdown",
+                "format": OutputFormatType.MARKDOWN.value,
                 "source_types": SourceType.TEXT.value,
+                "summary_level": SummaryLevel.DETAILED.value,
             },
         )
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -371,8 +389,9 @@ def test_summary_documents_success(tmp_path: Any) -> None:
                     "model": ModelType.GPT_4.value,
                     "category": "journalism",
                     "style": "news_wire",
-                    "format": "markdown",
+                    "format": OutputFormatType.MARKDOWN.value,
                     "source_types": SourceType.TEXT.value,
+                    "summary_level": SummaryLevel.DETAILED.value,
                 },
             )
         assert response.status_code == status.HTTP_202_ACCEPTED
@@ -399,8 +418,9 @@ def test_summary_documents_unsupported_file(tmp_path: Any) -> None:
                     "model": ModelType.GPT_4.value,
                     "category": "journalism",
                     "style": "news_wire",
-                    "format": "markdown",
+                    "format": OutputFormatType.MARKDOWN.value,
                     "source_types": SourceType.PDF.value,
+                    "summary_level": SummaryLevel.DETAILED.value,
                 },
             )
         assert response.status_code == status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
@@ -419,8 +439,9 @@ def test_summary_documents_unauthorized(tmp_path: Any) -> None:
                 "model": ModelType.GPT_4.value,
                 "category": "journalism",
                 "style": "news_wire",
-                "format": "markdown",
+                "format": OutputFormatType.MARKDOWN.value,
                 "source_types": SourceType.TEXT.value,
+                "summary_level": SummaryLevel.DETAILED.value,
             }
             response = client.post(
                 "/brevio/summary-documents",

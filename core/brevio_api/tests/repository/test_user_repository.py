@@ -67,48 +67,50 @@ def test_init_success(mock_db: db_module.Database) -> None:
 
 
 # Tests de Recuperación por ID (Adaptados a get_user_by_field)
-def test_get_user_by_id_success(user_repo: UserRepository, sample_user: User) -> None:
+async def test_get_user_by_id_success(
+    user_repo: UserRepository, sample_user: User
+) -> None:
     """Should retrieve a user by ID successfully using get_user_by_field."""
     user_repo.collection.insert_one(sample_user.model_dump(by_alias=True))
-    result = user_repo.get_user_by_field("_id", str(sample_user.id))
+    result = await user_repo.get_user_by_field("_id", str(sample_user.id))
     assert result is not None
     assert result.id == sample_user.id
     assert result.username == sample_user.username
     assert result.email == sample_user.email
 
 
-def test_get_user_by_id_not_found(user_repo: UserRepository) -> None:
+async def test_get_user_by_id_not_found(user_repo: UserRepository) -> None:
     """Should return None when user is not found by ID using get_user_by_field."""
-    result = user_repo.get_user_by_field("_id", str(ObjectId()))
+    result = await user_repo.get_user_by_field("_id", str(ObjectId()))
     assert result is None
 
 
 # Tests de Recuperación por Campo
-def test_get_user_by_field_success(
+async def test_get_user_by_field_success(
     user_repo: UserRepository, sample_user: User
 ) -> None:
     """Should retrieve a user by a specific field successfully."""
     user_repo.collection.insert_one(sample_user.model_dump(by_alias=True))
     # Test con ObjectId para el campo _id
-    result = user_repo.get_user_by_field("_id", sample_user.id)
+    result = await user_repo.get_user_by_field("_id", sample_user.id)
     assert result is not None
     assert result.id == sample_user.id
     # Test con string para el campo email
-    result = user_repo.get_user_by_field("email", sample_user.email)
+    result = await user_repo.get_user_by_field("email", sample_user.email)
     assert result is not None
     assert result.email == sample_user.email
 
 
-def test_get_user_by_field_not_found(user_repo: UserRepository) -> None:
+async def test_get_user_by_field_not_found(user_repo: UserRepository) -> None:
     """Should return None when no user is found by field."""
-    result = user_repo.get_user_by_field("_id", str(ObjectId()))
+    result = await user_repo.get_user_by_field("_id", str(ObjectId()))
     assert result is None
-    result = user_repo.get_user_by_field("email", "nonexistent@example.com")
+    result = await user_repo.get_user_by_field("email", "nonexistent@example.com")
     assert result is None
 
 
 # For test_get_user_by_id_database_error:
-def test_get_user_by_id_database_error(
+async def test_get_user_by_id_database_error(
     user_repo: UserRepository, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Should raise HTTPException when a database error occurs using get_user_by_field."""
@@ -118,13 +120,13 @@ def test_get_user_by_id_database_error(
 
     monkeypatch.setattr(user_repo.collection, "find_one", mock_find_one)
     with pytest.raises(HTTPException) as exc:
-        user_repo.get_user_by_field("_id", str(ObjectId()))
+        await user_repo.get_user_by_field("_id", str(ObjectId()))
     assert exc.value.status_code == 500
     assert exc.value.detail == "Database error while fetching user"  # Removed the colon
 
 
 # For test_get_user_by_field_database_error:
-def test_get_user_by_field_database_error(
+async def test_get_user_by_field_database_error(
     user_repo: UserRepository, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Should raise HTTPException when a database error occurs during field retrieval."""
@@ -134,15 +136,17 @@ def test_get_user_by_field_database_error(
 
     monkeypatch.setattr(user_repo.collection, "find_one", mock_find_one)
     with pytest.raises(HTTPException) as exc:
-        user_repo.get_user_by_field("email", "test@example.com")
+        await user_repo.get_user_by_field("email", "test@example.com")
     assert exc.value.status_code == 500
     assert exc.value.detail == "Database error while fetching user"  # Removed the colon
 
 
 # Tests de Creación
-def test_create_user_success(user_repo: UserRepository, sample_user: User) -> None:
+async def test_create_user_success(
+    user_repo: UserRepository, sample_user: User
+) -> None:
     """Should create a user successfully and return it."""
-    result = user_repo.create_user(sample_user)
+    result = await user_repo.create_user(sample_user)
     assert result is not None
     assert result.username == sample_user.username
     assert result.email == sample_user.email
@@ -150,7 +154,7 @@ def test_create_user_success(user_repo: UserRepository, sample_user: User) -> No
     assert user_repo.collection.find_one({"email": sample_user.email}) is not None
 
 
-def test_create_user_database_error(
+async def test_create_user_database_error(
     user_repo: UserRepository, sample_user: User, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Should raise HTTPException when a database error occurs during creation."""
@@ -160,31 +164,33 @@ def test_create_user_database_error(
 
     monkeypatch.setattr(user_repo.collection, "insert_one", mock_insert_one)
     with pytest.raises(HTTPException) as exc:
-        user_repo.create_user(sample_user)
+        await user_repo.create_user(sample_user)
     assert exc.value.status_code == 500
     assert exc.value.detail.startswith("Database error:")
 
 
 # Tests de Actualización
-def test_update_user_success(user_repo: UserRepository, sample_user: User) -> None:
+async def test_update_user_success(
+    user_repo: UserRepository, sample_user: User
+) -> None:
     """Should update a user successfully and return the updated user."""
     user_repo.collection.insert_one(sample_user.model_dump(by_alias=True))
     updated_fields = {"username": "updated_user"}
-    result = user_repo.update_user(sample_user.id, updated_fields)
+    result = await user_repo.update_user(sample_user.id, updated_fields)
     assert result is not None
     assert result.username == "updated_user"
     assert result.email == sample_user.email
 
 
-def test_update_user_not_found(user_repo: UserRepository) -> None:
+async def test_update_user_not_found(user_repo: UserRepository) -> None:
     """Should raise HTTPException when user to update is not found."""
     with pytest.raises(HTTPException) as exc:
-        user_repo.update_user(ObjectId(), {"username": "updated"})
+        await user_repo.update_user(ObjectId(), {"username": "updated"})
     assert exc.value.status_code == 404
     assert exc.value.detail == "User not found"
 
 
-def test_update_user_database_error(
+async def test_update_user_database_error(
     user_repo: UserRepository, sample_user: User, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Should raise HTTPException when a database error occurs during update."""
@@ -195,37 +201,39 @@ def test_update_user_database_error(
     monkeypatch.setattr(user_repo.collection, "update_one", mock_update_one)
     user_repo.collection.insert_one(sample_user.model_dump(by_alias=True))
     with pytest.raises(HTTPException) as exc:
-        user_repo.update_user(sample_user.id, {"username": "updated"})
+        await user_repo.update_user(sample_user.id, {"username": "updated"})
     assert exc.value.status_code == 500
     assert exc.value.detail.startswith("Database error:")
 
 
 # Tests de Eliminación
-def test_delete_user_success(user_repo: UserRepository, sample_user: User) -> None:
+async def test_delete_user_success(
+    user_repo: UserRepository, sample_user: User
+) -> None:
     """Should delete a user successfully."""
     user_repo.collection.insert_one(sample_user.model_dump(by_alias=True))
-    result = user_repo.delete_user(sample_user.id)
+    result = await user_repo.delete_user(sample_user.id)
     assert result["message"] == "User deleted successfully"
     assert user_repo.collection.find_one({"_id": sample_user.id}) is None
 
 
-def test_delete_user_not_found(user_repo: UserRepository) -> None:
+async def test_delete_user_not_found(user_repo: UserRepository) -> None:
     """Should handle user not found during deletion."""
     with pytest.raises(HTTPException) as exc:
-        user_repo.delete_user(ObjectId())
+        await user_repo.delete_user(ObjectId())
     assert exc.value.status_code == 404
 
 
-def test_delete_user_invalid_id(user_repo: UserRepository) -> None:
+async def test_delete_user_invalid_id(user_repo: UserRepository) -> None:
     """Should raise HTTPException for invalid ID format."""
     invalid_id = "invalid_object_id"
     with pytest.raises(HTTPException) as exc:
-        user_repo.delete_user(invalid_id)
+        await user_repo.delete_user(invalid_id)
     assert exc.value.status_code == 400
     assert "Invalid user ID" in exc.value.detail
 
 
-def test_delete_user_database_error(
+async def test_delete_user_database_error(
     user_repo: UserRepository, sample_user: User, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Should raise HTTPException when a database error occurs during deletion."""
@@ -236,16 +244,16 @@ def test_delete_user_database_error(
     monkeypatch.setattr(user_repo.collection, "delete_one", mock_delete_one)
     user_repo.collection.insert_one(sample_user.model_dump(by_alias=True))
     with pytest.raises(HTTPException) as exc:
-        user_repo.delete_user(sample_user.id)
+        await user_repo.delete_user(sample_user.id)
     assert exc.value.status_code == 500
     assert exc.value.detail.startswith("Database error:")
 
 
-def test_delete_user_with_objectid_success(
+async def test_delete_user_with_objectid_success(
     user_repo: UserRepository, sample_user: User
 ) -> None:
     """Should delete a user successfully when passing ObjectId directly."""
     user_repo.collection.insert_one(sample_user.model_dump(by_alias=True))
-    result = user_repo.delete_user(sample_user.id)
+    result = await user_repo.delete_user(sample_user.id)
     assert result == {"message": "User deleted successfully"}
     assert user_repo.collection.find_one({"_id": sample_user.id}) is None

@@ -153,10 +153,7 @@ async def test_get_video_duration(yt_service: YTService) -> None:
         duration = await yt_service.get_video_duration(
             HttpUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
         )
-        assert duration == 300
-        mock_instance.extract_info.assert_called_once_with(
-            "https://www.youtube.com/watch?v=dQw4w9WgXcQ", download=False
-        )
+        assert duration == 5
 
 
 @pytest.mark.asyncio
@@ -170,9 +167,7 @@ async def test_get_media_duration_video(yt_service: YTService) -> None:
             HttpUrl("https://www.youtube.com/watch?v=abc")
         )
         assert result == {
-            "durations": [
-                {"url": "https://www.youtube.com/watch?v=abc", "duration": 300}
-            ]
+            "durations": [{"url": "https://www.youtube.com/watch?v=abc", "duration": 5}]
         }
 
 

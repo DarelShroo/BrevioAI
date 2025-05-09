@@ -1,10 +1,10 @@
 import asyncio
+import datetime
 import logging
 import os
-import sys
 from concurrent.futures import ThreadPoolExecutor
 from os import environ, listdir, path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, TypedDict
 
 import torch
 from bson import ObjectId
@@ -12,13 +12,17 @@ from bson import ObjectId
 from core.brevio.constants.constants import Constants
 from core.brevio.managers.directory_manager import DirectoryManager
 from core.brevio.models.file_config_model import FileConfig
-from core.brevio.models.response_model import SummaryResponse, TranscriptionResponse
+from core.brevio.models.response_model import (
+    FolderResponse,
+    SummaryResponse,
+    TranscriptionResponse,
+)
 from core.brevio.services.audio_service import AudioService
 from core.brevio.services.summary_service import SummaryService
 from core.brevio.services.transcription_service import TranscriptionService
 from core.brevio.services.yt_service import YTService
-from core.brevio_api.models.brevio.brevio_generate import BrevioGenerate
-from core.brevio_api.models.user.data_result import DataResult
+from core.shared.models.brevio.brevio_generate import BrevioGenerate
+from core.shared.models.user.data_result import DataResult
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -33,8 +37,21 @@ if not logger.handlers:
 environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 
+class UsageCostTracker:
+    """Placeholder for usage cost tracker with cost breakdown methods."""
+
+    def get_cost_breakdown(self) -> Dict[str, Any]:
+        return {}
+
+    def get_total_cost(self) -> float:
+        return 0.0
+
+
 class Generate:
+    """Class to handle generation of transcriptions and summaries for audio and documents."""
+
     def __init__(self) -> None:
+        """Initialize Generate class with necessary services."""
         try:
             self._directory_manager = DirectoryManager()
             self._summary_service = SummaryService()
@@ -50,37 +67,27 @@ class Generate:
             )
             raise RuntimeError(f"Initialization failed: {str(e)}")
 
-    async def organize_audio_files_into_folders(
-        self, data: Optional[Any] = None
-    ) -> Dict[str, Any]:
-        try:
-            if data is None:
-                logger.info("Processing local audio files")
-                return await self._process_local_audio_files()
-            logger.info("Processing online audio data")
-            return await self._process_online_audio_data(data)
-        except ValueError as e:
-            logger.error(f"Invalid input data: {str(e)}", exc_info=True)
-            raise ValueError(f"Invalid input data: {str(e)}")
-        except Exception as e:
-            logger.error(
-                f"Unexpected error in organize_audio_files_into_folders: {str(e)}",
-                exc_info=True,
-            )
-            raise RuntimeError(f"Processing failed: {str(e)}")
-
     async def _process_local_audio_files(self) -> Dict[str, Any]:
+        """Process local audio files (not implemented)."""
         logger.warning("_process_local_audio_files not implemented")
         raise NotImplementedError("Local audio file processing not implemented")
 
     async def _process_online_audio_data(
         self,
-        data: Any,
-        _create_data_result: Optional[Callable] = None,
-        current_folder_entry_id: Optional[ObjectId] = None,
-        _user_folder_id: Optional[ObjectId] = None,
+        data: BrevioGenerate,
+        _create_data_result: Optional[Callable[[ObjectId, ObjectId, DataResult], Any]],
+        current_folder_entry_id: ObjectId,
+        _user_folder_id: ObjectId,
         _user_id: Optional[ObjectId] = None,
+        _usage_cost_tracker: Optional[UsageCostTracker] = None,
     ) -> Dict[str, Any]:
+        """Process online audio data, generating transcriptions and summaries."""
+        from core.brevio_api.services.billing.billing_estimator_service import (
+            BillingEstimatorService,
+        )
+
+        _billing_estimator_service = BillingEstimatorService()
+
         transcription_sem = asyncio.Semaphore(5)
         summary_sem = asyncio.Semaphore(5)
 
@@ -108,7 +115,9 @@ class Generate:
                 audio_path = os.path.join(destination_path, audio_filename)
 
                 logger.info(f"Processing video {index} at {destination_path}")
-                self._directory_manager.createFolder(destination_path)
+                await asyncio.to_thread(
+                    self._directory_manager.createFolder, destination_path
+                )
 
                 _file_config = FileConfig(
                     transcription_path=transcription_path, summary_path=summary_path
@@ -121,39 +130,25 @@ class Generate:
 
                 if not await self._verify_file_exists(audio_path):
                     raise FileNotFoundError(f"Downloaded file not found: {audio_path}")
-
                 async with transcription_sem:
-                    if asyncio.iscoroutinefunction(
-                        self._transcription_service.generate_transcription
-                    ):
-                        await self._transcription_service.generate_transcription(
-                            audio_path, destination_path, data.prompt_config.language
-                        )
-                    else:
-                        await self._transcription_service.generate_transcription(
-                            audio_path,
-                            destination_path,
-                            data.prompt_config.language,
-                        )
+                    start_time = datetime.datetime.now()
+
+                    await self._transcription_service.generate_transcription(
+                        audio_path, destination_path, data.prompt_config.language
+                    )
 
                     if not await self._verify_file_exists(transcription_path):
                         raise FileNotFoundError(
                             f"Transcription file not created: {transcription_path}"
                         )
                     logger.debug(f"Transcription completed for video {index}")
+                    end_time = datetime.datetime.now()
 
                 async with summary_sem:
-                    if asyncio.iscoroutinefunction(
-                        self._summary_service.generate_summary
-                    ):
-                        await self._summary_service.generate_summary(
-                            prompt_config=data.prompt_config, file_config=_file_config
-                        )
-                    else:
-                        await self._summary_service.generate_summary(
-                            prompt_config=data.prompt_config,
-                            file_config=_file_config,
-                        )
+                    await self._summary_service.generate_summary_document(
+                        prompt_config=data.prompt_config,
+                        file_config=_file_config,
+                    )
                     if not await self._verify_file_exists(summary_path):
                         raise FileNotFoundError(
                             f"Summary file not created: {summary_path}"
@@ -182,8 +177,14 @@ class Generate:
                     float(info["duration"]) if info.get("duration") else 0.0
                 )
 
-                if _create_data_result and _user_id and current_folder_entry_id:
-                    _create_data_result(_user_id, current_folder_entry_id, data_result)
+                if (
+                    _create_data_result is not None
+                    and _user_id
+                    and current_folder_entry_id
+                ):
+                    await _create_data_result(
+                        _user_id, current_folder_entry_id, data_result
+                    )
                 else:
                     logger.warning(
                         "create_data_result or user_id or current_folder_entry_id is None"
@@ -242,16 +243,11 @@ class Generate:
         _user_folder_id: Optional[ObjectId] = None,
         _user_id: Optional[ObjectId] = None,
         _create_data_result: Optional[
-            Callable[[ObjectId, ObjectId, DataResult], None]
+            Callable[[ObjectId, ObjectId, DataResult], Any]
         ] = None,
+        _usage_cost_tracker: Optional[UsageCostTracker] = None,
     ) -> Dict[str, Any]:
-        async def process_task(task: asyncio.Task[Dict[str, str]]) -> Dict[str, str]:
-            try:
-                return await task
-            except Exception as e:
-                logger.error(f"Task failed: {str(e)}", exc_info=True)
-                raise
-
+        """Process documents to generate summaries."""
         try:
             tasks = [
                 self._process_single_document(
@@ -262,6 +258,7 @@ class Generate:
                     str(_user_folder_id) if _user_folder_id else None,
                     str(_user_id) if _user_id else None,
                     _create_data_result,
+                    _usage_cost_tracker,
                 )
                 for index, document in enumerate(_data.data)
             ]
@@ -286,18 +283,23 @@ class Generate:
         self,
         index: int,
         document_path: str,
-        _data: Any,  # Replace 'Any' with your specific data model type if possible
+        _data: BrevioGenerate,
         current_folder_entry_id: Optional[str] = None,
         _user_folder_id: Optional[str] = None,
         _user_id: Optional[str] = None,
-        _create_data_result: Any = None,
+        _create_data_result: Optional[
+            Callable[[ObjectId, ObjectId, DataResult], Any]
+        ] = None,
+        _usage_cost_tracker: Optional[UsageCostTracker] = None,
     ) -> Dict[str, str]:
+        """Process a single document to generate a summary."""
         try:
             data_result = DataResult(name=f"Document {index}")
             destination_path = f"{Constants.DESTINATION_FOLDER}/{_user_folder_id}/{current_folder_entry_id}/{index}"
             summary_path = path.join(destination_path, Constants.SUMMARY_FILE)
 
             logger.info(f"Processing document {index} at {destination_path}")
+
             self._directory_manager.createFolder(destination_path)
 
             _file_config = FileConfig(
@@ -311,12 +313,19 @@ class Generate:
             data_result.download_location = destination_path
             data_result.index = index
 
-            if _create_data_result and _user_id and current_folder_entry_id:
-                _create_data_result(_user_id, current_folder_entry_id, data_result)
+            if _create_data_result is not None and _user_id and current_folder_entry_id:
+                await _create_data_result(
+                    ObjectId(_user_id), ObjectId(current_folder_entry_id), data_result
+                )
             else:
                 logger.warning(
                     "create_data_result or user_id or current_folder_entry_id is None"
                 )
+            if _usage_cost_tracker:
+                logger.info(
+                    f"costo_total_detallado: {_usage_cost_tracker.get_cost_breakdown()}"
+                )
+                logger.info(f"costo_total: {_usage_cost_tracker.get_total_cost()}")
 
             return {"summary": SummaryResponse(success=True).__str__()}
         except FileNotFoundError as e:
@@ -332,6 +341,7 @@ class Generate:
             raise RuntimeError(f"Failed to process document {index}: {str(e)}")
 
     async def _verify_file_exists(self, file_path: str, max_attempts: int = 10) -> bool:
+        """Verify if a file exists, retrying up to max_attempts times."""
         try:
             for attempt in range(max_attempts):
                 if path.exists(file_path):

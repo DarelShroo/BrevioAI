@@ -9,8 +9,8 @@ from pydantic import ValidationError
 from pymongo.database import Database
 from pymongo.errors import PyMongoError
 
-from core.brevio_api.models.user.data_result import DataResult
 from core.brevio_api.models.user.folder_entry import FolderEntry
+from core.shared.models.user.data_result import DataResult
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +35,10 @@ class FolderEntryRepository:
             )
             raise HTTPException(status_code=500, detail="Internal server error")
 
-    def create_folder_entry(self, entry: FolderEntry) -> FolderEntry:
+    async def create_folder_entry(self, entry: FolderEntry) -> FolderEntry:
         try:
             logger.debug(f"Creating FolderEntry for user ID: {entry.user_id}")
-            entry_dict = entry.to_mongo()
+            entry_dict = await entry.to_mongo()
             inserted_id = self.collection.insert_one(entry_dict).inserted_id
             created_entry = FolderEntry(**entry_dict)
             logger.info(f"FolderEntry created with ID: {inserted_id}")
@@ -52,15 +52,19 @@ class FolderEntryRepository:
             logger.error(f"Database error creating folder entry: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-    def get_folder_entry_by_id(self, entry_id: ObjectId) -> FolderEntry:
+    async def get_folder_entry_by_id(self, entry_id: ObjectId) -> FolderEntry:
         try:
+            if isinstance(entry_id, str):
+                try:
+                    entry_id = ObjectId(entry_id)
+                except InvalidId:
+                    logger.error(f"Invalid ID format: {entry_id}")
+                    raise HTTPException(
+                        status_code=400, detail="Invalid folder entry ID format"
+                    )
+
             logger.debug(f"Fetching FolderEntry with ID: {entry_id}")
             entry_data = self.collection.find_one({"_id": entry_id})
-
-            if not entry_data:
-                logger.warning(f"No FolderEntry found with ID: {entry_id}")
-                raise HTTPException(status_code=404, detail=NOT_FOUND_MSG)
-
             return FolderEntry.model_validate(entry_data)
         except InvalidId:
             logger.error(f"Invalid ID format: {entry_id}")
@@ -76,7 +80,7 @@ class FolderEntryRepository:
             logger.error(f"Database error: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-    def update_folder_entry(
+    async def update_folder_entry(
         self, entry_id: ObjectId, update_data: Dict[str, Any]
     ) -> FolderEntry:
         try:
@@ -144,7 +148,7 @@ class FolderEntryRepository:
             logger.error(f"Validation error: {str(e)}")
             raise HTTPException(status_code=400, detail=str(e))
 
-    def get_entries_ids_by_user_id(
+    async def get_entries_ids_by_user_id(
         self, _user_id: ObjectId, _entries_refs: List[ObjectId]
     ) -> List[FolderEntry]:
         try:
@@ -181,7 +185,7 @@ class FolderEntryRepository:
             logger.error(f"Unexpected error fetching entries: {str(e)}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
-    def delete_folder_entry(self, entry_id: ObjectId) -> Dict[str, str]:
+    async def delete_folder_entry(self, entry_id: ObjectId) -> Dict[str, str]:
         try:
             if not ObjectId.is_valid(entry_id):
                 raise HTTPException(status_code=400, detail=INVALID_ID_MSG)
@@ -197,7 +201,7 @@ class FolderEntryRepository:
             logger.error(f"Database error: {str(e)}")
             raise HTTPException(status_code=500, detail=DB_ERROR_MSG)
 
-    def get_entries_by_user(self, user_id: ObjectId) -> List[FolderEntry]:
+    async def get_entries_by_user(self, user_id: ObjectId) -> List[FolderEntry]:
         try:
             if not ObjectId.is_valid(user_id):
                 raise HTTPException(status_code=400, detail="Invalid user ID format")

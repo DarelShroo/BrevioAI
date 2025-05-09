@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 from core.brevio.constants.constants import Constants
 from core.brevio.enums.language import LanguageType
-from core.brevio.enums.model import ModelType
+from core.shared.enums.model import ModelType
 
 
 class ConfigModel:

@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 import jwt
 from fastapi import HTTPException, status
 
-from core.brevio_api.config.config import (
+from core.brevio_api.config.dotenv import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     ALGORITHM,
     SECRET_KEY,
@@ -60,6 +60,8 @@ class TokenService:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido"
             )
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

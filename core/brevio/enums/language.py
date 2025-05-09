@@ -102,3 +102,6 @@ class LanguageType(Enum):
     WELSH = "cy"
     YIDDISH = "yi"
     YORUBA = "yo"
+    ROMANIAN = "ro"
+    IRISH = "ga"
+    CATALAN = "ca"

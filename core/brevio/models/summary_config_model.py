@@ -2,8 +2,8 @@ from typing import Any
 
 from pydantic import field_validator
 
-from core.brevio.enums.model import ModelType
 from core.brevio.models.base_model import BaseModel
+from core.shared.enums.model import ModelType
 
 
 class SummaryConfig(BaseModel):

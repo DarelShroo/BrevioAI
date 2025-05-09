@@ -1,4 +1,4 @@
-from .brevio_generate import BrevioGenerate
+from ....shared.models.brevio.brevio_generate import BrevioGenerate
 from .brevio_yt import BrevioYT
 from .url_yt import UrlYT
 

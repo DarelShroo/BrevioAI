@@ -2,7 +2,7 @@ import jwt
 from bson import ObjectId
 from fastapi import Depends, HTTPException
 
-from core.brevio_api.config.config import oauth2_scheme
+from core.brevio_api.config.dotenv import oauth2_scheme
 from core.brevio_api.services.token_service import TokenService
 
 from .token_dependency import get_token_service
@@ -25,8 +25,10 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="Token expirado")
     except jwt.DecodeError:
         raise HTTPException(status_code=401, detail="Token inválido")
+    except HTTPException as e:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Error inesperado al validar el token: {str(e)}",
+            detail=f"Error inesperado al validar el token",
         )

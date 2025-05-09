@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 from bson import ObjectId
 from pydantic import EmailStr, Field
 
-from .base_model import BaseModel
+from ....shared.models.user.base_model import BaseModel
 from .user_folder import UserFolder
 
 
@@ -12,6 +12,7 @@ class User(BaseModel):
     username: str = Field("", strict=True, min_length=6, max_length=20)
     email: EmailStr
     password: str
+    user_credit: float = 0
     folder: Optional[UserFolder] = None
     otp: Optional[int] = None
     exp: Optional[int] = None

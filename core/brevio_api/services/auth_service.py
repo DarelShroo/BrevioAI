@@ -51,39 +51,52 @@ class AuthService:
         self._token_service = token_service
         self.directory_manager = DirectoryManager()
 
-    def login(self, user_login: LoginUser) -> LoginResponse:
-        user: Optional[User] = None
+    async def login(self, user_login: LoginUser) -> LoginResponse:
+        user: User | None = None
         try:
+            # Validar email o username
             validated_email = isEmail(user_login.identity)
-            user = self._user_service.get_user_by_email(validated_email)
+            logger.debug(f"Validated email: {validated_email}")
+            user = await self._user_service.get_user_by_email(validated_email)
         except ValidationError:
-            user = self._user_service.get_user_by_username(user_login.identity)
+            logger.debug(f"Email invalid, trying username: {user_login.identity}")
+            user = await self._user_service.get_user_by_username(user_login.identity)
 
+        # Verificar si el usuario existe
         if not user:
+            logger.info(f"User not found for identity: {user_login.identity}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado"
             )
 
+        # Verificar que el usuario tenga un password válido
+        if not hasattr(user, "password") or user.password is None:
+            logger.error(f"User {user.email} has no password set")
+            raise HTTPException(status_code=500, detail="Datos de usuario inválidos")
+
+        # Verificar la contraseña usando la función importada
+        logger.debug(f"Verifying password for user: {user.email}")
         if not verify_password(user_login.password, user.password):
+            logger.info(f"Password verification failed for user: {user.email}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Contraseña incorrecta"
             )
 
+        # Crear el token si todo está bien
+        logger.debug(f"Password verified, creating token for user: {user.email}")
         token = self._token_service.create_access_token(
             {"id": str(user.id)},
             timedelta(hours=1),
         )
-
-        response = LoginResponse(access_token=token)
-
-        return response
+        logger.debug(f"Token created: {token}")
+        return LoginResponse(access_token=token)
 
     async def register(self, user_register: RegisterUser) -> RegisterResponse:
         validated_email = isEmail(user_register.email)
         hashed_password = hash_password(user_register.password.strip())
         user_folder = UserFolder()
 
-        existing_user = self._user_service.get_user_by_email(validated_email)
+        existing_user = await self._user_service.get_user_by_email(validated_email)
 
         if existing_user:
             raise HTTPException(
@@ -97,7 +110,7 @@ class AuthService:
             folder=user_folder,
         )
 
-        user_db: User = self._user_service.create_user(user)
+        user_db: User = await self._user_service.create_user(user)
 
         dest_folder = path.join(
             ".",
@@ -136,21 +149,19 @@ class AuthService:
         await email_service.send_register_email()
 
         response = RegisterResponse(folder=folder_response, token=token)
-
         return response
 
     async def password_recovery_handshake(
         self, recovery_password_user: RecoveryPassword
     ) -> PasswordRecoveryResponse:
         user = None
-
         try:
             if isEmail(recovery_password_user.identity):
-                user = self._user_service.get_user_by_email(
+                user = await self._user_service.get_user_by_email(
                     recovery_password_user.identity
                 )
             else:
-                user = self._user_service.get_user_by_username(
+                user = await self._user_service.get_user_by_username(
                     recovery_password_user.identity
                 )
 
@@ -160,7 +171,7 @@ class AuthService:
                     otp = OTPUtils.generate_otp()
                     new_time = now + timedelta(minutes=10)
 
-                    self._user_repository.update_user(
+                    await self._user_repository.update_user(
                         user.id, {"otp": otp, "exp": int(new_time.timestamp())}
                     )
 
@@ -173,7 +184,6 @@ class AuthService:
             response = PasswordRecoveryResponse(
                 message="Código de recuperación enviado al correo electrónico."
             )
-
             return response
         except HTTPException:
             raise
@@ -184,7 +194,7 @@ class AuthService:
     async def change_password(
         self, recovery_password_otp: RecoveryPasswordOtp
     ) -> PasswordRecoveryResponse:
-        user = self._user_service.get_user_by_email(recovery_password_otp.email)
+        user = await self._user_service.get_user_by_email(recovery_password_otp.email)
 
         if not user:
             raise HTTPException(status_code=404, detail="Usuario no existe")
@@ -202,10 +212,11 @@ class AuthService:
                 status_code=400, detail="El código de recuperación es incorrecto."
             )
 
-        self._user_service.change_password(user.email, recovery_password_otp.password)
+        await self._user_service.change_password(
+            user.email, recovery_password_otp.password
+        )
 
         email_service = EmailService(user.email, "Confirmación de cambio de contraseña")
-
         await email_service.send_password_changed_email()
 
         response = PasswordRecoveryResponse(message="Contraseña cambiada exitosamente.")

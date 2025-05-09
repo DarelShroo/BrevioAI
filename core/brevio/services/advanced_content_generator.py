@@ -2,13 +2,16 @@ import html
 import re
 from typing import Any, Dict, List, Optional
 
+import tiktoken
 from googletrans import Translator
 
 from core.brevio.enums.language import LanguageType
+from core.brevio.enums.output_format_type import OutputFormatType
 from core.brevio.enums.source_type import SourceType
+from core.brevio.enums.summary_level import WORD_LIMITS_BY_SUMMARY_LEVEL, SummaryLevel
 
 
-class AdvancedContentGenerator:
+class AdvancedPromptGenerator:
     TEMPLATES: Dict[str, Dict[str, Any]] = {
         "simple_summary": {
             "structures": {"default": ["Direct summary without additional headings"]},
@@ -637,10 +640,10 @@ class AdvancedContentGenerator:
         self,
         category: str,
         style: str,
-        output_format: str = "markdown",
+        output_format: OutputFormatType = OutputFormatType.MARKDOWN,
         lang: LanguageType = LanguageType.ENGLISH,
-        source_type: Optional[SourceType] = None,
-        content_length: Optional[int] = None,
+        source_type: SourceType = SourceType.TEXT,
+        summary_level: SummaryLevel = SummaryLevel.CONCISE,
     ) -> str:
         if not category:
             raise ValueError("Category cannot be empty")
@@ -659,52 +662,51 @@ class AdvancedContentGenerator:
                 f"Style '{style}' not valid for '{category.title()}': {', '.join(spec['styles'].keys())}"
             )
 
-        if content_length is not None:
-            if not isinstance(content_length, int) or content_length <= 0:
-                raise ValueError("Content length must be a positive integer")
-
         style_info = spec["styles"][style]
         if source_type is not None:
-            # Check if source_type is a valid enum member
             if not isinstance(source_type, SourceType):
                 try:
                     source_type = SourceType(source_type)
                 except ValueError:
                     raise ValueError(f"Source type '{source_type}' not supported")
 
-            # Check if source_type is valid for this style
             if source_type not in style_info["source_types"]:
                 raise ValueError(
                     f"Source type '{source_type}' not supported for '{style}' in '{category}'."
                 )
 
+        # Construir el prompt base
         prompt: List[str] = [
             f"# Prompt for {category.title()} - {style.title()}",
-            f"**Objective:** Generate content in {output_format.upper()} optimized for {category.title()}",
+            f"**Objective:** Generate content in {output_format.value.upper()} optimized for {category.title()}",
             f"**Style:** {style.title()} ({style_info['tone']})",
             f"**Key Needs:** {spec.get('needs', 'Adapt to context')}",
             "",
         ]
 
         prompt.append("**Instructions**:")
+
         all_rules = spec.get("rules", [])
-        all_rules.append(
-            "Avoid generic statements like 'The text is now free of redundancies and repetitions while maintaining clarity and cohesion'. Focus on providing concrete and specific feedback."
-        )
-        all_rules.append(
-            "Do not include phrases like 'Here is the revised text, eliminating redundancies and repetitions, while preserving all the details and the original structure."
-        )
-        all_rules.append(
-            "You must not include the ```markdown tag under any circumstances. If you use code blocks, they must be either unspecified or use a language other than Markdown."
-        )
+
+        mandatory_rules = [
+            "Avoid generic statements like 'The text is now free of redundancies and repetitions while maintaining clarity and cohesion'. Focus on providing concrete and specific feedback.",
+            "Do not include phrases like 'Here is the revised text, eliminating redundancies and repetitions, while preserving all the details and the original structure.'",
+            "You must not include the ```markdown tag under any circumstances. If you use code blocks, they must be either unspecified or use a language other than Markdown.",
+        ]
+
+        for rule in mandatory_rules:
+            if rule not in all_rules:
+                all_rules.append(rule)
 
         prompt.extend([f"- {rule}" for rule in all_rules])
 
-        if content_length:
+        if summary_level:
+            word_limit = WORD_LIMITS_BY_SUMMARY_LEVEL[summary_level]
             prompt.append(
-                f"- Summarize a {content_length}-page document comprehensively, capturing main themes, key points, and overall purpose in approximately 200-300 words."
+                f"- Summarize the document comprehensively, capturing main themes, key points, and overall purpose in approximately {word_limit} words."
             )
 
+        # Añadir formato esperado
         prompt.append("\n**Expected Format**:")
         structure = spec["structures"].get(
             style, ["Direct summary without additional headings"]
@@ -715,21 +717,21 @@ class AdvancedContentGenerator:
             elif output_format == "text":
                 prompt.append(line.lstrip("#* ").strip("*- ").upper())
 
+        # Manejo de fuentes
         prompt.append("\n**Source Handling**:")
-
         source_rules = {
             "video": "- Use timestamps [MM:SS] for key events",
             "audio": "- Include relevant quotes with timestamps if applicable",
             "text": "- Summarize main ideas with references if applicable",
             None: "- Adapt to the original content",
         }
-
         prompt.append(
             source_rules.get(
                 source_type.value if source_type else None, source_rules[None]
             )
         )
 
+        # Añadir ejemplo si existe
         if category in self.EXAMPLES and style in self.EXAMPLES[category]:
             prompt.append("\n**Example**:")
             example = self.EXAMPLES[category][style]
@@ -748,7 +750,6 @@ class AdvancedContentGenerator:
             except Exception as e:
                 print(f"Translation error: {e}")
 
-        print("prompt", "\n" + prompt_text)
         return prompt_text
 
     def sanitize_markdown(
@@ -814,3 +815,21 @@ class AdvancedContentGenerator:
                     (category, style_name, [st.value for st in source_types])
                 )
         return combinations
+
+    def get_summary_chunk_prompt(self, prompt: str, previous_context: str) -> str:
+        return (
+            f"{prompt}\n\n"
+            f"Previous text context: {previous_context}\n"
+            f"Instructions: Provide a detailed summary of the following text, coherently integrating new information with the previous context. "
+            f"Include examples, explanations, and any details that facilitate the study of the topic. "
+            f"Organize the summary into sections or key points for better understanding."
+        )
+
+    def get_postprocess_prompt(self) -> str:
+        return (
+            "You are an expert editor in optimizing texts by removing redundancies. "
+            "Review the following summary and exclusively eliminate redundancies or repeated information, "
+            "such as duplicated texts, phrases, or ideas. "
+            "Do not simplify, summarize, or reduce the content in any way; keep all details, data, and important elements intact. "
+            "Ensure that the final text is clear, cohesive, and well-organized, without altering its structure or original meaning."
+        )

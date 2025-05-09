@@ -7,13 +7,13 @@ from fastapi import HTTPException, status
 from pydantic import EmailStr, ValidationError
 from pymongo.errors import PyMongoError
 
-from core.brevio_api.models.user.data_result import DataResult
 from core.brevio_api.models.user.folder_entry import FolderEntry
 from core.brevio_api.models.user.user_folder import UserFolder
 from core.brevio_api.models.user.user_model import User
 from core.brevio_api.repositories.folder_entry_repository import FolderEntryRepository
 from core.brevio_api.repositories.user_repository import UserRepository
 from core.brevio_api.utils.password_utils import hash_password
+from core.shared.models.user.data_result import DataResult
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,10 +31,10 @@ class UserService:
         self.user_repo = user_repository
         logger.info("UserService initialized with UserRepository")
 
-    def get_user_by_id(self, user_id: ObjectId) -> User | None:
+    async def get_user_by_id(self, user_id: ObjectId) -> User | None:
         try:
             logger.debug(f"Fetching user with ID: {user_id}")
-            user = self.user_repo.get_user_by_field("_id", user_id)
+            user = await self.user_repo.get_user_by_field("_id", user_id)
             if not user:
                 logger.warning(f"No user found with ID: {user_id}")
                 raise HTTPException(
@@ -58,10 +58,10 @@ class UserService:
                 detail=f"Error retrieving user by ID: {str(e)}",
             )
 
-    def get_user_by_email(self, email: EmailStr) -> User | None:
+    async def get_user_by_email(self, email: EmailStr) -> User | None:
         try:
             logger.debug(f"Fetching user with email: {email}")
-            user = self.user_repo.get_user_by_field("email", email)
+            user = await self.user_repo.get_user_by_field("email", email)
             logger.info(f"User found with email: {email}")
 
             return user
@@ -74,11 +74,11 @@ class UserService:
                 detail=f"Error retrieving user by email: {str(e)}",
             )
 
-    def get_user_by_username(self, username: str) -> User | None:
+    async def get_user_by_username(self, username: str) -> User | None:
         try:
             logger.debug(f"Fetching user with username: {username}")
 
-            user = self.user_repo.get_user_by_field("username", username)
+            user = await self.user_repo.get_user_by_field("username", username)
 
             logger.info(f"User found with username: {username}")
 
@@ -92,18 +92,18 @@ class UserService:
                 detail=f"Error retrieving user by username",
             )
 
-    def create_user(self, user: User) -> User:
+    async def create_user(self, user: User) -> User:
         try:
             logger.debug("Creating new user")
-            user_exist = self.user_repo.get_user_by_field(
+            user_exist = await self.user_repo.get_user_by_field(
                 "email", user.email
-            ) or self.user_repo.get_user_by_field("username", user.username)
+            ) or await self.user_repo.get_user_by_field("username", user.username)
             if user_exist:
                 logger.warning(
                     f"User already exists with email: {user.email} or username: {user.username}"
                 )
                 raise HTTPException(status_code=400, detail="User already exists")
-            created_user = self.user_repo.create_user(user)
+            created_user = await self.user_repo.create_user(user)
             logger.info(f"User created successfully with ID: {created_user.id}")
             return created_user
         except ValidationError as e:
@@ -116,10 +116,10 @@ class UserService:
             logger.error(f"Unexpected error creating user: {str(e)}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
-    def initiate_password_recovery(self, email: EmailStr) -> None:
+    async def initiate_password_recovery(self, email: EmailStr) -> None:
         try:
             logger.debug(f"Initiating password recovery for email: {email}")
-            user = self.user_repo.get_user_by_field("email", email)
+            user = await self.user_repo.get_user_by_field("email", email)
             if not user:
                 logger.warning(f"No user found with email: {email}")
                 raise HTTPException(
@@ -129,7 +129,7 @@ class UserService:
             otp_code = str(random.randint(100000, 999999))
             otp_expiration = datetime.now(timezone.utc) + timedelta(minutes=10)
 
-            self.user_repo.update_user(
+            await self.user_repo.update_user(
                 user.id,
                 {
                     "otp": otp_code,
@@ -149,10 +149,10 @@ class UserService:
                 detail=f"Error initiating password recovery: {str(e)}",
             )
 
-    def verify_otp(self, email: EmailStr, otp_code: str) -> bool:
+    async def verify_otp(self, email: EmailStr, otp_code: str) -> bool:
         try:
             logger.debug(f"Verifying OTP for email: {email}, OTP: {otp_code}")
-            user = self.user_repo.get_user_by_field("email", email)
+            user = await self.user_repo.get_user_by_field("email", email)
             if not user:
                 logger.warning(f"No user found with email: {email}")
                 raise HTTPException(
@@ -182,7 +182,7 @@ class UserService:
                     detail="Expired OTP",
                 )
 
-            self.user_repo.update_user(user.id, {"is_otp_verified": True})
+            await self.user_repo.update_user(user.id, {"is_otp_verified": True})
             logger.info(f"OTP verified successfully for email: {email}")
             return True
         except Exception as e:
@@ -194,17 +194,17 @@ class UserService:
                 detail=f"Error verifying OTP: {str(e)}",
             )
 
-    def change_password(self, email: EmailStr, new_password: str) -> User:
+    async def change_password(self, email: EmailStr, new_password: str) -> User:
         try:
             logger.debug(f"Changing password for email: {email}")
-            user = self.user_repo.get_user_by_field("email", email)
+            user = await self.user_repo.get_user_by_field("email", email)
             if not user:
                 logger.warning(f"No user found with email: {email}")
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
                 )
 
-            updated_user = self.user_repo.update_user(
+            updated_user = await self.user_repo.update_user(
                 user.id,
                 {"password": hash_password(new_password), "otp": None, "exp": 0},
             )
@@ -227,11 +227,11 @@ class UserService:
                 detail=f"Error changing password: {str(e)}",
             )
 
-    def create_folder_entry(self, user_id: ObjectId) -> ObjectId:
+    async def create_folder_entry(self, user_id: ObjectId) -> ObjectId:
         try:
             logger.debug(f"Creating FolderEntry for user ID: {user_id}")
 
-            user = self.user_repo.get_user_by_field("_id", user_id)
+            user = await self.user_repo.get_user_by_field("_id", user_id)
 
             if not user:
                 logger.warning(f"No user found with ID: {user_id}")
@@ -244,7 +244,7 @@ class UserService:
 
             entry = FolderEntry(user_id=user.id, name="", results=[])
 
-            created_entry = self._folder_entry_repo.create_folder_entry(entry)
+            created_entry = await self._folder_entry_repo.create_folder_entry(entry)
 
             entry_ref = ObjectId(created_entry.id)
 
@@ -252,7 +252,7 @@ class UserService:
 
             update_data = {"folder.entries": user.folder.entries}
 
-            updated_user = self.user_repo.update_user(user.id, update_data)
+            updated_user = await self.user_repo.update_user(user.id, update_data)
 
             if not updated_user:
                 logger.error(f"Failed to update user {user_id} with new folder entry")
@@ -273,7 +273,7 @@ class UserService:
                 status_code=500, detail=f"Error creating FolderEntry: {str(e)}"
             )
 
-    def create_data_result(
+    async def create_data_result(
         self, user_id: ObjectId, folder_entry_id: ObjectId, result: DataResult
     ) -> DataResult:
         try:
@@ -289,12 +289,12 @@ class UserService:
                     status_code=400, detail=f"Invalid DataResult format: {str(e)}"
                 )
 
-            user = self.user_repo.get_user_by_field("_id", user_id)
+            user = await self.user_repo.get_user_by_field("_id", user_id)
             if not user:
                 logger.warning(f"No user found with ID: {user_id}")
                 raise HTTPException(status_code=404, detail="User not found")
 
-            folder_entry = self._folder_entry_repo.get_folder_entry_by_id(
+            folder_entry = await self._folder_entry_repo.get_folder_entry_by_id(
                 folder_entry_id
             )
             if not folder_entry:
@@ -309,7 +309,7 @@ class UserService:
             result_dict = validated_result.model_dump(by_alias=True, exclude_unset=True)
             logger.debug(f"Serialized DataResult: {result_dict}")
 
-            update_result = self._folder_entry_repo.update_folder_entry(
+            update_result = await self._folder_entry_repo.update_folder_entry(
                 folder_entry.id,
                 {
                     "$push": {
