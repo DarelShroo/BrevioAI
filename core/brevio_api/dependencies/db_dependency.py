@@ -1,8 +1,8 @@
-from pymongo.database import Database
+from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from core.brevio_api.core.database import DB
+from core.brevio_api.core.database import AsyncDB
 
 
-def get_db() -> Database:
-    db = DB().database()
+def get_db() -> AsyncIOMotorDatabase:
+    db = AsyncDB().database()
     return db

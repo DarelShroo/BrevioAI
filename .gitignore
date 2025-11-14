@@ -9,7 +9,6 @@ build/
 
 # Archivos de configuración del entorno
 .env
-.env.* 
 
 # Archivos de caché
 .cache/
@@ -68,3 +67,6 @@ env/
 .venv/
 
 data/
+
+#MYPY
+.mypy_cache/

@@ -1,3 +1,6 @@
+from pydantic import BaseModel
+
+
 class UsageCostTracker:
     def __init__(self) -> None:
         self.total_media_minutes_cost = 0.0

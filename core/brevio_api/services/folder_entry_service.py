@@ -8,11 +8,6 @@ from fastapi import HTTPException
 from core.brevio_api.models.user.folder_entry import FolderEntry
 from core.brevio_api.repositories.folder_entry_repository import FolderEntryRepository
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()],
-)
 logger = logging.getLogger(__name__)
 
 
@@ -21,7 +16,7 @@ class FolderEntryService:
         self._folder_entry_repo = folder_entry_repo
 
     async def get_entries(
-        self, _user_id: ObjectId, _entries_refs: List[str]
+        self, _user_id: str, _entries_refs: List[str]
     ) -> List[FolderEntry]:
         _entries_refs_obj_ids = []
         try:

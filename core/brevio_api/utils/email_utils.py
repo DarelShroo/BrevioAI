@@ -6,9 +6,9 @@ class EmailValidator(BaseModel):
     email: EmailStr
 
 
-def isEmail(email: str) -> str:
+def isEmail(email: str) -> bool:
     try:
         EmailValidator(email=email)
-        return email
+        return True
     except ValidationError as e:
-        raise
+        return False

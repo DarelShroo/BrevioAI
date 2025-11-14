@@ -2,7 +2,7 @@ import logging
 from typing import Annotated
 
 from fastapi import Depends, HTTPException
-from pymongo.database import Database
+from motor.motor_asyncio import AsyncIOMotorCollection
 
 from core.brevio_api.services.auth_service import AuthService
 from core.brevio_api.services.token_service import TokenService
@@ -10,16 +10,11 @@ from core.brevio_api.services.token_service import TokenService
 from .db_dependency import get_db
 from .token_dependency import get_token_service
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()],
-)
 logger = logging.getLogger(__name__)
 
 
 def get_auth_service(
-    db: Annotated[Database, Depends(get_db)],
+    db: Annotated[AsyncIOMotorCollection, Depends(get_db)],
     token_service: Annotated[TokenService, Depends(get_token_service)],
 ) -> AuthService:
     try:

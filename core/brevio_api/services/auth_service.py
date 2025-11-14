@@ -4,8 +4,8 @@ from os import path
 from typing import Optional
 
 from fastapi import HTTPException, status
+from motor.motor_asyncio import AsyncIOMotorCollection
 from pydantic import ValidationError
-from pymongo.database import Database
 
 from core.brevio.constants.constants import Constants
 from core.brevio.managers.directory_manager import DirectoryManager
@@ -32,19 +32,16 @@ from core.brevio_api.utils.email_utils import isEmail
 from core.brevio_api.utils.otp_utils import OTPUtils
 from core.brevio_api.utils.password_utils import hash_password, verify_password
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()],
-)
 logger = logging.getLogger(__name__)
 
 
 class AuthService:
-    def __init__(self, db: Database, token_service: TokenService):
-        self._db = db
-        self._user_repository = UserRepository(self._db)
-        self._folder_entry_repository = FolderEntryRepository(self._db)
+    def __init__(self, collection: AsyncIOMotorCollection, token_service: TokenService):
+        self._db = collection
+        self._user_repository = UserRepository(self._db.get_collection("users"))
+        self._folder_entry_repository = FolderEntryRepository(
+            self._db.get_collection("entries")
+        )
         self._user_service = UserService(
             self._user_repository, self._folder_entry_repository
         )
@@ -53,46 +50,51 @@ class AuthService:
 
     async def login(self, user_login: LoginUser) -> LoginResponse:
         user: User | None = None
-        try:
-            # Validar email o username
-            validated_email = isEmail(user_login.identity)
+
+        if isEmail(user_login.identity):
+            validated_email = user_login.identity
             logger.debug(f"Validated email: {validated_email}")
             user = await self._user_service.get_user_by_email(validated_email)
-        except ValidationError:
+        else:
             logger.debug(f"Email invalid, trying username: {user_login.identity}")
             user = await self._user_service.get_user_by_username(user_login.identity)
 
-        # Verificar si el usuario existe
         if not user:
             logger.info(f"User not found for identity: {user_login.identity}")
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado"
+                status_code=status.HTTP_404_NOT_FOUND, detail="Credenciales Inválidas"
             )
 
-        # Verificar que el usuario tenga un password válido
         if not hasattr(user, "password") or user.password is None:
             logger.error(f"User {user.email} has no password set")
             raise HTTPException(status_code=500, detail="Datos de usuario inválidos")
 
-        # Verificar la contraseña usando la función importada
         logger.debug(f"Verifying password for user: {user.email}")
+
         if not verify_password(user_login.password, user.password):
             logger.info(f"Password verification failed for user: {user.email}")
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Contraseña incorrecta"
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Credenciales inválidas",
             )
 
-        # Crear el token si todo está bien
         logger.debug(f"Password verified, creating token for user: {user.email}")
         token = self._token_service.create_access_token(
             {"id": str(user.id)},
             timedelta(hours=1),
         )
         logger.debug(f"Token created: {token}")
+
         return LoginResponse(access_token=token)
 
     async def register(self, user_register: RegisterUser) -> RegisterResponse:
-        validated_email = isEmail(user_register.email)
+        if not isEmail(user_register.email):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Email inválido"
+            )
+
+        validated_email = user_register.email
+
         hashed_password = hash_password(user_register.password.strip())
         user_folder = UserFolder()
 
@@ -119,7 +121,7 @@ class AuthService:
         )
 
         if not path.exists(dest_folder):
-            folder_response: FolderResponse = self.directory_manager.createFolder(
+            folder_response: FolderResponse = await self.directory_manager.createFolder(
                 dest_folder
             )
         else:
@@ -148,7 +150,8 @@ class AuthService:
 
         await email_service.send_register_email()
 
-        response = RegisterResponse(folder=folder_response, token=token)
+        response = RegisterResponse(folder=folder_response, access_token=token)
+
         return response
 
     async def password_recovery_handshake(
@@ -164,22 +167,25 @@ class AuthService:
                 user = await self._user_service.get_user_by_username(
                     recovery_password_user.identity
                 )
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Credenciales inválidas",
+                )
 
-            if user:
-                now = datetime.now()
-                if not user.otp or not user.exp or user.exp < int(now.timestamp()):
-                    otp = OTPUtils.generate_otp()
-                    new_time = now + timedelta(minutes=10)
+            now = datetime.now()
 
-                    await self._user_repository.update_user(
-                        user.id, {"otp": otp, "exp": int(new_time.timestamp())}
-                    )
+            if not user.otp or not user.exp or user.exp < int(now.timestamp()):
+                otp = OTPUtils.generate_otp()
+                new_time = now + timedelta(minutes=10)
 
-                    email_service = EmailService(
-                        user.email, "Recuperación de contraseña"
-                    )
+                await self._user_repository.update_user(
+                    user.id, {"otp": otp, "exp": int(new_time.timestamp())}
+                )
 
-                    await email_service.send_recovery_password_email(str(otp))
+                email_service = EmailService(user.email, "Recuperación de contraseña")
+
+                await email_service.send_recovery_password_email(str(otp))
 
             response = PasswordRecoveryResponse(
                 message="Código de recuperación enviado al correo electrónico."

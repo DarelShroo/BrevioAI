@@ -19,7 +19,6 @@ from core.brevio_api.models.responses.auth_response import (
     RegisterResponse,
 )
 
-# Stub service providing default successful responses
 default_folder = FolderResponse(success=True, message="folder created")
 
 
@@ -28,7 +27,7 @@ class StubAuthService:
         return LoginResponse(access_token="testtoken")
 
     async def register(self, register_user: RegisterUser) -> RegisterResponse:
-        return RegisterResponse(folder=default_folder, token="testtoken")
+        return RegisterResponse(folder=default_folder, access_token="testtoken")
 
     async def password_recovery_handshake(
         self, recovery_password: RecoveryPassword
@@ -65,7 +64,8 @@ def test_login_invalid_credentials() -> None:
     class ErrorAuthService(StubAuthService):
         async def login(self, login_user: LoginUser) -> LoginResponse:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Contraseña incorrecta"
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Credenciales inválidas",
             )
 
     app.dependency_overrides[get_auth_service] = lambda: ErrorAuthService()
@@ -73,16 +73,12 @@ def test_login_invalid_credentials() -> None:
         "/auth/login", json={"identity": "user123", "password": "Wr@ng1Pass!"}
     )
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
-    assert response.json()["message"] == "Contraseña incorrecta"
+    assert response.json()["message"] == "Credenciales inválidas"
 
 
 def test_login_validation_error_missing_field() -> None:
-    # Missing password field should trigger validation error
     response = client.post("/auth/login", json={"identity": "user123"})
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-# ----- Registration tests -----
 
 
 def test_register_success() -> None:
@@ -95,7 +91,7 @@ def test_register_success() -> None:
     assert response.status_code == status.HTTP_201_CREATED
     data = response.json()
     assert data["status"] == "success"
-    assert data["data"]["token"] == "testtoken"
+    assert data["data"]["access_token"] == "testtoken"
     assert data["data"]["folder"]["success"] is True
 
 
@@ -118,18 +114,14 @@ def test_register_user_exists() -> None:
 
 
 def test_register_validation_error_missing_field() -> None:
-    # Missing email field
     response = client.post(
         "/auth/register", json={"username": "user123", "password": "Aa1@aaa!"}
     )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
-# ----- Password recovery handshake tests -----
-
-
 def test_password_recovery_handshake_success() -> None:
-    payload = {"identity": "user123"}
+    payload = {"identity": "test-success@gmail.com"}
     response = client.post("/auth/password-recovery-handshake", json=payload)
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
@@ -143,23 +135,19 @@ def test_password_recovery_handshake_user_not_found() -> None:
             self, recovery_password: RecoveryPassword
         ) -> PasswordRecoveryResponse:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado."
+                status_code=status.HTTP_404_NOT_FOUND, detail="Credenciales inválidas."
             )
 
     app.dependency_overrides[get_auth_service] = lambda: ErrorAuthService()
-    payload = {"identity": "unknown"}
+    payload = {"identity": "test-not-found@gmail.com"}
     response = client.post("/auth/password-recovery-handshake", json=payload)
     assert response.status_code == status.HTTP_404_NOT_FOUND
-    assert response.json()["message"] == "Usuario no encontrado."
+    assert response.json()["message"] == "Credenciales inválidas."
 
 
 def test_password_recovery_handshake_validation_error_missing_field() -> None:
-    # Missing identity field
     response = client.post("/auth/password-recovery-handshake", json={})
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-# ----- Password recovery verify tests -----
 
 
 def test_password_recovery_verify_success() -> None:
@@ -205,7 +193,6 @@ def test_password_recovery_verify_user_not_found() -> None:
 
 
 def test_password_recovery_verify_validation_error_missing_field() -> None:
-    # Missing otp field
     response = client.post(
         "/auth/password-recovery-verify",
         json={"email": "user@example.com", "password": "NewPass1!"},

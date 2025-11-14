@@ -11,30 +11,6 @@ from core.brevio_api.models.responses.signature_response import SignatureRespons
 SIGNATURE = SignatureResponse()
 
 
-async def pydantic_validation_exception_handler(
-    request: Request, exc: ValidationError
-) -> JSONResponse:
-    errors = []
-    for err in exc.errors():
-        errors.append(
-            {
-                "field": err["loc"][-1],
-                "error": err["type"],
-                "message": err["msg"],
-                "input": err.get("ctx", {}).get("input", None),
-            }
-        )
-    return JSONResponse(
-        status_code=422,
-        content={
-            "status": "error",
-            "message": "Se han encontrado errores de validación.",
-            "errors": errors,
-            "signature": SIGNATURE.model_dump(),
-        },
-    )
-
-
 async def request_validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
@@ -44,7 +20,9 @@ async def request_validation_exception_handler(
             {
                 "field": err["loc"][-1],
                 "error": err["type"],
-                "message": err["msg"],
+                "message": (
+                    err["msg"].split(",", 1)[1] if "," in err["msg"] else err["msg"]
+                ),
                 "input": err.get("ctx", {}).get("input", None),
             }
         )

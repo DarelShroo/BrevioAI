@@ -2,26 +2,19 @@ import logging
 import os
 from typing import Optional
 
-from pymongo import MongoClient
-from pymongo.database import Database
-from pymongo.errors import ConfigurationError, ConnectionFailure, OperationFailure
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+from pymongo.errors import ConnectionFailure, OperationFailure
 from pymongo.read_preferences import ReadPreference
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()],
-)
 logger = logging.getLogger(__name__)
 
 _PRIMARY_PREFERRED = ReadPreference.PRIMARY_PREFERRED
 
 
-class DB:
+class AsyncDB:
     def __init__(self, uri: Optional[str] = None) -> None:
-        self.db: Optional[Database] = None
-
-        self.client: MongoClient
+        self.client: Optional[AsyncIOMotorClient] = None
+        self.db: Optional[AsyncIOMotorDatabase] = None
 
         try:
             connection_uri = uri or os.getenv("MONGODB_URI")
@@ -35,23 +28,23 @@ class DB:
             socket_timeout = self._get_env_int("SOCKET_TIMEOUT_MS", 60000)
 
             logger.info(
-                f"Initializing MongoDB client with URI: {connection_uri[:20]}..."
+                f"Initializing MongoDB async client with URI: {connection_uri[:20]}..."
             )
 
-            self.client = MongoClient(
+            self.client = AsyncIOMotorClient(
                 connection_uri,
                 serverSelectionTimeoutMS=server_selection_timeout,
                 connectTimeoutMS=connect_timeout,
                 socketTimeoutMS=socket_timeout,
             )
-            self._verify_connection()
 
         except ValueError as e:
             logger.error(f"Configuration error: {str(e)}")
             raise ValueError(f"Invalid configuration: {str(e)}")
         except Exception as e:
             logger.error(
-                f"Unexpected error during initialization: {str(e)}", exc_info=True
+                f"Unexpected error during async MongoDB initialization: {str(e)}",
+                exc_info=True,
             )
             raise RuntimeError(f"Failed to initialize MongoDB client: {str(e)}")
 
@@ -65,10 +58,12 @@ class DB:
             )
             return default
 
-    def _verify_connection(self) -> None:
+    async def verify_connection(self) -> None:
         try:
-            logger.debug("Verifying MongoDB connection with ping command")
-            self.client.admin.command("ping")
+            if not self.client:
+                raise RuntimeError("MongoDB client not initialized")
+            logger.debug("Verifying MongoDB async connection with ping command")
+            await self.client.admin.command("ping")
             logger.info("Successfully connected to MongoDB")
         except ConnectionFailure as e:
             logger.error(f"Failed to connect to MongoDB: {str(e)}")
@@ -87,37 +82,48 @@ class DB:
                 f"Unexpected error during connection verification: {str(e)}"
             ) from e
 
-    def get_client(self) -> MongoClient:
-        try:
-            return self.client
-        except AttributeError:
-            logger.error("MongoClient instance not initialized")
+    def get_client(self) -> AsyncIOMotorClient:
+        if not self.client:
+            logger.error("MongoDB async client instance not initialized")
             raise RuntimeError("MongoDB client not initialized")
+        return self.client
 
-    def database(self, database: str = "brevio") -> Database:
+    def database(self, database_name: str = "brevio") -> AsyncIOMotorDatabase:
+        if not self.client:
+            raise RuntimeError("MongoDB client not initialized")
+        if not isinstance(database_name, str) or not database_name.strip():
+            raise ValueError("Database name must be a non-empty string")
+
         try:
-            if not isinstance(database, str) or not database.strip():
-                raise ValueError("Database name must be a non-empty string")
-
-            logger.debug(f"Accessing database: {database}")
-            # Asignar a self.db el valor obtenido de la conexión
             self.db = self.client.get_database(
-                database, read_preference=_PRIMARY_PREFERRED
+                database_name, read_preference=_PRIMARY_PREFERRED
             )
-            logger.info(f"Successfully accessed database: {database}")
+            logger.info(f"Successfully accessed database: {database_name}")
             return self.db
-
         except OperationFailure as e:
-            logger.error(f"Permission denied for database {database}: {str(e)}")
+            logger.error(f"Permission denied for database {database_name}: {str(e)}")
             raise PermissionError(
-                f"No permission to access database {database}: {str(e)}"
+                f"No permission to access database {database_name}: {str(e)}"
             ) from None
-        except ValueError as e:
-            logger.error(f"Invalid database name: {str(e)}")
-            raise ValueError(f"Invalid database name: {str(e)}")
         except Exception as e:
             logger.error(
-                f"Unexpected error accessing database {database}: {str(e)}",
+                f"Unexpected error accessing database {database_name}: {str(e)}",
                 exc_info=True,
             )
-            raise RuntimeError(f"Failed to access database {database}: {str(e)}")
+            raise RuntimeError(f"Failed to access database {database_name}: {str(e)}")
+
+    async def close(self) -> None:
+        try:
+            if self.client:
+                logger.info("Closing MongoDB async client connection...")
+                self.client.close()
+                self.client = None
+                self.db = None
+                logger.info("MongoDB connection closed successfully")
+            else:
+                logger.warning("MongoDB client was already None, nothing to close")
+        except Exception as e:
+            logger.error(
+                f"Error while closing MongoDB connection: {str(e)}", exc_info=True
+            )
+            raise RuntimeError(f"Failed to close MongoDB connection: {str(e)}") from e

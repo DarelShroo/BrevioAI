@@ -1,40 +1,44 @@
+import asyncio
 import json
 import os
 from datetime import datetime
 
+import aiofiles
 
-def save_log_to_json(
+
+async def save_log_to_json(
     log_data: str, filename: str = "./core/brevio_api/logs/logs.json"
 ) -> None:
     log_data = json.loads(log_data)
-
     if not isinstance(log_data, dict):
         raise ValueError("log_data must be a JSON object (dictionary).")
 
     log_data["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_entry = log_data
 
     log_dir = os.path.dirname(os.path.abspath(filename))
-    os.makedirs(log_dir, exist_ok=True)
+    await asyncio.to_thread(os.makedirs, log_dir, exist_ok=True)
 
     existing_logs = []
 
-    if os.path.exists(filename) and os.path.getsize(filename) > 0:
+    if (
+        await asyncio.to_thread(os.path.exists, filename)
+        and await asyncio.to_thread(os.path.getsize, filename) > 0
+    ):
         try:
-            with open(filename, "r", encoding="utf-8") as f:
-                file_content = f.read().strip()
-                if file_content:  # Verificar que no esté vacío
+            async with aiofiles.open(filename, "r", encoding="utf-8") as f:
+                file_content = (await f.read()).strip()
+                if file_content:
                     existing_logs = json.loads(file_content)
                     if not isinstance(existing_logs, list):
                         existing_logs = [existing_logs]
         except Exception as e:
             print(f"Error al leer {filename}: {str(e)}. Inicializando nuevo archivo.")
 
-    existing_logs.append(log_entry)
+    existing_logs.append(log_data)
 
     try:
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump(existing_logs, f, indent=4, ensure_ascii=False)
+        async with aiofiles.open(filename, "w", encoding="utf-8") as f:
+            await f.write(json.dumps(existing_logs, indent=4, ensure_ascii=False))
         print(
             f"Log añadido exitosamente a {filename}. Total logs: {len(existing_logs)}"
         )

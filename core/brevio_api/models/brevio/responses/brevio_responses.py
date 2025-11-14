@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -10,7 +10,7 @@ from core.brevio_api.models.responses.base_response import BaseResponse
 
 
 class LanguagesResponse(BaseModel):
-    languages: List[str]
+    languages: Any
 
 
 class LanguagesDataResponse(BaseResponse):
@@ -30,7 +30,15 @@ class CategoryStyles(BaseModel):
 
 
 class CategoryStylesDataResponse(BaseResponse):
-    data: CategoryStyles
+    data: Any
+
+
+class SummaryLevelDataResponse(BaseResponse):
+    data: Any
+
+
+class OutputFormatDataResponse(BaseResponse):
+    data: Any
 
 
 class CountMediaResponse(BaseModel):

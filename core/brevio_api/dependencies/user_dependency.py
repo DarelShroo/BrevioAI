@@ -11,7 +11,7 @@ from .token_dependency import get_token_service
 def get_current_user(
     token: str = Depends(oauth2_scheme),
     token_service: TokenService = Depends(get_token_service),
-) -> ObjectId:
+) -> str:
     if not token or token == "null":
         raise HTTPException(status_code=401, detail="Token no proporcionado o nulo")
 
@@ -19,8 +19,8 @@ def get_current_user(
         payload = token_service.validate_access_token(token)
         if payload is None:
             raise HTTPException(status_code=401, detail="Token inválido o expirado")
-        user_id = ObjectId(payload["id"])
-        return user_id
+        user_id = payload["id"]
+        return str(user_id)
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expirado")
     except jwt.DecodeError:

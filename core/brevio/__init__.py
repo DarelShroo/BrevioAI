@@ -10,7 +10,6 @@ from core.brevio.models.response_model import (
     SummaryResponse,
     TranscriptionResponse,
 )
-from core.brevio.services.summary_service import SummaryService
 from core.brevio.services.transcription_service import TranscriptionService
 from core.brevio.services.yt_service import YTService
 from core.shared.enums.model import ModelType
@@ -18,7 +17,6 @@ from core.shared.enums.model import ModelType
 __all__ = [
     "YTService",
     "TranscriptionService",
-    "SummaryService",
     "Config",
     "SummaryResponse",
     "GenerateResponse",

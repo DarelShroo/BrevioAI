@@ -1,0 +1,35 @@
+:deep(.no-padding.ant-menu-item) {
+    padding: 0 !important;
+    height: 100% !important;
+    background-color: #FAFAFA !important;
+    margin: 0px !important;
+    width: 100%;
+    background-color: transparent !important;
+  }
+  
+:deep(.border-radius-bottom){
+    border-bottom-left-radius: 0px !important;
+    border-bottom-right-radius: 0px !important;
+    border-top-right-radius: 0px !important;
+    border-top-left-radius: 0px !important;
+  }
+
+
+:deep(.no-padding.ant-menu-item .ant-tabs-nav) {
+  background-color: #FAFAFA !important;
+  margin-bottom: 0px;
+  padding-bottom: 16px;
+  padding-left: 10px;
+}
+
+
+:deep(.form-content >.ant-form-item .ant-row) {
+  justify-content: center !important;
+}
+
+:deep(.form-content > .ant-form-item .ant-form-item-label) {
+  max-width: 20% !important;
+}
+:deep(.form-content) {
+  width: 100% !important;
+}

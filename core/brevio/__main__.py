@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from bson import ObjectId
@@ -6,13 +7,12 @@ from fastapi.exceptions import HTTPException
 from pydantic import HttpUrl
 
 from core.brevio.enums import LanguageType, ModelType
+from core.brevio.enums.output_format_type import OutputFormatType
+from core.brevio.enums.summary_level import WORD_LIMITS_BY_SUMMARY_LEVEL, SummaryLevel
 from core.brevio.services.advanced_content_generator import AdvancedPromptGenerator
 
 from .generate import Generate
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
 logger = logging.getLogger(__name__)
 
 
@@ -57,11 +57,17 @@ class Main:
             )
 
     @staticmethod
-    def get_languages() -> List[str]:
+    def get_languages() -> Any:
         try:
-            languages = [language.name for language in LanguageType]
+            value_map = defaultdict(list)
+            for name, member in LanguageType.__members__.items():
+                value_map[member.value].append(name)
 
-            print(languages)
+            languages: List[str] = []
+
+            for value, names in value_map.items():
+                languages.append(names[0])
+
             logger.debug(f"Retrieved {len(languages)} languages")
             return languages
         except Exception as e:
@@ -71,7 +77,7 @@ class Main:
     @staticmethod
     def get_models() -> List[str]:
         try:
-            models = [key for key, member in ModelType.__members__.items()]
+            models = [member.value for member in ModelType]
             logger.debug(f"Retrieved {len(models)} models")
             return models
         except Exception as e:
@@ -79,14 +85,14 @@ class Main:
             raise Exception(f"Unexpected error getting models: {str(e)}")
 
     @staticmethod
-    def get_all_category_style_combinations() -> (
+    async def get_all_category_style_combinations() -> (
         Dict[str, List[Dict[str, Union[str, List[str]]]]]
     ):
         try:
             acg = AdvancedPromptGenerator()
             combinations: List[
                 Tuple[str, str, List[str]]
-            ] = acg.get_all_category_style_combinations()
+            ] = await acg.get_all_category_style_combinations()
 
             logger.debug(f"Combinations fetched: {combinations}")
 
@@ -105,13 +111,31 @@ class Main:
             )
             raise HTTPException(500, f"Unexpected error getting combinations")
 
+    def get_all_summary_levels(self) -> Any:
+        try:
+            return {"summary_levels": WORD_LIMITS_BY_SUMMARY_LEVEL}
+        except Exception as e:
+            logger.error(
+                f"Unexpected error getting summary levels: {str(e)}", exc_info=True
+            )
+            raise Exception(f"Unexpected error getting summary levels: {str(e)}")
+
+    def get_all_formats(self) -> Any:
+        try:
+            return {"output_format_types": list(OutputFormatType)}
+        except Exception as e:
+            logger.error(
+                f"Unexpected error getting summary levels: {str(e)}", exc_info=True
+            )
+            raise Exception(f"Unexpected error getting summary levels: {str(e)}")
+
     async def generate(
         self,
         data: Any,
         _create_data_result: Any,
-        current_folder_entry_id: ObjectId,
-        _user_folder_id: ObjectId,
-        user_id: ObjectId,
+        current_folder_entry_id: str,
+        _user_folder_id: str,
+        user_id: str,
         _usage_cost_tracker: Any,
     ) -> Dict[str, Any]:
         try:
@@ -134,9 +158,9 @@ class Main:
     async def generate_summary_documents(
         self,
         _data: Any,
-        current_folder_entry_id: ObjectId,
-        _user_folder_id: ObjectId,
-        user_id: ObjectId,
+        current_folder_entry_id: str,
+        _user_folder_id: str,
+        user_id: str,
         _create_data_result: Optional[Callable] = None,
         _usage_cost_tracker: Any = None,
     ) -> Dict[str, Any]:

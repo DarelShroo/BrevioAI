@@ -1,9 +1,6 @@
-from core.brevio import __main__ as Brevio
-from core.brevio import managers, models, services
+"""
+core.brevio_api package
+Provides FastAPI based API for Brevio.
+"""
 
-__all__ = [
-    "Brevio",
-    "services",
-    "models",
-    "managers",
-]
+# No top-level imports to avoid dependencies on core.brevio

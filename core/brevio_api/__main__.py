@@ -1,5 +1,7 @@
 import logging
-from typing import Any, Awaitable, Callable, Union
+import os
+from contextlib import asynccontextmanager
+from typing import Any, AsyncGenerator, Awaitable, Callable, Union
 
 from bson import ObjectId
 from dotenv import load_dotenv
@@ -13,6 +15,7 @@ from pydantic import ValidationError
 from starlette.requests import Request
 from starlette.responses import Response
 
+from core.brevio_api.core.database import AsyncDB
 from core.brevio_api.handlers.exception_handlers import (
     auth_service_exception_handler,
     expired_signature_exception_handler,
@@ -20,7 +23,6 @@ from core.brevio_api.handlers.exception_handlers import (
     http_exception_handler,
     invalid_file_extension_exception_handler,
     jwt_error_exception_handler,
-    pydantic_validation_exception_handler,
     request_validation_exception_handler,
     value_error_exception_handler,
 )
@@ -43,6 +45,18 @@ def custom_jsonable_encoder(obj: Any) -> Any:
 
 
 ExceptionHandler = Callable[[Request, Exception], Union[Response, Awaitable[Response]]]
+
+db = AsyncDB()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    # Código de startup
+    await db.verify_connection()
+    yield
+    # Código de shutdown (si hace falta cerrar conexión)
+    await db.close()
+
 
 app = FastAPI(
     title="Brevio API",
@@ -75,7 +89,7 @@ app.add_middleware(
 )
 
 # Registro de manejadores de excepciones
-app.add_exception_handler(ValidationError, pydantic_validation_exception_handler)  # type: ignore[arg-type]
+app.add_exception_handler(ValidationError, request_validation_exception_handler)  # type: ignore[arg-type]
 app.add_exception_handler(RequestValidationError, request_validation_exception_handler)  # type: ignore[arg-type]
 app.add_exception_handler(InvalidFileExtension, invalid_file_extension_exception_handler)  # type: ignore[arg-type]
 app.add_exception_handler(ExpiredSignatureError, expired_signature_exception_handler)  # type: ignore[arg-type]
@@ -90,8 +104,14 @@ app.include_router(brevio_router)
 app.include_router(user_router)
 app.include_router(billing_router)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()],
-)
+
+def setup_logging() -> None:
+    log_level = os.getenv("LOG_LEVEL", "DEBUG").upper()  # Cambia por INFO en producción
+    logging.basicConfig(
+        level=getattr(logging, log_level),
+        format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
+        handlers=[logging.StreamHandler()],
+    )
+
+
+setup_logging()

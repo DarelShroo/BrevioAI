@@ -1,0 +1,50 @@
+:deep(.ant-menu-title-content) {
+  background-color: red !important;
+}
+
+.container-upload-content {
+    width: 100%;
+    text-align: center;
+  }
+  
+  .ant-upload-text,
+  .ant-upload-hint {
+    word-break: break-word; /* Asegura que palabras largas se dividan */
+    overflow-wrap: break-word; /* Compatibilidad adicional */
+    white-space: normal; /* Permite saltos de línea */
+    font-size: 14px; /* Puedes reducir si necesitas ajustar mejor */
+    line-height: 1.4;
+    margin: 8px 0;
+  }
+
+  .upload-dragger {
+    height: auto !important; /* Permite que crezca según el contenido */
+    display: flex;
+    flex-direction: column;
+  }
+  .container-upload-content {
+    flex-grow: 1; /* El área de drag-and-drop ocupa el espacio necesario */
+  }
+  .ant-upload-list {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    margin-top: 10px !important;
+    position: relative !important;
+    z-index: 1 !important;
+    height: auto !important; /* Asegura que la lista crezca */
+  }
+  .ant-upload-list-item {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    padding: 5px !important;
+    border: 1px solid #d9d9d9 !important; /* Para depuración */
+  }
+
+  .ant-upload-text-icon {
+    display: none !important;
+  }
+  .ant-upload-list-item-progress {
+    display: none !important;
+  }

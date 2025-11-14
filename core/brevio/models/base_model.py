@@ -1,6 +1,16 @@
 from typing import Annotated, Any, Dict, Optional
 
-from bson import ObjectId
+try:
+    from bson import ObjectId
+except ImportError:
+    # Fallback for environments without bson
+    class _ObjectId:
+        """Stub ObjectId when bson is unavailable."""
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict, Field, PlainSerializer
 

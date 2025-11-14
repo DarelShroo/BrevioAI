@@ -6,7 +6,7 @@ from fastapi import HTTPException, UploadFile, status
 from core.brevio_api.models.errors.invalid_file_extension import InvalidFileExtension
 
 
-async def validate_file_extension(
+def validate_file_extension(
     file: UploadFile, allowed_extensions: List[str]
 ) -> UploadFile:
     try:

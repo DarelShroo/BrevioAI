@@ -1,15 +1,17 @@
 services:
   backend:
     build:
-      context: ./backend
+      context: ./core
       dockerfile: Dockerfile
     volumes:
-      - ./backend:/app
-      - db_data:/db
+      - ./core:/app/core
     ports:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     deploy:
       resources:
         reservations:
@@ -38,7 +40,7 @@ services:
       context: ./database
       dockerfile: Dockerfile
     volumes:
-      - db_data:/data/db 
+      - db_data:/data/db
     ports:
       - "27017:27017"
     networks:
@@ -47,6 +49,39 @@ services:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: password
       MONGO_INITDB_DATABASE: brevio
+
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "6380:6379"
+    networks:
+      - app_network
+
+  celery:
+    build:
+      context: ./core
+      dockerfile: Dockerfile
+    command: celery -A core.brevio_api.celery worker --loglevel=debug --time-limit=7200 --soft-time-limit=3600
+    volumes:
+      - ./core:/app/core
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - database
+      - redis
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - app_network
 
 volumes:
   db_data:

@@ -5,9 +5,11 @@ import math
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
+from core.brevio.enums.category import CategoryType
 from core.brevio.enums.language import LanguageType
 from core.brevio.enums.output_format_type import OutputFormatType
 from core.brevio.enums.source_type import SourceType
+from core.brevio.enums.style import StyleType
 from core.brevio.enums.summary_level import SummaryLevel
 from core.brevio.services.advanced_content_generator import AdvancedPromptGenerator
 from core.brevio_api.dependencies.advanced_prompt_generator_dependency import (
@@ -21,6 +23,7 @@ from core.brevio_api.models.responses.billing_response import BillingEstimateRes
 from core.brevio_api.services.billing.billing_estimator_service import (
     BillingEstimatorService,
 )
+from core.brevio_api.utils.language_utils import parse_language_enum
 from core.shared.enums.model import ModelType
 from core.shared.utils.model_tokens_utils import get_encoder
 
@@ -55,7 +58,7 @@ class BillingRoutes:
             verify_api_key: str = Depends(verify_api_key),
             billing_estimator: BillingEstimatorService = Depends(get_billing_estimator),
         ) -> None:
-            # estimated_cost = billing_estimator.billing_for_media(minutes)
+            # estimated_cost = billing_estimator.billing_for__media(minutes)
             # return BillingEstimateResponse(estimated_cost=estimated_cost)
             pass
 
@@ -66,20 +69,18 @@ class BillingRoutes:
             responses={401: {"description": "Invalid API key"}},
         )
         async def estimate_billing_for_tokens(
-            num_tokens_user: int = Query(
+            file_tokens: int = Query(
                 ..., gt=0, description="Number of tokens from frontend"
             ),
             model: ModelType = Query(..., description="Model type"),
-            language: LanguageType = Query(
-                ..., description="Language of the input text"
+            language_output: str = Query(..., description="Language of the input text"),
+            language_input: str = Query(..., description="Language of the input text"),
+            category: CategoryType = Query(
+                ..., description="Category of the input text"
             ),
-            category: str = Query(..., description="Category of the input text"),
-            style: str = Query(..., description="Style of the input text"),
+            style: StyleType = Query(..., description="Style of the input text"),
             output_format: OutputFormatType = Query(
                 ..., description="Output format of the input text"
-            ),
-            source_type: SourceType = Query(
-                ..., description="Source type of the input text"
             ),
             summary_level: SummaryLevel = Query(
                 ..., description="Summary level of the input text"
@@ -87,14 +88,25 @@ class BillingRoutes:
             verify_api_key: str = Depends(verify_api_key),
             billing_estimator: BillingEstimatorService = Depends(get_billing_estimator),
             acg: AdvancedPromptGenerator = Depends(get_advanced_prompt_generator),
-        ) -> dict:
+        ) -> dict[str, int]:
+            language_input_enum: LanguageType = parse_language_enum(language_input)
+            language_output_enum: LanguageType = parse_language_enum(language_output)
+
             try:
-                billing_estimator.summary_tokens_predict(
-                    num_tokens_user,
-                    language_output=language,
-                    summary_level=summary_level,
+                result = await billing_estimator.summary_tokens_predict(
+                    file_tokens,
+                    language_input_enum,
+                    language_output_enum,
+                    category,
+                    style,
+                    output_format,
+                    summary_level,
                 )
-                return {}
+
+                # total_tokens = sum(result)
+
+                return result
+
             except Exception as e:
                 logger.error(f"Error estimating billing: {str(e)}")
                 raise HTTPException(status_code=500, detail=str(e))

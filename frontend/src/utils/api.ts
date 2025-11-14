@@ -1,13 +1,19 @@
+import { useStoreDeviceType } from '@/modules/brevio/composables/useStoreDeviceType'
+import { useStoreNotification } from '@/modules/brevio/composables/useStoreNotification'
 import axios from 'axios'
-import type { BrevioRequest } from '@/modules/ConfigBrevio/interfaces/brevio-request'
-import { LanguageType } from '@/modules/ConfigBrevio/enums/language.enum'
-import { useStoreNotification } from '@/modules/ConfigBrevio/composables/useStoreNotification'
-import { useStoreDeviceType } from '@/modules/ConfigBrevio/composables/useStoreDeviceType'
+import { h } from 'vue'
+import type { RequestHeaders } from './interfaces/request-headers'
 
-export const api = () => {
+export const brevio_api = () => {
+  const base_url = import.meta.env.VITE_API_URL
+
   const get = async (path: string, parameters: { key: string; value: string }[] = []) => {
     try {
-      const response = await axios.get(path)
+      const response = await axios.get(base_url + path, {
+        headers: {
+          'X-API-KEY': 'AZUCAR',
+        },
+      })
       return response.data
     } catch (error) {
       console.error('Error en la solicitud GET:', error)
@@ -16,28 +22,53 @@ export const api = () => {
   }
 
   const post = async (
-    path: string,
-    body: BrevioRequest = { url: '', language: LanguageType.SPANISH },
-    token: string | null = null,
+    url: string,
+    body: any,
+    token: string = '',
+    api_key: string = 'AZUCAR',
   ) => {
     try {
-      const headers = token ? { Authorization: `Bearer ${token}` } : {}
-      const response = await axios.post(path, body, { headers })
+      const isFormData = body instanceof FormData
 
-      if (response.status !== 200) {
-        throw new Error(`La solicitud POST falló con el estado: ${response.status}`)
+      const requestHeaders: RequestHeaders = {
+        headers: {
+          'X-API-KEY': api_key,
+          'Authorization': `Bearer ${token}`,
+        },
       }
-      console.log(response.data)
-      return response.data
+
+      if (!isFormData) {
+        requestHeaders.headers['Content-Type'] = 'application/json'
+      }
+
+      const endpoint = base_url + url
+
+      const response = await axios.post(endpoint, body, requestHeaders)
+
+      return response
     } catch (error: any) {
       const notification = useStoreNotification()
       const { placement } = useStoreDeviceType()
+
+      const title = error?.response?.data?.message || 'Error en la solicitud'
+      const errorMessages: string[] = []
+
+      if (error?.response?.data?.errors) {
+        error.response.data.errors.forEach((err: { message: string }) => {
+          errorMessages.push(err.message)
+        })
+      }
+
+      const htmlMessage = errorMessages.join('<br>')
+
       notification.configNotification(
         'error',
-        error.response.data.detail.error_message,
-        error.status,
-        placement.value,
+        htmlMessage,
+        title,
+        placement.value
       )
+
+      return null
     }
   }
 
@@ -46,3 +77,5 @@ export const api = () => {
     post,
   }
 }
+
+export const api = brevio_api()

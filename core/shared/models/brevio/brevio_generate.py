@@ -2,7 +2,14 @@ from pathlib import Path
 from typing import List, Optional, Type, Union
 
 from bson import ObjectId
-from pydantic import BaseModel, FilePath, HttpUrl, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    FilePath,
+    HttpUrl,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from core.brevio.models.prompt_config_model import PromptConfig
 
@@ -29,6 +36,20 @@ class MediaEntry(BaseModel):
             raise ValueError("Path cannot be empty")
 
         return path
+
+    @field_serializer("path")
+    @classmethod
+    def serialize_path(cls, value: Optional[Path]) -> Optional[str]:
+        if value is None:
+            return None
+        return str(value)
+
+    @field_serializer("url")
+    @classmethod
+    def serialize_url(cls, value: Optional[HttpUrl]) -> Optional[str]:
+        if value is None:
+            return None
+        return str(value)
 
 
 class BaseBrevioGenerate(BaseModel):

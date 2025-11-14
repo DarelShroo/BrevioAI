@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import HomeView from '@/modules/HomeBrevio/views/HomeView.vue'
+import HomeView from '@/modules/content/components/Home/HomeView.vue';
+import { useRouter } from 'vue-router';
+import { useAuthStore } from './stores/useAuthStore';
+
+const authStore = useAuthStore();
+const router = useRouter();
+
+if (!authStore.userLoggedIn) {
+  router.push("/auth/login");
+}
 </script>
 
 <template id="app">
@@ -11,20 +20,17 @@ import HomeView from '@/modules/HomeBrevio/views/HomeView.vue'
   background-color: #242328 !important;
   border-color: #242328 !important;
 }
+
 :where(.css-dev-only-do-not-override-1p3hq3p).ant-input-search .ant-input:hover,
 :where(.css-dev-only-do-not-override-1p3hq3p).ant-input-search .ant-input:focus {
   border-color: #70b3b2;
 }
 
-:where(.css-dev-only-do-not-override-1p3hq3p).ant-menu-dark:not(.ant-menu-horizontal)
-  .ant-menu-submenu-title:active {
+:where(.css-dev-only-do-not-override-1p3hq3p).ant-menu-dark:not(.ant-menu-horizontal) .ant-menu-submenu-title:active {
   background-color: #70b3b2;
 }
 
-:where(.css-dev-only-do-not-override-1p3hq3p).ant-select:not(.ant-select-disabled):not(
-    .ant-select-customize-input
-  ):not(.ant-pagination-size-changer):hover
-  .ant-select-selector {
+:where(.css-dev-only-do-not-override-1p3hq3p).ant-select:not(.ant-select-disabled):not(.ant-select-customize-input):not(.ant-pagination-size-changer):hover .ant-select-selector {
   border-color: #70b3b2 !important;
 }
 
@@ -51,6 +57,7 @@ import HomeView from '@/modules/HomeBrevio/views/HomeView.vue'
     flex-direction: column !important;
     width: 100% !important;
   }
+
   .ant-menu {
     margin-bottom: 10px;
     margin-right: 0px;

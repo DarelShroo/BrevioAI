@@ -1,6 +1,7 @@
 import logging
 import random
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from bson import ObjectId
 from fastapi import HTTPException, status
@@ -15,11 +16,6 @@ from core.brevio_api.repositories.user_repository import UserRepository
 from core.brevio_api.utils.password_utils import hash_password
 from core.shared.models.user.data_result import DataResult
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()],
-)
 logger = logging.getLogger(__name__)
 
 
@@ -31,7 +27,7 @@ class UserService:
         self.user_repo = user_repository
         logger.info("UserService initialized with UserRepository")
 
-    async def get_user_by_id(self, user_id: ObjectId) -> User | None:
+    async def get_user_by_id(self, user_id: str) -> User | None:
         try:
             logger.debug(f"Fetching user with ID: {user_id}")
             user = await self.user_repo.get_user_by_field("_id", user_id)
@@ -227,7 +223,7 @@ class UserService:
                 detail=f"Error changing password: {str(e)}",
             )
 
-    async def create_folder_entry(self, user_id: ObjectId) -> ObjectId:
+    async def create_folder_entry(self, user_id: str) -> str:
         try:
             logger.debug(f"Creating FolderEntry for user ID: {user_id}")
 
@@ -262,7 +258,7 @@ class UserService:
                 )
 
             logger.info(f"FolderEntry {entry_ref} created and linked to user {user_id}")
-            return entry_ref
+            return str(entry_ref)
 
         except Exception as e:
             logger.error(
@@ -274,22 +270,30 @@ class UserService:
             )
 
     async def create_data_result(
-        self, user_id: ObjectId, folder_entry_id: ObjectId, result: DataResult
+        self, user_id: str, folder_entry_id: str, result: DataResult
     ) -> DataResult:
         try:
             logger.debug(
                 f"Creating DataResult for user ID: {user_id}, FolderEntry ID: {folder_entry_id}"
             )
 
-            try:
-                validated_result = DataResult(**result.model_dump())
-            except ValidationError as e:
-                logger.error(f"Invalid DataResult format: {str(e)}")
+            if not ObjectId.is_valid(user_id):
+                logger.warning(f"Invalid user ID format: {user_id}")
+                raise HTTPException(status_code=400, detail="Invalid user ID format")
+            user_id_obj = ObjectId(user_id)
+
+            if not ObjectId.is_valid(folder_entry_id):
+                logger.warning(f"Invalid FolderEntry ID format: {folder_entry_id}")
                 raise HTTPException(
-                    status_code=400, detail=f"Invalid DataResult format: {str(e)}"
+                    status_code=400, detail="Invalid FolderEntry ID format"
                 )
 
-            user = await self.user_repo.get_user_by_field("_id", user_id)
+            result_dict = result.model_dump(
+                by_alias=True, exclude_unset=True, mode="json"
+            )
+            logger.debug(f"Serialized DataResult: {result_dict}")
+
+            user = await self.user_repo.get_user_by_field("_id", user_id_obj)
             if not user:
                 logger.warning(f"No user found with ID: {user_id}")
                 raise HTTPException(status_code=404, detail="User not found")
@@ -306,28 +310,24 @@ class UserService:
                     detail=f"FolderEntry with ID {folder_entry_id} not found",
                 )
 
-            result_dict = validated_result.model_dump(by_alias=True, exclude_unset=True)
-            logger.debug(f"Serialized DataResult: {result_dict}")
+            update_data = {
+                "$push": {"results": {"$each": [result_dict]}},
+                "$set": {"updated_at": datetime.now(ZoneInfo("UTC"))},
+            }
 
             update_result = await self._folder_entry_repo.update_folder_entry(
-                folder_entry.id,
-                {
-                    "$push": {
-                        "results": {
-                            "$each": [result_dict],
-                        }
-                    },
-                    "$set": {"updated_at": datetime.now(timezone.utc)},
-                },
+                folder_entry_id, update_data
             )
-
-            logger.info(f"Updated result {update_result} times")
+            if not update_result:
+                logger.error(f"Failed to update FolderEntry {folder_entry_id}")
+                raise HTTPException(
+                    status_code=500, detail="Failed to update folder entry"
+                )
 
             logger.info(
                 f"DataResult added to FolderEntry {folder_entry_id} for user {user_id}"
             )
-            return validated_result
-
+            return result
         except PyMongoError as e:
             logger.error(f"MongoDB error creating DataResult: {str(e)}", exc_info=True)
             raise HTTPException(

@@ -20,7 +20,7 @@ class LoginDataResponse(BaseResponse):
 
 class RegisterResponse(BaseResponseModel):
     folder: FolderResponse
-    token: str
+    access_token: str
 
 
 class RegisterDataResponse(BaseResponse):

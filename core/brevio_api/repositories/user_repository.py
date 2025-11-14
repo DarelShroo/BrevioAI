@@ -4,23 +4,19 @@ from typing import Any, Dict, Optional, Union
 from bson import ObjectId
 from bson.errors import InvalidId
 from fastapi import HTTPException
+from motor.motor_asyncio import AsyncIOMotorCollection
 from pydantic import ValidationError
 from pymongo.errors import PyMongoError
 
 from core.brevio_api.models.user.user_model import User
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()],
-)
 logger = logging.getLogger(__name__)
 
 
 class UserRepository:
-    def __init__(self, db: Any):
+    def __init__(self, collection: AsyncIOMotorCollection):
         try:
-            self.collection = db["users"]
+            self.collection = collection
         except Exception as e:
             logger.error(f"Database initialization error: {str(e)}")
             raise HTTPException(
@@ -41,7 +37,8 @@ class UserRepository:
                     raise HTTPException(status_code=400, detail="Invalid ID format")
 
             query = {field: value}
-            user_data = self.collection.find_one(query)
+
+            user_data = await self.collection.find_one(query)
 
             if not user_data:
                 logger.warning(f"No user found with {field}: {value}")
@@ -87,7 +84,9 @@ class UserRepository:
 
             user_dict = user.model_dump(by_alias=True)
 
-            inserted_id = self.collection.insert_one(user_dict).inserted_id
+            result = await self.collection.insert_one(user_dict)
+
+            inserted_id = result.inserted_id
 
             created_user: User = User(**user_dict)
 
@@ -124,14 +123,16 @@ class UserRepository:
                         logger.error(f"Invalid ObjectId format: {value}")
                         raise HTTPException(status_code=400, detail="Invalid ID format")
 
-            existing = self.collection.find_one({"_id": user_id})
+            existing = await self.collection.find_one({"_id": user_id})
 
             if not existing:
                 raise HTTPException(status_code=404, detail="User not found")
 
-            result = self.collection.update_one({"_id": user_id}, {"$set": fields})
+            result = await self.collection.update_one(
+                {"_id": user_id}, {"$set": fields}
+            )
 
-            updated_user = self.collection.find_one({"_id": user_id})
+            updated_user = await self.collection.find_one({"_id": user_id})
 
             if not updated_user:
                 raise HTTPException(
@@ -166,7 +167,7 @@ class UserRepository:
             else:
                 user_id = id
 
-            result = self.collection.delete_one({"_id": user_id})
+            result = await self.collection.delete_one({"_id": user_id})
 
             if result.deleted_count == 0:
                 logger.warning(f"No user found with ID: {id} to delete")

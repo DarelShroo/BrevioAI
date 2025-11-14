@@ -1,3 +1,3 @@
-from .database import DB
+from .database import AsyncDB
 
-__all__ = ["DB"]
+__all__ = ["AsyncDB"]

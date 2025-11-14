@@ -1,16 +1,17 @@
 from typing import Any, Dict
 
-from pydantic import EmailStr, Field, model_validator
+from pydantic import EmailStr, Field, field_validator, model_validator, validate_email
 
 from core.brevio_api.models.auth.auth_base import AuthWithPassword, IdentityBase
+from core.brevio_api.utils.email_utils import isEmail
 
 
-class LoginUser(AuthWithPassword, IdentityBase):
-    pass
+class LoginUser(IdentityBase):
+    password: str = Field(..., min_length=3, max_length=64)
 
 
 class RegisterUser(AuthWithPassword):
-    username: str = Field("", strict=True, max_length=100)
+    username: str = Field("", strict=True, min_length=6, max_length=25)
     email: EmailStr
 
     @model_validator(mode="before")
@@ -35,4 +36,11 @@ class UserIdentity(IdentityBase):
 
 
 class RecoveryPassword(UserIdentity):
-    pass
+    identity: EmailStr
+
+    @field_validator("identity", mode="before")
+    @classmethod
+    def validate_email_identity(cls, value: str) -> str:
+        if not isEmail(value):
+            raise ValueError("Invalid identity format: must be a valid email")
+        return value

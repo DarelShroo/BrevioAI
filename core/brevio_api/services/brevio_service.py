@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path as FilePath
 from typing import Any, Dict, List, Tuple
 
-from bson import ObjectId
+import aiofiles
 from fastapi import HTTPException, status
 from pydantic import HttpUrl, ValidationError
 
@@ -14,7 +14,7 @@ from core.brevio.__main__ import Main
 from core.brevio.constants.constants import Constants
 from core.brevio.managers.directory_manager import DirectoryManager
 from core.brevio.models.prompt_config_model import PromptConfig
-from core.brevio_api.core.database import DB
+from core.brevio_api.core.database import AsyncDB
 from core.brevio_api.repositories.folder_entry_repository import FolderEntryRepository
 from core.brevio_api.repositories.user_repository import UserRepository
 from core.brevio_api.services.billing.billing_estimator_service import (
@@ -24,11 +24,6 @@ from core.brevio_api.services.billing.usage_cost_tracker import UsageCostTracker
 from core.brevio_api.services.user_service import UserService
 from core.shared.models.brevio.brevio_generate import BrevioGenerate, MediaEntry
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()],
-)
 logger = logging.getLogger(__name__)
 
 
@@ -53,13 +48,24 @@ async def wait_for_file(
 
 class BrevioService:
     def __init__(self) -> None:
-        self._db = DB()
-        user_repository = UserRepository(self._db.database())
-        entry_repository = FolderEntryRepository(self._db.database())
-        self._user_service = UserService(user_repository, entry_repository)
+        self._db = AsyncDB()
+        self._user_service: UserService | None = None
         self.directory_manager = DirectoryManager()
         self._main = Main()
         self._billing_estimator_cost_service = BillingEstimatorService()
+
+    async def init_services(self) -> None:
+        await self._db.verify_connection()
+        db = self._db.database()
+        user_repository = UserRepository(db.get_collection("users"))
+        entry_repository = FolderEntryRepository(db.get_collection("entries"))
+        self._user_service = UserService(user_repository, entry_repository)
+
+    async def _get_user_service(self) -> UserService:
+        if self._user_service is None:
+            await self.init_services()
+        assert self._user_service is not None
+        return self._user_service
 
     async def count_media_in_yt_playlist(self, url: HttpUrl) -> int:
         return await self._main.count_media_in_yt_playlist(url)
@@ -82,11 +88,17 @@ class BrevioService:
                 status_code=500, detail="Error retrieving media duration"
             ) from e
 
-    def get_languages(self) -> List[str]:
+    def get_languages(self) -> Any:
         return self._main.get_languages()
 
-    def get_all_category_style_combinations(self) -> Any:
-        return self._main.get_all_category_style_combinations()
+    async def get_all_category_style_combinations(self) -> Any:
+        return await self._main.get_all_category_style_combinations()
+
+    def get_all_summary_levels(self) -> Any:
+        return self._main.get_all_summary_levels()
+
+    def get_all_formats(self) -> Any:
+        return self._main.get_all_formats()
 
     def get_models(self) -> List[str]:
         return self._main.get_models()
@@ -94,10 +106,14 @@ class BrevioService:
     async def generate(
         self,
         data: BrevioGenerate,
-        _current_user_id: ObjectId,
+        _current_user_id: str,
         _usage_cost_tracker: UsageCostTracker,
     ) -> Dict[str, Any]:
         try:
+            await self.init_services()
+
+            assert self._user_service is not None
+
             folder_entry = await self._user_service.create_folder_entry(
                 _current_user_id
             )
@@ -142,7 +158,7 @@ class BrevioService:
                 data,
                 self._user_service.create_data_result,
                 current_folder_entry_id,
-                user_folder_id,
+                str(user_folder_id),
                 _current_user_id,
                 _usage_cost_tracker,
             )
@@ -160,11 +176,13 @@ class BrevioService:
     async def generate_summary_media_upload(
         self,
         files_data: List[Tuple[str, bytes]],
-        _current_user_id: ObjectId,
+        _current_user_id: str,
         _prompt_config: PromptConfig,
         _usage_cost_tracker: UsageCostTracker,
     ) -> Dict[str, Any]:
-        folder_entry = await self._user_service.create_folder_entry(_current_user_id)
+        user_service = await self._get_user_service()
+
+        folder_entry = await user_service.create_folder_entry(_current_user_id)
 
         if folder_entry is None:
             logger.error("Failed to create folder entry")
@@ -174,7 +192,7 @@ class BrevioService:
             )
         current_folder_entry_id = folder_entry
 
-        user = await self._user_service.get_user_by_id(_current_user_id)
+        user = await user_service.get_user_by_id(_current_user_id)
 
         if user is None or user.folder is None or user.folder.id is None:
             logger.error("User or user folder not found")
@@ -225,9 +243,9 @@ class BrevioService:
         logger.info(f"Generating summary for media upload for user {_current_user_id}")
         result = await self._main.generate(
             _data,
-            self._user_service.create_data_result,
+            user_service.create_data_result,
             current_folder_entry_id,
-            user_folder_id,
+            str(user_folder_id),
             _current_user_id,
             _usage_cost_tracker,
         )
@@ -244,11 +262,13 @@ class BrevioService:
     async def generate_summary_documents(
         self,
         files_data: List[Tuple[str, bytes]],
-        _current_user_id: ObjectId,
+        _current_user_id: str,
         _prompt_config: PromptConfig,
         _usage_cost_tracker: UsageCostTracker,
     ) -> Dict[str, str]:
-        folder_entry = await self._user_service.create_folder_entry(_current_user_id)
+        user_service = await self._get_user_service()
+
+        folder_entry = await user_service.create_folder_entry(_current_user_id)
 
         if folder_entry is None:
             logger.error("Failed to create folder entry")
@@ -259,7 +279,7 @@ class BrevioService:
 
         current_folder_entry_id = folder_entry
 
-        user = await self._user_service.get_user_by_id(_current_user_id)
+        user = await user_service.get_user_by_id(_current_user_id)
 
         if user is None or user.folder is None or user.folder.id is None:
             logger.error("User or user folder not found")
@@ -307,9 +327,9 @@ class BrevioService:
         result = await self._main.generate_summary_documents(
             _data,
             current_folder_entry_id,
-            user_folder_id,
+            str(user_folder_id),
             _current_user_id,
-            self._user_service.create_data_result,
+            user_service.create_data_result,
             _usage_cost_tracker,
         )
         return result
@@ -321,7 +341,7 @@ class BrevioService:
 
             os.chmod(file_path.parent, 0o755)
 
-            await asyncio.to_thread(self._write_file, file_path, content)
+            await self._write_file(file_path, content)
             logger.debug(f"Successfully saved media to {file_path}")
         except Exception as e:
             logger.error(
@@ -343,17 +363,26 @@ class BrevioService:
                 "-show_format",
                 str(file_path),
             ]
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            probe_data = json.loads(result.stdout)
 
-            duration_str = probe_data["format"]["duration"]
-            duration_seconds = float(duration_str)
+            # Ejecutar el subprocess de forma asíncrona
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            stdout, stderr = await process.communicate()
+
+            if process.returncode != 0:
+                raise RuntimeError(
+                    f"ffprobe falló en {file_path}: {stderr.decode().strip()}"
+                )
+
+            probe_data = json.loads(stdout.decode())
+            duration_seconds = float(probe_data["format"]["duration"])
             duration_minutes = duration_seconds / 60
             return round(duration_minutes, 2)
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(
-                f"Error al ejecutar ffprobe en {file_path}: {e.stderr}"
-            ) from e
+
         except (KeyError, ValueError, json.JSONDecodeError) as e:
             raise RuntimeError(
                 f"Error al obtener la duración de {file_path}: {str(e)}"
@@ -363,8 +392,13 @@ class BrevioService:
                 f"Error inesperado al calcular duración de {file_path}: {str(e)}"
             ) from e
 
-    def _write_file(self, file_path: FilePath, content: bytes) -> None:
-        with open(file_path, "wb") as f:
-            f.write(content)
-            f.flush()
-            os.fsync(f.fileno())
+    async def _write_file(self, file_path: FilePath, content: bytes) -> None:
+        try:
+            async with aiofiles.open(file_path, "wb") as f:
+                await f.write(content)
+                await f.flush()
+
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, os.fsync, f.fileno())
+        except Exception as e:
+            raise RuntimeError(f"Error al escribir en {file_path}: {str(e)}") from e

@@ -7,9 +7,6 @@ from typing import Any, Dict, Optional
 import yt_dlp
 from pydantic import HttpUrl
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
 logger = logging.getLogger(__name__)
 
 
