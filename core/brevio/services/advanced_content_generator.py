@@ -1,6 +1,6 @@
 import html
 import re
-from typing import Any, Dict
+from typing import Any, Dict, Union
 
 from core.brevio.constants.prompts import (
     ARABIC,
@@ -46,8 +46,8 @@ class AdvancedPromptGenerator:
 
     async def generate_prompt(
         self,
-        category: CategoryType,
-        style: StyleType,
+        category: Union[CategoryType, str],
+        style: Union[StyleType, str],
         output_format: OutputFormatType,
         lang: LanguageType,
         summary_level: SummaryLevel,

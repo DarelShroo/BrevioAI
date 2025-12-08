@@ -1,0 +1,5 @@
+torch
+torchaudio
+pandas
+transformers==4.51.3
+openai-whisper==20240930

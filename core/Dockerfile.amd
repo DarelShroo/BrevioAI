@@ -1,0 +1,30 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install system dependencies required for ROCm runtime and general build
+RUN apt-get update && \
+    apt-get install -y libglib2.0-0 git curl libgomp1 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip
+RUN pip install --upgrade pip setuptools wheel
+
+# Install ML dependencies
+# We install from the ROCm index to get the correct wheels
+COPY requirements-ml.amd.txt /app/core/requirements-ml.amd.txt
+RUN pip install --no-cache-dir -r /app/core/requirements-ml.amd.txt --extra-index-url https://download.pytorch.org/whl/rocm6.2
+
+# Install app dependencies
+COPY requirements.txt /app/core/requirements.txt
+RUN pip install --no-cache-dir -r /app/core/requirements.txt
+
+# Copy source code
+COPY . /app/core
+
+EXPOSE 8000
+
+# Adjust PYTHONPATH
+ENV PYTHONPATH=/app
+
+CMD ["fastapi", "run", "core/brevio_api/__main__.py", "--port", "8000"]

@@ -250,14 +250,28 @@ class BrevioRoutes:
                         detail="File must have a valid filename with extension",
                     )
 
-            # Convert files to data for Celery task
-            file_data_list = [
-                (file.filename or "unknown", await file.read()) for file in files
-            ]
+            # Save files to disk
+            import os
+            import shutil
+            import uuid
+            
+            upload_dir = "/tmp/brevio_uploads"
+            os.makedirs(upload_dir, exist_ok=True)
+            
+            file_paths = []
+            for file in files:
+                file_id = str(uuid.uuid4())
+                filename = file.filename or "unknown"
+                file_path = os.path.join(upload_dir, f"{file_id}_{filename}")
+                
+                with open(file_path, "wb") as buffer:
+                    shutil.copyfileobj(file.file, buffer)
+                
+                file_paths.append(file_path)
 
             # Start Celery task
             task = process_summary_task.delay(
-                files=file_data_list,
+                file_paths=file_paths,
                 language=language.value,
                 model=model.value,
                 category=category,
@@ -322,14 +336,28 @@ class BrevioRoutes:
                         detail="File must have a valid filename with extension",
                     )
 
-            # Convert files to data for Celery task
-            file_data_list = [
-                (file.filename or "unknown", await file.read()) for file in files
-            ]
+            # Save files to disk
+            import os
+            import shutil
+            import uuid
+            
+            upload_dir = "/tmp/brevio_uploads"
+            os.makedirs(upload_dir, exist_ok=True)
+            
+            file_paths = []
+            for file in files:
+                file_id = str(uuid.uuid4())
+                filename = file.filename or "unknown"
+                file_path = os.path.join(upload_dir, f"{file_id}_{filename}")
+                
+                with open(file_path, "wb") as buffer:
+                    shutil.copyfileobj(file.file, buffer)
+                
+                file_paths.append(file_path)
 
             # Start Celery task
             task = process_summary_task.delay(
-                files=file_data_list,
+                file_paths=file_paths,
                 language=language.value,
                 model=model.value,
                 category=category,

@@ -8,3 +8,4 @@ class FileConfig(BaseModel):
     pdf_path: Optional[str] = None
     document_path: Optional[str] = None
     summary_path: Optional[str] = None
+    is_youtube: Optional[bool] = False

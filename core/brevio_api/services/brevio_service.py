@@ -175,7 +175,7 @@ class BrevioService:
 
     async def generate_summary_media_upload(
         self,
-        files_data: List[Tuple[str, bytes]],
+        file_paths: List[str],
         _current_user_id: str,
         _prompt_config: PromptConfig,
         _usage_cost_tracker: UsageCostTracker,
@@ -210,14 +210,31 @@ class BrevioService:
         saved_files: List[MediaEntry] = []
         total_media_minutes = 0.0
 
-        tasks = [
-            self.save_media(content, uploads_dir / str(index) / filename)
-            for index, (filename, content) in enumerate(files_data)
-        ]
-        await asyncio.gather(*tasks)
+        import shutil
+        
+        for index, src_path in enumerate(file_paths):
+            filename = os.path.basename(src_path)
+            # Remove UUID prefix if present (simple split by first underscore if we want original name, 
+            # but maybe keeping unique name is fine. Let's keep unique name to avoid collisions)
+            # Actually, the router added a UUID prefix. Let's keep it.
+            
+            dest_dir = uploads_dir / str(index)
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest_path = dest_dir / filename
+            
+            try:
+                shutil.copy2(src_path, dest_path)
+                os.chmod(dest_dir, 0o755)
+            except Exception as e:
+                 logger.error(f"Error moving file {src_path} to {dest_path}: {e}")
+                 raise HTTPException(status_code=500, detail=f"Error processing file {filename}")
 
-        for index, (filename, _) in enumerate(files_data):
-            file_path = uploads_dir / str(index) / f"{filename}"
+        # No need for async gather of save_media anymore
+
+
+        for index, src_path in enumerate(file_paths):
+            filename = os.path.basename(src_path)
+            dest_path = uploads_dir / str(index) / filename
             if not await wait_for_file(file_path):
                 logger.error(f"File {file_path} not created after saving")
                 raise HTTPException(
@@ -261,7 +278,7 @@ class BrevioService:
 
     async def generate_summary_documents(
         self,
-        files_data: List[Tuple[str, bytes]],
+        file_paths: List[str],
         _current_user_id: str,
         _prompt_config: PromptConfig,
         _usage_cost_tracker: UsageCostTracker,
@@ -294,15 +311,22 @@ class BrevioService:
             f"{Constants.DESTINATION_FOLDER}/{user_folder_id}/{current_folder_entry_id}/"
         )
 
-        tasks = [
-            self.save_media(content, uploads_dir / str(index) / filename)
-            for index, (filename, content) in enumerate(files_data)
-        ]
-
-        await asyncio.gather(*tasks)
+        import shutil
+        for index, src_path in enumerate(file_paths):
+            filename = os.path.basename(src_path)
+            dest_dir = uploads_dir / str(index)
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest_path = dest_dir / filename
+            
+            try:
+                shutil.copy2(src_path, dest_path)
+            except Exception as e:
+                 logger.error(f"Error moving file {src_path} to {dest_path}: {e}")
+                 raise HTTPException(status_code=500, detail=f"Error processing file {filename}")
 
         saved_files: List[MediaEntry] = []
-        for index, (filename, _) in enumerate(files_data):
+        for index, src_path in enumerate(file_paths):
+            filename = os.path.basename(src_path)
             file_path = uploads_dir / str(index) / filename
             if not await wait_for_file(file_path):
                 logger.error(f"File {file_path} not created after saving")

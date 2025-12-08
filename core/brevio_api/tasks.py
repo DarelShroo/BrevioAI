@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 @shared_task(name="core.brevio_api.tasks.process_summary_task")
 def process_summary_task(
-    files: List[Tuple[str, bytes]],
+    file_paths: List[str],
     language: str,
     model: str,
     category: str,
@@ -31,16 +31,18 @@ def process_summary_task(
     _current_user: str,
     is_media: bool = False,
 ) -> str:
+    import os
+    
     allowed_extensions = (
         [ExtensionType.MP3.value]
         if is_media
         else [ExtensionType.DOCX.value, ExtensionType.PDF.value]
     )
-    files_filtered = [
-        (name, content)
-        for name, content in files
-        if any(name.lower().endswith(ext.lower()) for ext in allowed_extensions)
-    ]
+    
+    files_filtered = []
+    for path in file_paths:
+        if any(path.lower().endswith(ext.lower()) for ext in allowed_extensions):
+            files_filtered.append(path)
 
     if not files_filtered:
         logger.error("No se encontraron archivos válidos para procesar")
@@ -65,12 +67,23 @@ def process_summary_task(
     )
 
     try:
+        # Pass paths directly to service, assuming service is updated to handle paths
+        # Or read content here if service expects bytes (but better to update service)
+        # For now, let's update service to accept paths.
         async_to_sync(service_method)(
             files_filtered, _current_user, prompt_config, _usage_cost_tracker
         )
     except Exception as e:
         logger.error(f"Error al procesar la tarea de resumen: {str(e)}")
         raise
+    finally:
+        # Cleanup temp files
+        for path in file_paths:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except Exception as e:
+                logger.warning(f"Failed to remove temp file {path}: {e}")
 
     return f"Resumen generado exitosamente para el usuario {_current_user}"
 
