@@ -1,13 +1,14 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { api } from '@/utils/api'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { api } from '@/utils/api'
-import SearchBar from '../../../SearchBar/SearchBar.vue'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import SearchBar from '../../../SearchBar/SearchBar'
 
 vi.mock('@/utils/api', () => ({
-  api: vi.fn(() => ({
+  api: {
     post: vi.fn(),
-  })),
+    get: vi.fn(),
+  },
 }))
 
 vi.mock('@/ConfigBrevioRequest/composables/useStoreNotification', () => ({
@@ -53,7 +54,7 @@ describe('SearchBar.ts', () => {
       summary_result: ['Test Summary'],
     }
     const mockPost = vi.fn().mockResolvedValue(mockApiResponse)
-    ;(api as any).mockImplementation(() => ({ post: mockPost }))
+      ; (api.post as any).mockImplementation(mockPost)
 
     wrapper.vm.searchValue = 'http://example.com'
     await wrapper.vm.onSearch()
@@ -73,7 +74,7 @@ describe('SearchBar.ts', () => {
 
   it('should handle API failure and trigger error notification', async () => {
     const mockPost = vi.fn().mockRejectedValue(new Error('API failure'))
-    ;(api as any).mockImplementation(() => ({ post: mockPost }))
+      ; (api.post as any).mockImplementation(mockPost)
 
     wrapper.vm.searchValue = 'http://example.com'
     await wrapper.vm.onSearch()
@@ -83,13 +84,15 @@ describe('SearchBar.ts', () => {
       language: 'es',
     })
 
+    await wrapper.vm.$nextTick()
+
     expect(wrapper.emitted()).toHaveProperty('update:error')
 
   })
 
   it('should not call API if searchValue is empty', async () => {
     const mockPost = vi.fn()
-    ;(api as any).mockImplementation(() => ({ post: mockPost }))
+      ; (api.post as any).mockImplementation(mockPost)
 
     wrapper.vm.searchValue = ''
     await wrapper.vm.onSearch()

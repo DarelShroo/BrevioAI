@@ -1,15 +1,15 @@
-import { api } from '@/utils/api'
-import { Form, message } from 'ant-design-vue'
-import { defineComponent, onMounted, reactive, ref, toRaw } from 'vue'
+import { api } from '@/utils/api';
+import { Form, message } from 'ant-design-vue';
+import { defineComponent, onMounted, reactive, ref } from 'vue';
 import { useAuthStore } from '../../../../stores/useAuthStore';
 import type {
-  LanguageTypeResponse,
-  ModelTypeResponse,
-  SummaryLevelResponse,
   AdvancedContentCombinations,
   CategoryOptions,
+  LanguageTypeResponse,
+  ModelTypeResponse,
   OutputFormatResponse,
-} from '../../interfaces/brevio-responses'
+  SummaryLevelResponse,
+} from '../../interfaces/brevio-responses';
 
 const useForm = Form.useForm
 
@@ -218,19 +218,22 @@ export default defineComponent({
 
 
 
-    const onSubmit = () => {
-      if(props.fileList.length === 0) {
+    const onSubmit = async () => {
+      if (props.fileList.length === 0) {
         message.error('Please upload a file')
         return
       }
-      validate()
-        .then(() => {
-          fetchBrevio()
-          message.success('Form submitted successfully')
-        })
-        .catch((err) => {
-          message.error('Please fill all required fields')
-        })
+      try {
+        await validate()
+        const response = await fetchBrevio()
+        if (response && response.data && response.data.message) {
+          message.success(response.data.message)
+        }
+      } catch (err) {
+        // Validation failed or other error
+        console.error(err)
+        message.error('Please fill all required fields or check your connection')
+      }
     }
 
     // Fetch data on mount
