@@ -1,9 +1,11 @@
 import asyncio
 import logging
 import os
-from typing import List, Optional, Tuple, Callable, Any
+from typing import Any, Callable, List, Optional, Tuple
 
 import aiofiles
+
+from core.brevio.enums.extension import ExtensionType
 from core.brevio.enums.language import LanguageType
 from core.brevio.managers.directory_manager import DirectoryManager
 from core.brevio.managers.token_manager import TokenManager
@@ -22,6 +24,7 @@ from core.shared.utils.json_data_utils import save_log_to_json
 from core.shared.utils.model_tokens_utils import get_encoder
 
 logger = logging.getLogger(__name__)
+
 
 class DocumentProcessor:
     def __init__(
@@ -47,11 +50,11 @@ class DocumentProcessor:
         self,
         request: DocumentProcessingRequest,
         prompt: str,
-        process_chunks_func: Callable[[List[str], str, ModelType, LanguageType], Any],
+        process_chunks_func: Callable[..., Any],
     ) -> SummaryResponse:
         file_config = request.file_config
         prompt_config = request.prompt_config
-        
+
         logger.info(f"Processing document: {file_config.document_path}")
 
         try:
@@ -73,13 +76,40 @@ class DocumentProcessor:
             text_content = ""
             if file_config.document_path:
                 if not os.path.exists(file_config.document_path):
-                    return SummaryResponse(success=False, summary="", message="File not found")
-                
-                async with aiofiles.open(file_config.document_path, "r", encoding="utf-8", errors="ignore") as f:
-                    text_content = await f.read()
+                    return SummaryResponse(
+                        success=False, summary="", message="File not found"
+                    )
+
+                file_ext = (
+                    os.path.splitext(file_config.document_path)[1].lower().lstrip(".")
+                )
+
+                if file_ext == ExtensionType.PDF.value:
+                    # Use DirectoryManager for PDF to ensure correct filtering
+                    # Pass None for history_token_model for now as it's optional
+                    fragments = await self.directory_manager.read_pdf(
+                        file_config.document_path, None
+                    )
+                    text_content = " ".join(fragments)
+                elif file_ext == ExtensionType.DOCX.value:
+                    # Use DirectoryManager for DOCX
+                    text_content = await self.directory_manager.read_docx(
+                        file_config.document_path
+                    )
+                else:
+                    # Fallback for text files
+                    async with aiofiles.open(
+                        file_config.document_path,
+                        "r",
+                        encoding="utf-8",
+                        errors="ignore",
+                    ) as f:
+                        text_content = await f.read()
 
             if not text_content:
-                return SummaryResponse(success=False, summary="", message="No content to summarize")
+                return SummaryResponse(
+                    success=False, summary="", message="No content to summarize"
+                )
 
             # 4. Chunk Text
             overlap = int(self.max_tokens_per_chunk * self._percent_chunk_overlap)
@@ -89,29 +119,64 @@ class DocumentProcessor:
             logger.info(f"Split document into {len(chunks)} chunks")
 
             # 5. Process Chunks
+            # Define temp summary path
+            temp_summary_path = ""
+            if file_config.summary_path:
+                temp_summary_path = file_config.summary_path.replace(".md", ".temp.md")
+
+            # Callback to update temp file
+            async def update_temp_summary(partial_summary: str) -> None:
+                if temp_summary_path:
+                    await self.directory_manager.overwrite_file(
+                        partial_summary, temp_summary_path
+                    )
+
             full_summary, total_tokens = await process_chunks_func(
-                chunks, prompt, prompt_config.model, prompt_config.language
+                chunks,
+                prompt,
+                prompt_config.model,
+                prompt_config.language,
+                callback=update_temp_summary,
             )
 
             # 6. Post-process
             encoder = get_encoder(prompt_config.model)
             clean_summary_tokens = len(encoder.encode(full_summary))
-            
+
             post_process_request = PostProcessRequest(
                 clean_summary=full_summary,
                 clean_summary_tokens=clean_summary_tokens,
                 model=prompt_config.model,
-                language=prompt_config.language
+                language=prompt_config.language,
             )
-            
-            final_summary = await self.post_processor.postprocess_summary(post_process_request)
+
+            final_summary = await self.post_processor.postprocess_summary(
+                post_process_request
+            )
+
+            # Save summary to file if path is provided
+            if file_config.summary_path:
+                await self.directory_manager.write_summary(
+                    final_summary, file_config.summary_path
+                )
+
+                # Cleanup temp file
+                if temp_summary_path and os.path.exists(temp_summary_path):
+                    try:
+                        await self.directory_manager.deleteFile(temp_summary_path)
+                        logger.info(f"Deleted temp summary file: {temp_summary_path}")
+                    except Exception as e:
+                        logger.warning(f"Failed to delete temp summary file: {e}")
 
             return SummaryResponse(
                 success=True,
                 summary=final_summary,
-                message="Summary generated successfully"
+                message="Summary generated successfully",
             )
 
         except Exception as e:
-            logger.error(f"Error processing document {file_config.document_path}: {e}", exc_info=True)
+            logger.error(
+                f"Error processing document {file_config.document_path}: {e}",
+                exc_info=True,
+            )
             return SummaryResponse(success=False, summary="", message=str(e))

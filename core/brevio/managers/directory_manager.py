@@ -1,9 +1,10 @@
 import asyncio
 import logging
 from collections.abc import AsyncGenerator
-from typing import Generator, Optional
+from typing import TYPE_CHECKING, Any, Generator, Optional
 
-from core.shared.models.history_token_model import HistoryTokenModel
+if TYPE_CHECKING:
+    from core.shared.models.history_token_model import HistoryTokenModel
 
 try:
     import aiofiles
@@ -141,17 +142,84 @@ class DirectoryManager:
             logger.info(f"PDF tiene {total_paginas} páginas")
             encoder = tiktoken.encoding_for_model("gpt-4")
 
+            # Create a visitor function to filter text during extraction
             fragments = []
             for i, pagina in enumerate(lector.pages):
-                texto = pagina.extract_text() or ""
-                texto_limpio = re.sub(r"\n+", "\n", texto.strip())
-                if texto_limpio:
-                    if history_token_model:
-                        history_token_model.num_chars_file += len(texto_limpio)
-                        history_token_model.num_tokens_file += len(
-                            encoder.encode(texto_limpio)
-                        )
-                    fragments.append(texto_limpio)
+                # Collect text using visitor pattern
+                collected_text = []
+
+                # State for tracking text rendering mode
+                # 3 = Invisible text (often used for OCR or metadata)
+                render_mode = 0
+
+                def visitor_body(op: bytes, args: list[Any], cm: Any, tm: Any) -> None:
+                    nonlocal render_mode
+                    if op == b"Tr" and len(args) > 0:
+                        try:
+                            render_mode = int(args[0])
+                        except (ValueError, TypeError):
+                            pass
+
+                    # Check for images (Do operator)
+                    if op == b"Do" and len(args) > 0:
+                        try:
+                            # The operand is the name of the XObject (e.g. /Im1)
+                            xobject_name = args[0]
+                            if hasattr(pagina, "images") and pagina.images:
+                                # pypdf images is a list of ImageFile objects, but mapping name to image is tricky directly from here
+                                # without parsing resources. However, we can check resources directly.
+                                if "/XObject" in pagina.resources:  # type: ignore
+                                    xobj = pagina.resources["/XObject"].get(  # type: ignore
+                                        xobject_name
+                                    )
+                                    if xobj and xobj.get("/Subtype") == "/Image":
+                                        print("imagen encontrada")
+                        except Exception:
+                            # Fail silently for image detection to not break text extraction
+                            pass
+
+                def text_visitor(
+                    text: str, cm: Any, tm: Any, font_dict: Any, font_size: float
+                ) -> None:
+                    """
+                    Visitor function called for each text fragment.
+                    Only adds text if it's visible (render_mode != 3).
+                    """
+                    # Skip invisible text (Render Mode 3)
+                    if render_mode == 3:
+                        return
+
+                    # Skip if text is None or empty
+                    if not text or not text.strip():
+                        return
+
+                    # Basic sanity check for binary garbage that might not be marked as invisible
+                    # (e.g. malformed PDF content)
+                    if "Öx" in text or "\\x0" in text:
+                        return
+
+                    # Add valid text to the list
+                    collected_text.append(text)
+
+                # Extract text with visitor function
+                pagina.extract_text(
+                    visitor_text=text_visitor, visitor_operand_before=visitor_body
+                )
+
+                # Join collected text and clean up
+                if collected_text:
+                    texto = " ".join(collected_text)
+                    texto_limpio = re.sub(r"\s+", " ", texto.strip())
+
+                    if texto_limpio:
+                        if history_token_model:
+                            history_token_model.num_chars_file += len(texto_limpio)
+                            history_token_model.num_tokens_file += len(
+                                encoder.encode(texto_limpio)
+                            )
+                        fragments.append(texto_limpio)
+
+            logger.info(f"PDF processed: {len(fragments)} pages with text content")
             return fragments
 
         fragments = await asyncio.to_thread(blocking_read)
@@ -176,9 +244,19 @@ class DirectoryManager:
     async def read_docx(self, docx_path: str) -> str:
         def blocking_read() -> str:
             doc = Document(docx_path)
-            paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
+            paragraphs = []
+            for para in doc.paragraphs:
+                # Check for images in runs
+                for run in para.runs:
+                    # Check for drawing elements (images) in the run's XML
+                    if "w:drawing" in run.element.xml or "w:pict" in run.element.xml:
+                        print("imagen encontrada")
+
+                if para.text.strip():
+                    paragraphs.append(para.text)
+
             total_paragraphs = len(paragraphs)
-            logger.info(f"DOCX tiene {total_paragraphs} párrafos")
+            logger.info(f"DOCX tiene {total_paragraphs} párrafos de texto")
             return "\n".join(paragraphs)
 
         return await asyncio.to_thread(blocking_read)
@@ -191,6 +269,16 @@ class DirectoryManager:
         except Exception as e:
             raise RuntimeError(
                 f"Error al escribir el resumen en {summary_path}: {str(e)}"
+            ) from e
+
+    async def overwrite_file(self, content: str, file_path: str) -> None:
+        try:
+            async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
+                await f.write(content)
+            logger.info(f"Archivo sobrescrito en {file_path}")
+        except Exception as e:
+            raise RuntimeError(
+                f"Error al sobrescribir el archivo en {file_path}: {str(e)}"
             ) from e
 
     def _add_toc(self, doc: DocumentType) -> None:

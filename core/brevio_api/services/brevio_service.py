@@ -211,47 +211,48 @@ class BrevioService:
         total_media_minutes = 0.0
 
         import shutil
-        
+
         for index, src_path in enumerate(file_paths):
             filename = os.path.basename(src_path)
-            # Remove UUID prefix if present (simple split by first underscore if we want original name, 
+            # Remove UUID prefix if present (simple split by first underscore if we want original name,
             # but maybe keeping unique name is fine. Let's keep unique name to avoid collisions)
             # Actually, the router added a UUID prefix. Let's keep it.
-            
+
             dest_dir = uploads_dir / str(index)
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest_path = dest_dir / filename
-            
+
             try:
                 shutil.copy2(src_path, dest_path)
                 os.chmod(dest_dir, 0o755)
             except Exception as e:
-                 logger.error(f"Error moving file {src_path} to {dest_path}: {e}")
-                 raise HTTPException(status_code=500, detail=f"Error processing file {filename}")
+                logger.error(f"Error moving file {src_path} to {dest_path}: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Error processing file {filename}"
+                )
 
         # No need for async gather of save_media anymore
-
 
         for index, src_path in enumerate(file_paths):
             filename = os.path.basename(src_path)
             dest_path = uploads_dir / str(index) / filename
-            if not await wait_for_file(file_path):
-                logger.error(f"File {file_path} not created after saving")
+            if not await wait_for_file(dest_path):
+                logger.error(f"File {dest_path} not created after saving")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"File {file_path} not created after saving",
+                    detail=f"File {dest_path} not created after saving",
                 )
             try:
-                minutes = await self.count_minutes_media(file_path)
+                minutes = await self.count_minutes_media(dest_path)
                 total_media_minutes += minutes
-                saved_files.append(MediaEntry(path=file_path))
+                saved_files.append(MediaEntry(path=dest_path))
             except ValidationError as e:
                 logger.error(
-                    f"Validation error for MediaEntry at {file_path}: {str(e)}"
+                    f"Validation error for MediaEntry at {dest_path}: {str(e)}"
                 )
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Invalid media entry for {file_path}: {str(e)}",
+                    detail=f"Invalid media entry for {dest_path}: {str(e)}",
                 )
 
         _data = BrevioGenerate(data=saved_files, prompt_config=_prompt_config)
@@ -312,17 +313,20 @@ class BrevioService:
         )
 
         import shutil
+
         for index, src_path in enumerate(file_paths):
             filename = os.path.basename(src_path)
             dest_dir = uploads_dir / str(index)
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest_path = dest_dir / filename
-            
+
             try:
                 shutil.copy2(src_path, dest_path)
             except Exception as e:
-                 logger.error(f"Error moving file {src_path} to {dest_path}: {e}")
-                 raise HTTPException(status_code=500, detail=f"Error processing file {filename}")
+                logger.error(f"Error moving file {src_path} to {dest_path}: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Error processing file {filename}"
+                )
 
         saved_files: List[MediaEntry] = []
         for index, src_path in enumerate(file_paths):

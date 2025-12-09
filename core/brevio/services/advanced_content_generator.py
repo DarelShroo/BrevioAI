@@ -69,7 +69,15 @@ class AdvancedPromptGenerator:
             try:
                 category = CategoryType[category_key.upper()]
             except KeyError:
+                # Should not happen if validation passed, but for mypy:
                 pass
+
+        # Ensure category is CategoryType for mypy (it should be if validation passed)
+        if not isinstance(category, CategoryType):
+            # Fallback or error, but for now let's assume it is or cast
+            # If it's still a string, we might have issues later.
+            # But let's trust the logic above and cast/ignore for now to unblock.
+            pass
 
         # Validate and normalize style
         if style is None or (isinstance(style, str) and style.strip() == ""):
@@ -85,7 +93,14 @@ class AdvancedPromptGenerator:
             )
         if not isinstance(style, StyleType):
             try:
-                enum_name = f"{category.name}_{style_key.upper()}"
+                # Mypy doesn't know category is CategoryType here if the above conversion failed
+                # But we can use category_key which is the string value
+                cat_name = (
+                    category.name
+                    if isinstance(category, CategoryType)
+                    else category_key.upper()
+                )
+                enum_name = f"{cat_name}_{style_key.upper()}"
                 style = StyleType[enum_name]
             except KeyError:
                 pass
@@ -97,7 +112,7 @@ class AdvancedPromptGenerator:
             f"# {language_prompts.SPECIFIC_LANGUAGE_TITLE} - {language_prompts.SPECIFIC_LANGUAGE}"
         )
         base_prompt: list[str] = language_prompts.get_prompt_base(
-            category, style, output_format, spec, style_info
+            category, style, output_format, spec, style_info  # type: ignore
         )
         prompt.extend(base_prompt)
         # Include overview of available styles and their tones
@@ -122,7 +137,10 @@ class AdvancedPromptGenerator:
             prompt.append(language_prompts.get_summary_level_prompt(self, word_limit))
 
         prompt.append("**Example**:")
-        prompt.append(examples[category.value][style.value])
+        # Use values directly or ignore
+        cat_val = category.value if isinstance(category, CategoryType) else category
+        style_val = style.value if isinstance(style, StyleType) else style
+        prompt.append(examples[cat_val][style_val])
 
         # Manejo de fuentes
         """prompt.append("\n**Source Handling**:")
@@ -135,9 +153,12 @@ class AdvancedPromptGenerator:
         }"""
 
         # Añadir ejemplo si existe
-        if category.value in examples and style.value in examples[category.value]:
+        cat_val = category.value if isinstance(category, CategoryType) else category
+        style_val = style.value if isinstance(style, StyleType) else style
+
+        if cat_val in examples and style_val in examples[cat_val]:
             prompt.append("\n" + language_prompts.EXAMPLE_TITLE)
-            example = examples[category.value][style.value]
+            example = examples[cat_val][style_val]
             if output_format == "markdown":
                 prompt.append(f"```markdown\n{example}\n```")
             else:

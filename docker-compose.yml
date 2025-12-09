@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./core:/app/core
+      - brevio_uploads:/tmp/brevio_uploads
     ports:
       - "8000:8000"
     environment:
@@ -65,6 +66,7 @@ services:
     volumes:
       - ./core:/app/core
       - ./data:/app/data
+      - brevio_uploads:/tmp/brevio_uploads
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app
@@ -85,6 +87,7 @@ services:
 
 volumes:
   db_data:
+  brevio_uploads:
 
 networks:
   app_network:
