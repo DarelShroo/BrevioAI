@@ -1,13 +1,16 @@
 import asyncio
+import io
 import json
 import logging
 import os
 import subprocess
+import zipfile
 from pathlib import Path as FilePath
 from typing import Any, Dict, List, Tuple
 
 import aiofiles
 from fastapi import HTTPException, status
+from fastapi.responses import Response
 from pydantic import HttpUrl, ValidationError
 
 from core.brevio.__main__ import Main
@@ -87,6 +90,9 @@ class BrevioService:
             raise HTTPException(
                 status_code=500, detail="Error retrieving media duration"
             ) from e
+
+    async def get_video_info(self, url: HttpUrl) -> List[Dict[str, Any]]:
+        return await self._main.get_video_info(url)
 
     def get_languages(self) -> Any:
         return self._main.get_languages()
@@ -430,3 +436,69 @@ class BrevioService:
                 await loop.run_in_executor(None, os.fsync, f.fileno())
         except Exception as e:
             raise RuntimeError(f"Error al escribir en {file_path}: {str(e)}") from e
+
+    async def download_folder_content(self, user_id: str, folder_id: str) -> Response:
+        """
+        Zips all PDF and MD files in the specified folder and returns the zip file.
+        """
+        # Construct path: data/{user_id}/{folder_id}
+        # Note: Based on observation, the structure seems to be data/{user_folder_id}/{folder_entry_id}
+        # The user request says "se le pasará el id del usuario el id de la carpeta".
+        # I need to be careful about which ID is which.
+        # Looking at generate methods:
+        # uploads_dir = FilePath(f"{Constants.DESTINATION_FOLDER}/{user_folder_id}/{current_folder_entry_id}/")
+        # So it seems we need the user's *folder* ID, not just user ID.
+        # But the request says "id del usuario".
+        # Let's resolve the user's folder ID from the user ID first.
+
+        user_service = await self._get_user_service()
+        user = await user_service.get_user_by_id(user_id)
+
+        if user is None or user.folder is None or user.folder.id is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User or user folder not found",
+            )
+
+        user_folder_id = user.folder.id
+
+        # Now we look for the specific folder (entry) inside the user's folder
+        target_dir = FilePath(
+            f"{Constants.DESTINATION_FOLDER}/{user_folder_id}/{folder_id}/"
+        )
+
+        if not target_dir.exists() or not target_dir.is_dir():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Folder {folder_id} not found for user",
+            )
+
+        # Gather files
+        files_to_zip: List[FilePath] = []
+        for ext in ["*.pdf", "*.md", "*.docx"]:
+            files_to_zip.extend(target_dir.rglob(ext))
+
+        if not files_to_zip:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No PDF, MD or DOCX files found in the folder",
+            )
+
+        # Create Zip
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            for file_path in files_to_zip:
+                # Arcname should be relative to the target_dir to preserve structure inside zip?
+                # Or just flat? Let's preserve structure relative to target_dir.
+                arcname = file_path.relative_to(target_dir)
+                zip_file.write(file_path, arcname)
+
+        zip_buffer.seek(0)
+
+        return Response(
+            content=zip_buffer.getvalue(),
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f"attachment; filename=download_{folder_id}.zip"
+            },
+        )

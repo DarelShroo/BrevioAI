@@ -1,5 +1,5 @@
 import base64
-from typing import Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from bson import ObjectId
 from fastapi import (
@@ -12,7 +12,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import HttpUrl
 
 from core.brevio.enums.extension import ExtensionType
@@ -206,6 +206,33 @@ class BrevioRoutes:
                 )
 
         @self.router.post(
+            "/preview-youtube",
+            description="Get video metadata for preview",
+            status_code=status.HTTP_200_OK,
+            responses={
+                401: {"description": "Invalid API key"},
+                422: {"description": "Invalid URL format"},
+            },
+        )
+        async def preview_youtube(
+            request: UrlYT,
+            verify_api_key: str = Depends(verify_api_key),
+            brevio_service: BrevioService = Depends(get_brevio_service),
+        ) -> Dict[str, List[Dict[str, Any]]]:
+            try:
+                video_info = await brevio_service.get_video_info(request.url)
+                return {"data": video_info}
+            except ValueError as ve:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve)
+                )
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Error processing YouTube URL: {str(e)}",
+                )
+
+        @self.router.post(
             "/summary-media",
             response_model=ProcessingMessageResponse,
             description="""
@@ -254,19 +281,19 @@ class BrevioRoutes:
             import os
             import shutil
             import uuid
-            
+
             upload_dir = "/tmp/brevio_uploads"
             os.makedirs(upload_dir, exist_ok=True)
-            
+
             file_paths = []
             for file in files:
                 file_id = str(uuid.uuid4())
                 filename = file.filename or "unknown"
                 file_path = os.path.join(upload_dir, f"{file_id}_{filename}")
-                
+
                 with open(file_path, "wb") as buffer:
                     shutil.copyfileobj(file.file, buffer)
-                
+
                 file_paths.append(file_path)
 
             # Start Celery task
@@ -340,19 +367,19 @@ class BrevioRoutes:
             import os
             import shutil
             import uuid
-            
+
             upload_dir = "/tmp/brevio_uploads"
             os.makedirs(upload_dir, exist_ok=True)
-            
+
             file_paths = []
             for file in files:
                 file_id = str(uuid.uuid4())
                 filename = file.filename or "unknown"
                 file_path = os.path.join(upload_dir, f"{file_id}_{filename}")
-                
+
                 with open(file_path, "wb") as buffer:
                     shutil.copyfileobj(file.file, buffer)
-                
+
                 file_paths.append(file_path)
 
             # Start Celery task
@@ -388,6 +415,25 @@ class BrevioRoutes:
             response = ProcessingMessageResponse(data=ProcessingMessageData())
             return JSONResponse(
                 content=response.model_dump(), status_code=status.HTTP_202_ACCEPTED
+            )
+
+        @self.router.get(
+            "/download/{folder_id}",
+            description="Download all PDF and MD files from a specific folder as a ZIP archive.",
+            status_code=status.HTTP_200_OK,
+            responses={
+                401: {"description": "Unauthorized"},
+                404: {"description": "Folder or files not found"},
+            },
+        )
+        async def download_folder(
+            folder_id: str,
+            verify_api_key: str = Depends(verify_api_key),
+            _current_user: ObjectId = Depends(get_current_user),
+            brevio_service: BrevioService = Depends(get_brevio_service),
+        ) -> Response:
+            return await brevio_service.download_folder_content(
+                str(_current_user), folder_id
             )
 
 

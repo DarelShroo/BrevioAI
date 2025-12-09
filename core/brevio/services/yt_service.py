@@ -188,3 +188,58 @@ class YTService:
                 for entry in (info.get("entries", []) if info else [])
                 if "url" in entry
             ]
+
+    async def get_video_info(self, url: HttpUrl) -> List[Dict[str, Any]]:
+        try:
+            self.logger.info(f"Obteniendo información del video/playlist: {url}")
+            ydl_opts = {
+                "quiet": True,
+                "extract_flat": True,
+                "ignoreerrors": True,
+                "skip_download": True,
+                "ignore_no_formats_error": True,
+                "extractor_args": {
+                    "youtube": {
+                        "player_client": ["android", "web"],
+                    }
+                },
+                "http_headers": {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                },
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = await asyncio.to_thread(
+                    ydl.extract_info, str(url), download=False
+                )
+
+                if not info:
+                    raise ValueError("No se pudo obtener información del video.")
+
+                results = []
+                if "entries" in info:  # Playlist
+                    for entry in info["entries"]:
+                        if entry:
+                            results.append(
+                                {
+                                    "title": entry.get("title", "Unknown Title"),
+                                    "url": entry.get("url", ""),
+                                    "duration": entry.get("duration", 0),
+                                    "thumbnail": entry.get("thumbnail", ""),
+                                    "id": entry.get("id", ""),
+                                }
+                            )
+                else:  # Single video
+                    results.append(
+                        {
+                            "title": info.get("title", "Unknown Title"),
+                            "url": info.get("webpage_url", str(url)),
+                            "duration": info.get("duration", 0),
+                            "thumbnail": info.get("thumbnail", ""),
+                            "id": info.get("id", ""),
+                        }
+                    )
+
+                return results
+        except Exception as e:
+            self.logger.error(f"Error obteniendo información de {url}: {str(e)}")
+            raise

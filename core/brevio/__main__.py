@@ -56,6 +56,19 @@ class Main:
                 status_code=500, detail=f"Unexpected error getting duration"
             )
 
+    async def get_video_info(self, url: HttpUrl) -> List[Dict[str, Any]]:
+        try:
+            result: List[Dict[str, Any]] = await self._yt_service.get_video_info(url)
+            logger.debug(f"Successfully got info for video: {url}")
+            return result
+        except Exception as e:
+            logger.error(
+                f"Unexpected error getting info for {url}: {str(e)}", exc_info=True
+            )
+            raise HTTPException(
+                status_code=500, detail=f"Unexpected error getting video info"
+            )
+
     @staticmethod
     def get_languages() -> Any:
         try:
