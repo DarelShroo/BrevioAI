@@ -13,6 +13,7 @@ from core.brevio.models.dtos import DocumentProcessingRequest, PostProcessReques
 from core.brevio.models.file_config_model import FileConfig
 from core.brevio.models.prompt_config_model import PromptConfig
 from core.brevio.models.response_model import SummaryResponse
+from core.brevio.services.pdf_service import PdfService
 from core.brevio.services.summary_chunk_generator import SummaryChunkGenerator
 from core.brevio.services.summary_post_processor import SummaryPostProcessor
 from core.brevio.services.transcription_service import TranscriptionService
@@ -35,6 +36,7 @@ class DocumentProcessor:
         transcription_service: TranscriptionService,
         yt_service: YTService,
         directory_manager: DirectoryManager,
+        pdf_service: PdfService,
         max_tokens_per_chunk: int,
     ):
         self.token_manager = token_manager
@@ -43,6 +45,7 @@ class DocumentProcessor:
         self.transcription_service = transcription_service
         self.yt_service = yt_service
         self.directory_manager = directory_manager
+        self.pdf_service = pdf_service
         self.max_tokens_per_chunk = max_tokens_per_chunk
         self._percent_chunk_overlap = 0.2
 
@@ -167,6 +170,11 @@ class DocumentProcessor:
                         logger.info(f"Deleted temp summary file: {temp_summary_path}")
                     except Exception as e:
                         logger.warning(f"Failed to delete temp summary file: {e}")
+
+            # Generate PDF
+            if file_config.summary_path:
+                pdf_path = file_config.summary_path.replace(".md", ".pdf")
+                self.pdf_service.generate_pdf(final_summary, pdf_path)
 
             return SummaryResponse(
                 success=True,

@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Install system dependencies first (cached unless changed)
 RUN apt-get update && \
-    apt-get install -y python3.12 python3.12-venv libglib2.0-0 && \
+    apt-get install -y python3.12 python3.12-venv libglib2.0-0 libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0 shared-mime-info && \
     rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment

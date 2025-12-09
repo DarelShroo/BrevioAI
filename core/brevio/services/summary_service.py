@@ -16,6 +16,7 @@ from core.brevio.models.file_config_model import FileConfig
 from core.brevio.models.prompt_config_model import PromptConfig
 from core.brevio.models.response_model import SummaryResponse
 from core.brevio.services.document_processor import DocumentProcessor
+from core.brevio.services.pdf_service import PdfService
 from core.brevio.services.summary_chunk_generator import SummaryChunkGenerator
 from core.brevio.services.summary_post_processor import SummaryPostProcessor
 from core.brevio.services.transcription_service import TranscriptionService
@@ -48,7 +49,7 @@ class SummaryService:
         self.max_concurrent_chunks = 8
         self.max_concurrent_files = 1000
         self.max_concurrent_requests = 100000
-        
+
         self.token_manager = TokenManager()
 
         self.task_queue: asyncio.Queue[
@@ -77,7 +78,7 @@ class SummaryService:
         )
         self.client: Optional[AsyncOpenAI] = None
         self.directory_manager = DirectoryManager()
-        
+
         # Initialize sub-services
         self.chunk_generator = SummaryChunkGenerator(
             self.token_manager,
@@ -85,10 +86,10 @@ class SummaryService:
             self.history_token_model,
             self.max_tokens,
             self.temperature,
-            self.context_token_limit
+            self.context_token_limit,
         )
         self.chunk_generator.set_queue_info(self.task_queue, self.queue_lock)
-        
+
         self.post_processor = SummaryPostProcessor(
             self.token_manager,
             self.advanced_prompt_generator,
@@ -97,13 +98,14 @@ class SummaryService:
             self.max_tokens,
             self.temperature,
             self.max_tokens_per_chunk,
-            self._percent_chunk_overlap
+            self._percent_chunk_overlap,
         )
         self.post_processor.set_queue_info(self.task_queue, self.queue_lock)
-        
+
         self.transcription_service = TranscriptionService()
         self.yt_service = YTService()
-        
+        self.pdf_service = PdfService()
+
         self.document_processor = DocumentProcessor(
             self.token_manager,
             self.chunk_generator,
@@ -111,7 +113,8 @@ class SummaryService:
             self.transcription_service,
             self.yt_service,
             self.directory_manager,
-            self.max_tokens_per_chunk
+            self.pdf_service,
+            self.max_tokens_per_chunk,
         )
 
         logger.debug(
@@ -123,7 +126,7 @@ class SummaryService:
             f"overlap={self._percent_chunk_overlap}, "
             f"context_limit={self.context_token_limit}"
         )
-    
+
     async def start(self) -> None:
         if not self.running:
             self.running = True
@@ -178,7 +181,9 @@ class SummaryService:
                 )
                 logger.debug(f"Group estimated tokens needed: {total_tokens_needed}")
 
-                while not await self.token_manager.check_token_limit(total_tokens_needed):
+                while not await self.token_manager.check_token_limit(
+                    total_tokens_needed
+                ):
                     logger.warning(
                         f"Token limit reached for group: needed={total_tokens_needed}, "
                         f"available={self.token_manager.token_bucket}. Waiting 5 seconds"
@@ -197,16 +202,16 @@ class SummaryService:
                         prompt=prompt,
                         accumulated_summary=accumulated_summary,
                         model=model,
-                        language=language
+                        language=language,
                     )
                     if not self.client:
-                         raise ValueError("Client not initialized")
+                        raise ValueError("Client not initialized")
                     tasks.append(
                         asyncio.create_task(
                             self.chunk_generator.generate_chunk(request, self.client)
                         )
                     )
-                
+
                 self.running_tasks.extend(tasks)
 
                 try:
@@ -257,11 +262,13 @@ class SummaryService:
                         prompt=prompt,
                         accumulated_summary=accumulated_summary,
                         model=model,
-                        language=language
+                        language=language,
                     )
                     if not self.client:
-                         raise ValueError("Client not initialized")
-                    result = await self.chunk_generator.generate_chunk(request, self.client)
+                        raise ValueError("Client not initialized")
+                    result = await self.chunk_generator.generate_chunk(
+                        request, self.client
+                    )
                     idx, chunk_summary, tokens_used = result
                     if chunk_summary is not None:
                         chunk_summaries[index] = chunk_summary
@@ -359,17 +366,22 @@ class SummaryService:
                 prompt_config.summary_level,
             )
 
-
             tasks = [
                 self._process_single_document(
-                    prompt, file_config, prompt_config.model, prompt_config.language, prompt_config
+                    prompt,
+                    file_config,
+                    prompt_config.model,
+                    prompt_config.language,
+                    prompt_config,
                 )
                 for file_config in file_configs
             ]
             return await asyncio.gather(*tasks)
 
         except Exception as e:
-            logger.error(f"Error in generate_summary_documents: {str(e)}", exc_info=True)
+            logger.error(
+                f"Error in generate_summary_documents: {str(e)}", exc_info=True
+            )
             return [
                 SummaryResponse(
                     success=False,
@@ -385,16 +397,12 @@ class SummaryService:
         file_config: FileConfig,
         model: ModelType,
         language: LanguageType,
-        prompt_config: PromptConfig
+        prompt_config: PromptConfig,
     ) -> SummaryResponse:
         self.client = await self.api_service._initialize_client(model)
         request = DocumentProcessingRequest(
-            prompt_config=prompt_config,
-            file_config=file_config
+            prompt_config=prompt_config, file_config=file_config
         )
         return await self.document_processor.process_single_document(
-            request,
-            prompt,
-            self.process_chunks_in_groups
+            request, prompt, self.process_chunks_in_groups
         )
-
