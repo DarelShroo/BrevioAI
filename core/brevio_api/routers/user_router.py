@@ -4,7 +4,9 @@ from typing import List
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from core.brevio_api.dependencies import FolderEntryServiceDependency
+from core.brevio_api.dependencies.folder_entry_service_dependency import (
+    get_folder_entry_service,
+)
 from core.brevio_api.dependencies.user_dependency import get_current_user
 from core.brevio_api.models.responses.folder_entry_response import GetEntriesResponse
 from core.brevio_api.models.user.entry_ref import EntryRef
@@ -42,7 +44,7 @@ class UserRouter:
             entry_data: EntryRef,
             _current_user: str = Depends(get_current_user),
             folder_entry_service: FolderEntryService = Depends(
-                FolderEntryServiceDependency
+                get_folder_entry_service
             ),
         ) -> GetEntriesResponse:
             try:

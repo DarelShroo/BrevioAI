@@ -3,11 +3,11 @@ from typing import Optional, Type
 from bson import ObjectId
 from pydantic import ConfigDict, Field, field_validator
 
-from .base_model import BaseModel
+from .base_model import BaseModel, SerializedObjectId
 
 
 class DataResult(BaseModel):
-    id: ObjectId = Field(default_factory=ObjectId, alias="_id")
+    id: SerializedObjectId = Field(default_factory=ObjectId, alias="_id")
     index: Optional[int] = None
     url: Optional[str] = None
     download_location: Optional[str] = None

@@ -417,9 +417,52 @@ class BrevioRoutes:
                 content=response.model_dump(), status_code=status.HTTP_202_ACCEPTED
             )
 
+        from core.brevio_api.models.brevio.responses.file_listing_response import (
+            FolderContentResponse,
+            UserFoldersResponse,
+        )
+
         @self.router.get(
-            "/download/{folder_id}",
-            description="Download all PDF and MD files from a specific folder as a ZIP archive.",
+            "/user-folders",
+            response_model=UserFoldersResponse,
+            description="List all folder IDs for the authenticated user.",
+            status_code=status.HTTP_200_OK,
+            responses={401: {"description": "Unauthorized"}},
+        )
+        async def list_user_folders(
+            verify_api_key: str = Depends(verify_api_key),
+            _current_user: ObjectId = Depends(get_current_user),
+            brevio_service: BrevioService = Depends(get_brevio_service),
+        ) -> UserFoldersResponse:
+            return await brevio_service.list_user_folders(str(_current_user))
+
+        @self.router.get(
+            "/folder/{folder_id}/files",
+            response_model=FolderContentResponse,
+            description="List content (files and subfolders) of a specific folder.",
+            status_code=status.HTTP_200_OK,
+            responses={
+                401: {"description": "Unauthorized"},
+                404: {"description": "Folder not found"},
+            },
+        )
+        async def list_folder_content(
+            folder_id: str,
+            verify_api_key: str = Depends(verify_api_key),
+            _current_user: ObjectId = Depends(get_current_user),
+            brevio_service: BrevioService = Depends(get_brevio_service),
+        ) -> FolderContentResponse:
+            return await brevio_service.list_folder_content(
+                str(_current_user), folder_id
+            )
+
+        from core.brevio_api.models.brevio.requests.download_request import (
+            DownloadRequest,
+        )
+
+        @self.router.post(
+            "/download",
+            description="Download specific files from a folder with optional renaming.",
             status_code=status.HTTP_200_OK,
             responses={
                 401: {"description": "Unauthorized"},
@@ -427,13 +470,13 @@ class BrevioRoutes:
             },
         )
         async def download_folder(
-            folder_id: str,
+            request: DownloadRequest,
             verify_api_key: str = Depends(verify_api_key),
             _current_user: ObjectId = Depends(get_current_user),
             brevio_service: BrevioService = Depends(get_brevio_service),
         ) -> Response:
-            return await brevio_service.download_folder_content(
-                str(_current_user), folder_id
+            return await brevio_service.download_files_advanced(
+                str(_current_user), request
             )
 
 

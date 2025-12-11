@@ -1,13 +1,16 @@
 import logging
 import random
 from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 from bson import ObjectId
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from pydantic import EmailStr, ValidationError
 from pymongo.errors import PyMongoError
+from starlette import status
 
+from core.brevio_api.models.brevio.file_metadata import FileMetadata
 from core.brevio_api.models.user.folder_entry import FolderEntry
 from core.brevio_api.models.user.user_folder import UserFolder
 from core.brevio_api.models.user.user_model import User
@@ -223,7 +226,7 @@ class UserService:
                 detail=f"Error changing password: {str(e)}",
             )
 
-    async def create_folder_entry(self, user_id: str) -> str:
+    async def create_folder_entry(self, user_id: str, name: str = "") -> str:
         try:
             logger.debug(f"Creating FolderEntry for user ID: {user_id}")
 
@@ -238,7 +241,7 @@ class UserService:
             elif user.folder.entries is None:
                 user.folder.entries = []
 
-            entry = FolderEntry(user_id=user.id, name="", results=[])
+            entry = FolderEntry(user_id=user.id, name=name, results=[])
 
             created_entry = await self._folder_entry_repo.create_folder_entry(entry)
 
@@ -337,10 +340,51 @@ class UserService:
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(
-                f"Unexpected error creating DataResult: {str(e)}", exc_info=True
-            )
             raise HTTPException(
                 status_code=500,
                 detail=f"Unexpected error creating DataResult: {str(e)}",
+            )
+
+    async def update_folder_entry_metadata(
+        self, folder_entry_id: str, files_metadata: List[FileMetadata]
+    ) -> None:
+        try:
+            logger.debug(f"Updating metadata for FolderEntry ID: {folder_entry_id}")
+
+            if not ObjectId.is_valid(folder_entry_id):
+                raise HTTPException(
+                    status_code=400, detail="Invalid FolderEntry ID format"
+                )
+
+            metadata_dicts = [m.model_dump(mode="json") for m in files_metadata]
+
+            update_data = {
+                "$set": {
+                    "files_metadata": metadata_dicts,
+                    "updated_at": datetime.now(ZoneInfo("UTC")),
+                }
+            }
+
+            update_result = await self._folder_entry_repo.update_folder_entry(
+                folder_entry_id, update_data
+            )
+
+            if not update_result:
+                logger.error(
+                    f"Failed to update metadata for FolderEntry {folder_entry_id}"
+                )
+                raise HTTPException(
+                    status_code=500, detail="Failed to update folder entry metadata"
+                )
+
+            logger.info(f"Metadata updated for FolderEntry {folder_entry_id}")
+
+        except Exception as e:
+            logger.error(
+                f"Error updating metadata for FolderEntry {folder_entry_id}: {str(e)}",
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error updating folder entry metadata: {str(e)}",
             )

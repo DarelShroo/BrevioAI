@@ -8,7 +8,7 @@ from core.brevio_api.__main__ import (  # ← Ajusta la ruta si tu app está en 
     app,
 )
 from core.brevio_api.dependencies.folder_entry_service_dependency import (
-    FolderEntryServiceDependency,
+    get_folder_entry_service,
 )
 from core.brevio_api.dependencies.user_dependency import get_current_user
 
@@ -27,7 +27,7 @@ async def test_get_user_entries() -> None:
     ]
 
     app.dependency_overrides[get_current_user] = lambda: mock_user_id
-    app.dependency_overrides[FolderEntryServiceDependency] = lambda: mock_service
+    app.dependency_overrides[get_folder_entry_service] = lambda: mock_service
 
     entries_refs = [str(ObjectId()), str(ObjectId())]
     payload = {"entries_refs": entries_refs}

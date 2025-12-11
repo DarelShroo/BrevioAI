@@ -28,6 +28,9 @@ class FolderEntryService:
                         status_code=400, detail=f"Invalid ObjectId format: {entry_id}"
                     )
 
+            logger.info(
+                f"Fetching entries for user {_user_id} with refs {_entries_refs_obj_ids}"
+            )
             user_entries = await self._folder_entry_repo.get_entries_ids_by_user_id(
                 _user_id, _entries_refs_obj_ids
             )
@@ -36,6 +39,9 @@ class FolderEntryService:
                 raise HTTPException(status_code=404, detail="No Entries found")
 
             return user_entries
+        except ValueError as e:
+            logger.error(f"ValueError in get_entries: {e}", exc_info=True)
+            raise
         except HTTPException:
             raise
         except Exception as e:

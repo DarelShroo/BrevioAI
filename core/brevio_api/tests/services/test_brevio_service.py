@@ -119,7 +119,9 @@ async def test_generate_success(
 
             # Verificar que se llamó a create_folder_entry
             mock_user_service = cast(MagicMock, brevio_service._user_service)
-            mock_user_service.create_folder_entry.assert_awaited_once_with(user_id)
+            mock_user_service.create_folder_entry.assert_awaited_once_with(
+                user_id, name="http://example.com/test.mp3"
+            )
 
 
 @pytest.mark.asyncio

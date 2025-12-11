@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./core:/app/core
+      - ./data:/app/data
       - brevio_uploads:/tmp/brevio_uploads
     ports:
       - "8000:8000"
@@ -19,7 +20,7 @@ services:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [gpu]
+              capabilities: [ gpu ]
     depends_on:
       - database
     networks:
@@ -81,13 +82,14 @@ services:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [gpu]
+              capabilities: [ gpu ]
     networks:
       - app_network
 
 volumes:
   db_data:
   brevio_uploads:
+
 
 networks:
   app_network:

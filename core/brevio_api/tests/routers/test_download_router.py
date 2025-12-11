@@ -51,7 +51,7 @@ async def test_download_folder_success() -> None:
     # Mock the service method to return a Response
     from fastapi.responses import Response
 
-    mock_brevio_service.download_folder_content.return_value = Response(
+    mock_brevio_service.download_files_advanced.return_value = Response(
         content=b"fake_zip_content",
         media_type="application/zip",
         headers={
@@ -60,7 +60,9 @@ async def test_download_folder_success() -> None:
     )
 
     # Execute
-    response = client.get(f"/brevio/download/{folder_id}")
+    # The route is POST /brevio/download with a body
+    payload = {"folder_id": folder_id, "files": [], "download_all": True}
+    response = client.post("/brevio/download", json=payload)
 
     # Verify
     assert response.status_code == 200
@@ -70,9 +72,12 @@ async def test_download_folder_success() -> None:
         "attachment; filename=download_test_folder_id.zip"
         in response.headers["content-disposition"]
     )
-    mock_brevio_service.download_folder_content.assert_called_once_with(
-        user_id, folder_id
-    )
+    # Check if ANY call to download_files_advanced matches what we expect, as kwargs might be used
+    # The first arg is user_id, second is DownloadRequest model
+    assert mock_brevio_service.download_files_advanced.called
+    call_args = mock_brevio_service.download_files_advanced.call_args
+    assert call_args[0][0] == user_id
+    assert call_args[0][1].folder_id == folder_id
 
 
 @pytest.mark.asyncio
@@ -83,12 +88,13 @@ async def test_download_folder_not_found() -> None:
 
     from fastapi import HTTPException
 
-    mock_brevio_service.download_folder_content.side_effect = HTTPException(
+    mock_brevio_service.download_files_advanced.side_effect = HTTPException(
         status_code=404, detail="Folder not found"
     )
 
     # Execute
-    response = client.get(f"/brevio/download/{folder_id}")
+    payload = {"folder_id": folder_id, "files": [], "download_all": True}
+    response = client.post("/brevio/download", json=payload)
 
     # Verify
     assert response.status_code == 404

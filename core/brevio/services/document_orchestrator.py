@@ -15,6 +15,7 @@ from core.shared.models.user.data_result import DataResult
 
 logger = logging.getLogger(__name__)
 
+
 class DocumentOrchestrator:
     def __init__(
         self,
@@ -36,7 +37,8 @@ class DocumentOrchestrator:
         _usage_cost_tracker: Optional[Any] = None,
     ) -> Dict[str, str]:
         try:
-            data_result = DataResult(name=f"Document {index}")
+            filename = os.path.basename(document_path)
+            data_result = DataResult(name=filename)
             destination_path = f"{Constants.DESTINATION_FOLDER}/{_user_folder_id}/{current_folder_entry_id}/{index}"
             summary_path = path.join(destination_path, Constants.SUMMARY_FILE)
 
@@ -51,10 +53,14 @@ class DocumentOrchestrator:
             summary_responses = await self._summary_service.generate_summary_documents(
                 data.prompt_config, [_file_config]
             )
-            
+
             if not summary_responses or not summary_responses[0].success:
-                 error_msg = summary_responses[0].message if summary_responses else "Unknown error"
-                 raise RuntimeError(f"Failed to generate summary: {error_msg}")
+                error_msg = (
+                    summary_responses[0].message
+                    if summary_responses
+                    else "Unknown error"
+                )
+                raise RuntimeError(f"Failed to generate summary: {error_msg}")
 
             data_result.download_location = destination_path
             data_result.index = index
