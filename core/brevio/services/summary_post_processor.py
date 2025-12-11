@@ -1,11 +1,22 @@
 import asyncio
 import logging
-from typing import Optional, List, Any
+from typing import Any, List, Optional
 
 import httpx
-from openai import AsyncOpenAI, BadRequestError, AuthenticationError, RateLimitError, APIConnectionError
+from openai import (
+    APIConnectionError,
+    AsyncOpenAI,
+    AuthenticationError,
+    BadRequestError,
+    RateLimitError,
+)
 from openai.types.chat import ChatCompletion
-from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from core.brevio.managers.token_manager import TokenManager
 from core.brevio.models.dtos import PostProcessRequest
@@ -14,10 +25,12 @@ from core.shared.enums.type_call import TypeCall
 from core.shared.models.brevio.history_token_call import HistoryTokenCall
 from core.shared.models.history_token_model import HistoryTokenModel
 from core.shared.utils.model_tokens_utils import get_encoder
+
 from .advanced_content_generator import AdvancedPromptGenerator
 from .api_service import ApiService
 
 logger = logging.getLogger(__name__)
+
 
 class SummaryPostProcessor:
     def __init__(
@@ -29,7 +42,7 @@ class SummaryPostProcessor:
         max_tokens: int,
         temperature: float,
         max_tokens_per_chunk: int,
-        percent_chunk_overlap: float = 0.2
+        percent_chunk_overlap: float = 0.2,
     ):
         self.token_manager = token_manager
         self.advanced_prompt_generator = advanced_prompt_generator
@@ -43,7 +56,9 @@ class SummaryPostProcessor:
         self.queue_lock: Optional[asyncio.Lock] = None
         self.tasks_put = 0
 
-    def set_queue_info(self, task_queue: asyncio.Queue, queue_lock: asyncio.Lock) -> None:
+    def set_queue_info(
+        self, task_queue: asyncio.Queue, queue_lock: asyncio.Lock
+    ) -> None:
         self.task_queue = task_queue
         self.queue_lock = queue_lock
 
@@ -54,13 +69,12 @@ class SummaryPostProcessor:
             (RateLimitError, APIConnectionError, AuthenticationError)
         ),
     )
-    async def postprocess_summary(
-        self,
-        request: PostProcessRequest
-    ) -> str:
+    async def postprocess_summary(self, request: PostProcessRequest) -> str:
         encoder = get_encoder(request.model)
 
-        logger.info(f"Postprocessing summary: input_tokens={request.clean_summary_tokens}")
+        logger.info(
+            f"Postprocessing summary: input_tokens={request.clean_summary_tokens}"
+        )
 
         if not request.clean_summary.strip():
             logger.error("Input summary is empty, skipping postprocessing")
@@ -71,7 +85,9 @@ class SummaryPostProcessor:
             logger.debug(f"Postprocessing tokens needed: {tokens_needed}")
 
             postprocess_prompt = (
-                await self.advanced_prompt_generator.get_postprocess_prompt(request.language)
+                await self.advanced_prompt_generator.get_postprocess_prompt(
+                    request.language
+                )
             )
             logger.debug(f"Postprocess prompt: {postprocess_prompt[:100]}...")
             client = await self.api_service._initialize_client(request.model)
@@ -86,7 +102,7 @@ class SummaryPostProcessor:
                     # For now, just returning original summary if we can't process
                     # Or we should implement the requeue logic here if we have access to the queue
                     if self.task_queue and self.queue_lock:
-                         async with self.queue_lock:
+                        async with self.queue_lock:
                             await self.task_queue.put(
                                 (
                                     self.postprocess_summary,
@@ -97,8 +113,10 @@ class SummaryPostProcessor:
                             logger.debug(
                                 f"Queued postprocess_summary task, total tasks put: {self.tasks_put}"
                             )
-                            return request.clean_summary # Return original while task is queued
-                    
+                            return (
+                                request.clean_summary
+                            )  # Return original while task is queued
+
                     return request.clean_summary
 
                 try:
@@ -107,7 +125,10 @@ class SummaryPostProcessor:
                             model=request.model.value,
                             messages=[
                                 {"role": "system", "content": postprocess_prompt},
-                                {"role": "user", "content": f"\n\n{request.clean_summary}"},
+                                {
+                                    "role": "user",
+                                    "content": f"\n\n{request.clean_summary}",
+                                },
                             ],
                             max_tokens=self.max_tokens,
                             temperature=self.temperature,
@@ -289,13 +310,18 @@ class SummaryPostProcessor:
             logger.error(f"Postprocessing failed: {str(e)}", exc_info=True)
             return request.clean_summary
 
-    def _record_history(self, system_prompt: str, user_prompt: str, response: ChatCompletion, encoder: Any, type_call: TypeCall) -> int:
+    def _record_history(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        response: ChatCompletion,
+        encoder: Any,
+        type_call: TypeCall,
+    ) -> int:
         system_tokens = len(encoder.encode(system_prompt))
         user_tokens = len(encoder.encode(user_prompt))
         output_tokens = (
-            response.usage.completion_tokens
-            if response.usage is not None
-            else 0
+            response.usage.completion_tokens if response.usage is not None else 0
         )
         self.history_token_model.history_tokens_per_call.append(
             HistoryTokenCall(
@@ -305,11 +331,11 @@ class SummaryPostProcessor:
                 response_tokens=output_tokens,
             )
         )
-        
+
         if type_call == TypeCall.POSTPROCESSING:
             self.history_token_model.total_tokens_postprocess_input += (
                 system_tokens + user_tokens
             )
             self.history_token_model.total_tokens_postprocess_output += output_tokens
-            
+
         return output_tokens

@@ -2,6 +2,8 @@ import asyncio
 import logging
 from typing import Any, Callable, Dict, Optional
 
+from pydantic import HttpUrl
+
 from core.brevio.managers.directory_manager import DirectoryManager
 from core.brevio.services.audio_service import AudioService
 from core.brevio.services.document_orchestrator import DocumentOrchestrator
@@ -11,9 +13,9 @@ from core.brevio.services.video_orchestrator import VideoOrchestrator
 from core.brevio.services.yt_service import YTService
 from core.shared.models.brevio.brevio_generate import BrevioGenerate
 from core.shared.models.user.data_result import DataResult
-from pydantic import HttpUrl
 
 logger = logging.getLogger(__name__)
+
 
 class UsageCostTracker:
     """Placeholder for usage cost tracker with cost breakdown methods."""
@@ -33,17 +35,16 @@ class Generate:
             self._transcription_service = TranscriptionService()
             self._yt_service = YTService()
             self._audio_service = AudioService()
-            
+
             self._video_orchestrator = VideoOrchestrator(
                 self._directory_manager,
                 self._summary_service,
                 self._transcription_service,
                 self._yt_service,
-                self._audio_service
+                self._audio_service,
             )
             self._document_orchestrator = DocumentOrchestrator(
-                self._directory_manager,
-                self._summary_service
+                self._directory_manager, self._summary_service
             )
             logger.info("Generate class initialized successfully")
         except Exception as e:
@@ -68,7 +69,13 @@ class Generate:
         _user_id: str,
     ) -> Dict[str, str]:
         return await self._video_orchestrator.process_video(
-            index, video, data, _create_data_result, current_folder_entry_id, _user_folder_id, _user_id
+            index,
+            video,
+            data,
+            _create_data_result,
+            current_folder_entry_id,
+            _user_folder_id,
+            _user_id,
         )
 
     async def _process_online_audio_data(
@@ -204,5 +211,12 @@ class Generate:
         _usage_cost_tracker: Optional[UsageCostTracker] = None,
     ) -> Dict[str, str]:
         return await self._document_orchestrator.process_document(
-            index, document_path, _data, current_folder_entry_id, _user_folder_id, _user_id, _create_data_result, _usage_cost_tracker
+            index,
+            document_path,
+            _data,
+            current_folder_entry_id,
+            _user_folder_id,
+            _user_id,
+            _create_data_result,
+            _usage_cost_tracker,
         )

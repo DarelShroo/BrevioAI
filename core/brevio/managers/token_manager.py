@@ -6,6 +6,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+
 class TokenManager:
     def __init__(self) -> None:
         self.tokens_per_minute = int(os.getenv("MAX_TOKEN_PER_MINUTE", 200000))
@@ -32,7 +33,7 @@ class TokenManager:
                 f"Token check passed: needed={tokens_needed}, available={self.token_bucket}"
             )
             return True
-        
+
         waited = 0
         while waited <= self.max_wait:
             logger.warning(
@@ -46,7 +47,7 @@ class TokenManager:
                 )
                 return True
             waited += 5
-            
+
         logger.error(f"Waited too long ({waited}s) for tokens, aborting")
         raise TimeoutError(
             f"Could not acquire {tokens_needed} tokens after {self.max_wait}s"

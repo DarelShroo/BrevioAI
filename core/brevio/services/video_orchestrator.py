@@ -21,6 +21,7 @@ from core.shared.models.user.data_result import DataResult
 
 logger = logging.getLogger(__name__)
 
+
 class VideoOrchestrator:
     def __init__(
         self,
@@ -95,16 +96,19 @@ class VideoOrchestrator:
             file_config = FileConfig(
                 transcription_path=transcription_path, summary_path=summary_path
             )
-            
+
             # Generate summary
             summary_responses = await self._summary_service.generate_summary_documents(
-                prompt_config=data.prompt_config,
-                file_configs=[file_config]
+                prompt_config=data.prompt_config, file_configs=[file_config]
             )
-            
+
             if not summary_responses or not summary_responses[0].success:
-                 error_msg = summary_responses[0].message if summary_responses else "Unknown error"
-                 raise RuntimeError(f"Failed to generate summary: {error_msg}")
+                error_msg = (
+                    summary_responses[0].message
+                    if summary_responses
+                    else "Unknown error"
+                )
+                raise RuntimeError(f"Failed to generate summary: {error_msg}")
 
             if not await self._verify_file_exists(Path(summary_path)):
                 raise FileNotFoundError(f"Archivo de resumen no creado: {summary_path}")

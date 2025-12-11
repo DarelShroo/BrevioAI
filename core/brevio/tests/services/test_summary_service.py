@@ -10,10 +10,11 @@ from openai.types import CompletionUsage
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
 
 from core.brevio.enums.language import LanguageType
+from core.brevio.models.dtos import ChunkProcessingRequest
 from core.brevio.services.summary_service import SummaryService
 from core.brevio.utils.text_chunker import TextChunker
 from core.shared.enums.model import ModelType
-from core.brevio.models.dtos import ChunkProcessingRequest
+
 
 @pytest.fixture(autouse=True)
 def set_env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -45,9 +46,7 @@ def test_chunk_text() -> None:
     text = "0123456789" * 10
     chunk_size = 10
     overlap = 0.2
-    chunks = TextChunker.chunk_text(
-        text, chunk_size, overlap, ModelType.GPT_4
-    )
+    chunks = TextChunker.chunk_text(text, chunk_size, overlap, ModelType.GPT_4)
     assert len(chunks) > 0
     for chunk in chunks:
         assert len(chunk) > 0
@@ -98,9 +97,13 @@ async def test_generate_summary_chunk_success(
             prompt="Prompt de prueba",
             accumulated_summary="Resumen acumulado",
             model=ModelType.DEEPSEEK_CHAT,
-            language=LanguageType.SPANISH
+            language=LanguageType.SPANISH,
         )
-        index, summary, tokens_used = await summary_service.chunk_generator.generate_chunk(
+        (
+            index,
+            summary,
+            tokens_used,
+        ) = await summary_service.chunk_generator.generate_chunk(
             request, summary_service.client
         )
 
@@ -129,9 +132,13 @@ async def test_generate_summary_chunk_failure(
             prompt="Prompt",
             accumulated_summary="Acumulado",
             model=ModelType.DEEPSEEK_CHAT,
-            language=LanguageType.SPANISH
+            language=LanguageType.SPANISH,
         )
-        index, summary, tokens_used = await summary_service.chunk_generator.generate_chunk(
+        (
+            index,
+            summary,
+            tokens_used,
+        ) = await summary_service.chunk_generator.generate_chunk(
             request, summary_service.client
         )
 
@@ -149,8 +156,7 @@ async def test_process_chunks_in_groups(
     prompt = "Prompt de prueba"
 
     async def fake_generate_chunk(
-        request: ChunkProcessingRequest,
-        client: AsyncOpenAI
+        request: ChunkProcessingRequest, client: AsyncOpenAI
     ) -> Tuple[int, str, int]:
         return request.index, f"Resumen: {request.chunk}", len(request.chunk)
 
@@ -158,7 +164,9 @@ async def test_process_chunks_in_groups(
         summary_service.chunk_generator,
         "generate_chunk",
         new=AsyncMock(side_effect=fake_generate_chunk),
-    ), patch.object(summary_service.token_manager, "check_token_limit", return_value=True):
+    ), patch.object(
+        summary_service.token_manager, "check_token_limit", return_value=True
+    ):
         (
             full_summary,
             total_tokens_used,

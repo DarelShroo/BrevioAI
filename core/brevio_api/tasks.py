@@ -32,13 +32,13 @@ def process_summary_task(
     is_media: bool = False,
 ) -> str:
     import os
-    
+
     allowed_extensions = (
         [ExtensionType.MP3.value]
         if is_media
         else [ExtensionType.DOCX.value, ExtensionType.PDF.value]
     )
-    
+
     files_filtered = []
     for path in file_paths:
         if any(path.lower().endswith(ext.lower()) for ext in allowed_extensions):

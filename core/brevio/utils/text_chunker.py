@@ -6,6 +6,7 @@ from core.shared.utils.model_tokens_utils import get_encoder
 
 logger = logging.getLogger(__name__)
 
+
 class TextChunker:
     @staticmethod
     def chunk_text(
