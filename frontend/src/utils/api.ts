@@ -5,7 +5,7 @@ import { h } from 'vue'
 import type { RequestHeaders } from './interfaces/request-headers'
 
 export const brevio_api = () => {
-  const base_url = import.meta.env.VITE_API_URL
+  const base_url = '/brevioai/api'
 
   const get = async (path: string, parameters: { key: string; value: string }[] = []) => {
     try {

@@ -1,14 +1,29 @@
-FROM nvidia/cuda:12.6.3-runtime-ubuntu24.04
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system dependencies first (cached unless changed)
+# Install system dependencies
+# We need these for audio processing/video libraries often used with AI
 RUN apt-get update && \
-    apt-get install -y python3.12 python3.12-venv libglib2.0-0 libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0 shared-mime-info && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    libglib2.0-0 \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    libcairo2 \
+    libgdk-pixbuf-2.0-0 \
+    shared-mime-info \
+    git \
+    && rm -rf /var/lib/apt/lists/*
 
-# Create virtual environment
-RUN python3.12 -m venv /opt/venv
+# We are already in a python environment, so we don't strictly need a venv, 
+# but keeping it is good practice or we can drop it to save a bit of complexity.
+# Given the user wants to reduce size/complexity, dropping venv in a container is standard.
+# However, if the app relies on /opt/venv path, we should keep it or adjust paths.
+# The original dockerfile set PATH. Let's stick to system python to save space/layers?
+# Actually, venv protects from system package clashes. Let's keep venv but use the provided python.
+
+RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Upgrade pip

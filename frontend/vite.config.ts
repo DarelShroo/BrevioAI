@@ -5,6 +5,7 @@ import { AntDesignVueResolver } from 'unplugin-vue-components/resolvers';
 import { fileURLToPath, URL } from 'url';
 import vueDevTools from 'vite-plugin-vue-devtools';
 export default defineConfig({
+  base: '/brevioai/',
   plugins: [
     vue(),
     Components({
