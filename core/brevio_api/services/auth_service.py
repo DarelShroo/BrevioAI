@@ -1,10 +1,9 @@
 import logging
 from datetime import datetime, timedelta
 from os import path
-from typing import Optional
+from typing import Any, Optional, overload
 
 from fastapi import HTTPException, status
-from motor.motor_asyncio import AsyncIOMotorCollection
 from pydantic import ValidationError
 
 from core.brevio.constants.constants import Constants
@@ -36,16 +35,34 @@ logger = logging.getLogger(__name__)
 
 
 class AuthService:
-    def __init__(self, collection: AsyncIOMotorCollection, token_service: TokenService):
-        self._db = collection
-        self._user_repository = UserRepository(self._db.get_collection("users"))
-        self._folder_entry_repository = FolderEntryRepository(
-            self._db.get_collection("entries")
-        )
+    @overload
+    def __init__(self, token_service: TokenService): ...
+
+    @overload
+    def __init__(self, collection: Any, token_service: TokenService): ...
+
+    def __init__(
+        self,
+        collection_or_token_service: Any,
+        token_service: Optional[TokenService] = None,
+    ):
+        # Compatibilidad backward: AuthService(token_service) y AuthService(db, token_service)
+        if token_service is None:
+            resolved_token_service = collection_or_token_service
+            self._db = None
+        else:
+            resolved_token_service = token_service
+            self._db = collection_or_token_service
+
+        if resolved_token_service is None:
+            raise ValueError("Token service is required")
+
+        self._user_repository = UserRepository()
+        self._folder_entry_repository = FolderEntryRepository()
         self._user_service = UserService(
             self._user_repository, self._folder_entry_repository
         )
-        self._token_service = token_service
+        self._token_service = resolved_token_service
         self.directory_manager = DirectoryManager()
 
     async def login(self, user_login: LoginUser) -> LoginResponse:

@@ -4,18 +4,26 @@ import Components from 'unplugin-vue-components/vite';
 import { AntDesignVueResolver } from 'unplugin-vue-components/resolvers';
 import { fileURLToPath, URL } from 'url';
 import vueDevTools from 'vite-plugin-vue-devtools';
+
+const isVitest = process.env.VITEST === 'true';
+
+const plugins = [
+  vue(),
+  Components({
+    resolvers: [
+      AntDesignVueResolver({
+        importStyle: false,
+      }),
+    ],
+  }),
+];
+
+if (!isVitest) {
+  plugins.push(vueDevTools());
+}
+
 export default defineConfig({
-  plugins: [
-    vue(),
-    Components({
-      resolvers: [
-        AntDesignVueResolver({
-          importStyle: false,
-        }),
-      ],
-    }),
-    vueDevTools(),
-  ],
+  plugins,
 
   resolve: {
     alias: {

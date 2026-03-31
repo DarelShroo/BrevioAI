@@ -1,0 +1,28 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install system dependencies required for ROCm runtime and general build
+RUN apt-get update && \
+    apt-get install -y libglib2.0-0 git curl libgomp1 libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0 shared-mime-info tesseract-ocr libtesseract-dev tesseract-ocr-spa poppler-utils && \
+    rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip
+RUN pip install --upgrade pip setuptools wheel
+
+# Install app dependencies
+COPY requirements.txt /app/core/requirements.txt
+RUN grep -Ev '^(nvidia-|triton==|torch==|openai-whisper==)' /app/core/requirements.txt > /tmp/requirements-amd.txt && \
+    pip install --no-cache-dir -r /tmp/requirements-amd.txt && \
+    pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.6.0 && \
+    pip install --no-cache-dir --no-build-isolation openai-whisper==20240930
+
+# Copy source code
+COPY . /app/core
+
+EXPOSE 8000
+
+# Adjust PYTHONPATH
+ENV PYTHONPATH=/app
+
+CMD ["fastapi", "run", "core/brevio_api/__main__.py", "--port", "8000"]

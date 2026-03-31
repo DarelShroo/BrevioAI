@@ -1,6 +1,7 @@
 import logging
+from types import SimpleNamespace
 from typing import Any, Awaitable, Dict, List, Union
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, mock_open, patch
 
 import pytest
 
@@ -345,3 +346,73 @@ async def test_generate_transcription_io_error(
     # Check error handling
     assert "Unexpected error in transcription: No space left" in caplog.text
     assert str(exc_info.value) == "No space left"
+
+
+@pytest.mark.asyncio
+async def test_generate_transcription_production_remote_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    TranscriptionService._instance = None
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake_key")
+
+    transcription_service = TranscriptionService()
+
+    remote_result = SimpleNamespace(
+        text="",
+        segments=[SimpleNamespace(start=0.0, text="Hola remoto")],
+    )
+
+    mock_client = MagicMock()
+    mock_client.audio.transcriptions.create = AsyncMock(return_value=remote_result)
+    mock_client.close = AsyncMock(return_value=None)
+
+    with patch(
+        "core.brevio.services.transcription_service.exists", return_value=True
+    ), patch(
+        "core.brevio.services.transcription_service.AsyncOpenAI",
+        return_value=mock_client,
+    ), patch(
+        "core.brevio.services.transcription_service.format_time",
+        return_value="[00:00:00]",
+    ), patch(
+        "builtins.open", mock_open(read_data=b"fake audio")
+    ), patch.object(
+        transcription_service, "_write_transcription", Mock()
+    ) as write_mock:
+        text = await transcription_service.generate_transcription(
+            audio_path="/audio.mp3",
+            destination_path="/tmp",
+            language=LanguageType.SPANISH,
+        )
+
+    assert text == "[00:00:00] Hola remoto"
+    assert mock_client.audio.transcriptions.create.await_count == 1
+    call_kwargs = mock_client.audio.transcriptions.create.await_args.kwargs
+    assert call_kwargs["model"] == "whisper-1"
+    assert call_kwargs["language"] == "es"
+    assert call_kwargs["response_format"] == "verbose_json"
+    assert call_kwargs["timestamp_granularities"] == ["segment"]
+    assert mock_client.close.await_count == 1
+    write_mock.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_generate_transcription_production_missing_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    TranscriptionService._instance = None
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    transcription_service = TranscriptionService()
+
+    with patch("core.brevio.services.transcription_service.exists", return_value=True):
+        with pytest.raises(ValueError) as exc_info:
+            await transcription_service.generate_transcription(
+                audio_path="/audio.mp3",
+                destination_path="/tmp",
+                language=LanguageType.SPANISH,
+            )
+
+    assert "OPENAI_API_KEY is required" in str(exc_info.value)

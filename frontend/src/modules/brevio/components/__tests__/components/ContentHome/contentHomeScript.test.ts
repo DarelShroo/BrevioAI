@@ -1,7 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import ContentHome from '../../../ContentHome/ContentHome.vue'
+import ContentBrevio from '../../../ContentBrevio/ContentBrevio'
+
+vi.mock('@/composables/useAuthGuard', () => ({
+  useAuthGuard: vi.fn(),
+}))
 
 describe('ContentHome.ts', () => {
   let pinia: any
@@ -10,11 +14,10 @@ describe('ContentHome.ts', () => {
   beforeEach(() => {
     pinia = createPinia()
     setActivePinia(pinia)
-    wrapper = mount(ContentHome, {
+    wrapper = mount(ContentBrevio, {
       global: {
         plugins: [pinia],
       },
-      template: '<div />',
     })
   })
 

@@ -1,9 +1,10 @@
 import asyncio
 import logging
 from collections.abc import AsyncGenerator
-from typing import Generator, Optional
+from typing import TYPE_CHECKING, Generator, Optional
 
-from core.shared.models.history_token_model import HistoryTokenModel
+if TYPE_CHECKING:
+    from core.shared.models.history_token_model import HistoryTokenModel
 
 try:
     import aiofiles

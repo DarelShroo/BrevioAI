@@ -4,11 +4,15 @@ import os
 from os.path import exists, join
 from typing import Any, Optional, Type
 
+from dotenv import load_dotenv
+from openai import AsyncOpenAI
 import whisper
 
 from core.brevio.constants.constants import Constants
 from core.brevio.enums.language import LanguageType
 from core.brevio.utils.utils import format_time
+
+load_dotenv()
 
 
 class TranscriptionService:
@@ -47,6 +51,90 @@ class TranscriptionService:
             self._directory_manager_initialized = True
             self.logger.debug("DirectoryManager initialized")
 
+        raw_environment = os.getenv("ENVIRONMENT", "development").strip().lower()
+        if raw_environment not in {"development", "production"}:
+            self.logger.warning(
+                "Invalid ENVIRONMENT='%s'. Falling back to 'development'.",
+                raw_environment,
+            )
+            raw_environment = "development"
+
+        self._environment = raw_environment
+        self._openai_api_key = os.getenv("OPENAI_API_KEY", "")
+        self._openai_api_url = os.getenv("OPENAI_API_URL", "https://api.openai.com/v1")
+        self._openai_transcription_model = os.getenv(
+            "OPENAI_TRANSCRIPTION_MODEL", "whisper-1"
+        )
+        self.logger.info("Transcription environment set to '%s'", self._environment)
+
+    def _is_production(self) -> bool:
+        return self._environment == "production"
+
+    def _build_transcription_text(self, result: Any) -> str:
+        segments_data: list[tuple[float, str]] = []
+        fallback_text = ""
+
+        if isinstance(result, dict):
+            fallback_text = str(result.get("text", "")).strip()
+            raw_segments = result.get("segments") or []
+            for segment in raw_segments:
+                if not isinstance(segment, dict):
+                    continue
+                text = str(segment.get("text", "")).strip()
+                start = float(segment.get("start", 0.0))
+                if text:
+                    segments_data.append((start, text))
+        else:
+            fallback_text = str(getattr(result, "text", "")).strip()
+            raw_segments = getattr(result, "segments", None) or []
+            for segment in raw_segments:
+                text = str(getattr(segment, "text", "")).strip()
+                start = float(getattr(segment, "start", 0.0))
+                if text:
+                    segments_data.append((start, text))
+
+        if segments_data:
+            return "\n".join(
+                f"{format_time(start)} {text}" for start, text in segments_data
+            )
+
+        return fallback_text
+
+    async def _transcribe_local(self, audio_path: str) -> Any:
+        model = whisper.load_model("small")
+        self.logger.debug("Whisper model loaded successfully")
+
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, lambda: model.transcribe(audio_path))
+        self.logger.info("Local transcription completed successfully")
+        return result
+
+    async def _transcribe_remote(self, audio_path: str, language: LanguageType) -> Any:
+        if not self._openai_api_key:
+            raise ValueError(
+                "OPENAI_API_KEY is required when ENVIRONMENT=production"
+            )
+
+        client = AsyncOpenAI(api_key=self._openai_api_key, base_url=self._openai_api_url)
+        self.logger.debug(
+            "Using remote OpenAI transcription with model '%s'",
+            self._openai_transcription_model,
+        )
+
+        try:
+            with open(audio_path, "rb") as audio_file:
+                result = await client.audio.transcriptions.create(
+                    model=self._openai_transcription_model,
+                    file=audio_file,
+                    language=language.value,
+                    response_format="verbose_json",
+                    timestamp_granularities=["segment"],
+                )
+            self.logger.info("Remote transcription completed successfully")
+            return result
+        finally:
+            await client.close()
+
     def _validate_paths(self, audio_path: str, destination_path: str) -> None:
         if not exists(audio_path):
             error_msg = f"Audio file not found: {audio_path}"
@@ -73,27 +161,32 @@ class TranscriptionService:
             )
             self._validate_paths(audio_path, destination_path)
 
-            model = whisper.load_model("small")
-            self.logger.debug("Whisper model loaded successfully")
-
-            loop = asyncio.get_running_loop()
-            result = await loop.run_in_executor(
-                None, lambda: model.transcribe(audio_path)
-            )
-            self.logger.info("Transcription completed successfully")
-
-            if not result.get("segments"):
-                self.logger.info("No segments found in transcription result")
-                transcription_text = ""
-            else:
-                transcription_text = "\n".join(
-                    f"{format_time(segment['start'])} {segment['text']}"
-                    for segment in result["segments"]
+            if self._is_production():
+                self.logger.info(
+                    "ENVIRONMENT=production detected, using remote OpenAI transcription"
                 )
+                result = await self._transcribe_remote(audio_path, language)
+            else:
+                self.logger.info(
+                    "ENVIRONMENT=development detected, using local Whisper transcription"
+                )
+                result = await self._transcribe_local(audio_path)
+
+            transcription_text = self._build_transcription_text(result)
+            raw_segments = (
+                result.get("segments")
+                if isinstance(result, dict)
+                else getattr(result, "segments", None)
+            )
+            if raw_segments is not None and len(raw_segments) == 0:
+                self.logger.info("No segments found in transcription result")
+            if not transcription_text.strip():
+                self.logger.info("No transcription text generated from result")
 
             transcription_path = os.path.join(
                 destination_path, Constants.TRANSCRIPTION_FILE
             )
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(
                 None,
                 lambda: self._write_transcription(

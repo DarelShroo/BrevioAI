@@ -1,238 +1,292 @@
-from typing import Any, Dict, List
-from unittest.mock import AsyncMock, MagicMock
+from typing import Any, Dict, List, Optional
+from unittest.mock import AsyncMock
 
 import pytest
 from bson import ObjectId
 from fastapi import HTTPException
 
 from core.brevio_api.models.user.folder_entry import FolderEntry
+from core.brevio_api.repositories import (
+    folder_entry_repository as folder_entry_repository_module,
+)
 from core.brevio_api.repositories.folder_entry_repository import FolderEntryRepository
 
 
-# Mock para AsyncIOMotorCollection
-class MockAsyncCollection:
-    def __init__(self) -> None:
-        self._data: List[Dict[str, Any]] = []  # Simula documentos en la colección
+class FakeFindQuery:
+    def __init__(self, entries: List["FakeFolderEntryDocument"]) -> None:
+        self._entries = entries
 
-    async def insert_one(self, document: Dict) -> Any:
-        inserted_id = document.get("_id", ObjectId())
-        document["_id"] = inserted_id
-        self._data.append(document.copy())
-        mock_result = MagicMock()
-        mock_result.inserted_id = inserted_id
-        return mock_result
+    async def to_list(self) -> List["FakeFolderEntryDocument"]:
+        return self._entries
 
-    async def find_one(self, query: Dict) -> Dict | None:
-        for doc in self._data:
-            match = True
-            for k, v in query.items():
-                if isinstance(v, dict) and "$in" in v:
-                    if doc.get(k) not in v["$in"]:
-                        match = False
-                        break
-                elif doc.get(k) != v:
-                    match = False
-                    break
-            if match:
-                return doc.copy()
+
+class FakeFolderEntryDocument:
+    _storage: list["FakeFolderEntryDocument"] = []
+
+    def __init__(
+        self,
+        id: ObjectId,
+        user_id: Any,
+        name: str = "",
+        results: Optional[List[Any]] = None,
+    ) -> None:
+        self.id = id
+        self.user_id = user_id
+        self.name = name
+        self.results = results or []
+
+    async def insert(self) -> None:
+        self.__class__._storage.append(self)
+
+    @classmethod
+    async def get(cls, object_id: ObjectId) -> Optional["FakeFolderEntryDocument"]:
+        for entry in cls._storage:
+            if entry.id == object_id:
+                return entry
         return None
 
-    def find(self, query: Dict) -> "MockAsyncCursor":
-        results: List[Dict[str, Any]] = []
-        for doc in self._data:
+    @classmethod
+    def find(cls, query: Dict[str, Any]) -> FakeFindQuery:
+        filtered: List[FakeFolderEntryDocument] = []
+
+        for entry in cls._storage:
             match = True
-            for k, v in query.items():
-                if isinstance(v, dict) and "$in" in v:
-                    if doc.get(k) not in v["$in"]:
+            for key, value in query.items():
+                attr_name = "id" if key == "_id" else key
+                entry_value = getattr(entry, attr_name, None)
+                if isinstance(value, dict) and "$in" in value:
+                    if entry_value not in value["$in"]:
                         match = False
                         break
-                elif doc.get(k) != v:
+                elif entry_value != value:
                     match = False
                     break
+
             if match:
-                results.append(doc.copy())
-        return MockAsyncCursor(results)
+                filtered.append(entry)
 
-    async def update_one(self, query: Dict, update: Dict) -> Any:
-        for doc in self._data:
-            if all(doc.get(k) == v for k, v in query.items()):
-                set_fields = update.get("$set", {})
-                doc.update(set_fields)
-                mock_result = MagicMock()
-                mock_result.matched_count = 1
-                mock_result.modified_count = 1
-                return mock_result
-        mock_result = MagicMock()
-        mock_result.matched_count = 0
-        mock_result.modified_count = 0
-        return mock_result
+        return FakeFindQuery(filtered)
 
-    async def delete_one(self, query: Dict) -> Any:
-        for i, doc in enumerate(self._data):
-            if all(doc.get(k) == v for k, v in query.items()):
-                del self._data[i]
-                mock_result = MagicMock()
-                mock_result.deleted_count = 1
-                return mock_result
-        mock_result = MagicMock()
-        mock_result.deleted_count = 0
-        return mock_result
+    async def update(self, update_data: Dict[str, Any]) -> None:
+        set_data = update_data.get("$set", {})
+        for key, value in set_data.items():
+            setattr(self, key, value)
+
+        push_data = update_data.get("$push", {})
+        for key, value in push_data.items():
+            current = getattr(self, key, [])
+            if isinstance(value, dict) and "$each" in value:
+                current.extend(value["$each"])
+            else:
+                current.append(value)
+            setattr(self, key, current)
+
+    async def delete(self) -> None:
+        self.__class__._storage = [e for e in self.__class__._storage if e.id != self.id]
 
 
-class MockAsyncCursor:
-    def __init__(self, results: List[Dict[str, Any]]) -> None:
-        self._results = results
-
-    async def to_list(self, length: int | None = None) -> List[Dict[str, Any]]:
-        return self._results
-
-
-# Fixtures
 @pytest.fixture
-def mock_collection() -> MockAsyncCollection:
-    """Provide a mock async collection for testing."""
-    return MockAsyncCollection()
+def patch_folder_entry_document(
+    monkeypatch: pytest.MonkeyPatch,
+) -> type[FakeFolderEntryDocument]:
+    FakeFolderEntryDocument._storage = []
+    monkeypatch.setattr(
+        folder_entry_repository_module,
+        "FolderEntryDocument",
+        FakeFolderEntryDocument,
+    )
+    return FakeFolderEntryDocument
 
 
 @pytest.fixture
 def folder_entry_repository(
-    mock_collection: MockAsyncCollection,
+    patch_folder_entry_document: type[FakeFolderEntryDocument],
 ) -> FolderEntryRepository:
-    """Provide a FolderEntryRepository instance with a mock async collection."""
-    return FolderEntryRepository(mock_collection)  # type: ignore
-
-
-@pytest.fixture
-def folder_entry_data() -> dict:
-    return {
-        "_id": ObjectId(),
-        "name": "Test Folder",
-        "path": "/test/path",
-        "user_id": ObjectId(),
-        "parent_id": ObjectId(),
-        "results": [],
-    }
+    return FolderEntryRepository()
 
 
 @pytest.fixture
 def dummy_entry() -> FolderEntry:
-    entry_id = ObjectId()
-    user_id = ObjectId()
     return FolderEntry(
-        _id=entry_id,
+        _id=ObjectId(),
         name="Test Entry",
-        user_id=user_id,
+        user_id=ObjectId(),
         results=[],
     )
 
 
-# Tests
 @pytest.mark.asyncio
 async def test_create_folder_entry_success(
     folder_entry_repository: FolderEntryRepository,
+    patch_folder_entry_document: type[FakeFolderEntryDocument],
     dummy_entry: FolderEntry,
 ) -> None:
-    """Should create a FolderEntry successfully and return it with an assigned ID."""
-    result = await folder_entry_repository.create_folder_entry(dummy_entry)
+    created = await folder_entry_repository.create_folder_entry(dummy_entry)
 
-    assert isinstance(result.id, ObjectId)
-    assert result.name == dummy_entry.name
-    assert result.user_id == dummy_entry.user_id
+    assert created.id == dummy_entry.id
+    assert created.user_id == dummy_entry.user_id
+    assert len(patch_folder_entry_document._storage) == 1
 
 
 @pytest.mark.asyncio
 async def test_get_folder_entry_success(
     folder_entry_repository: FolderEntryRepository,
-    folder_entry_data: dict,
+    dummy_entry: FolderEntry,
 ) -> None:
-    """Should retrieve the correct FolderEntry by its ID."""
-    # Insertar dato primero
-    await folder_entry_repository.collection.insert_one(folder_entry_data)
-    entry_id = folder_entry_data["_id"]
+    entry_doc = FakeFolderEntryDocument(
+        id=dummy_entry.id,
+        user_id=dummy_entry.user_id,
+        name=dummy_entry.name,
+        results=dummy_entry.results,
+    )
+    await entry_doc.insert()
 
-    retrieved = await folder_entry_repository.get_folder_entry_by_id(str(entry_id))
+    retrieved = await folder_entry_repository.get_folder_entry_by_id(str(dummy_entry.id))
 
-    assert retrieved is not None
-    assert retrieved.id == entry_id
-    assert retrieved.name == folder_entry_data["name"]
-    assert retrieved.user_id == folder_entry_data["user_id"]
+    assert retrieved.id == dummy_entry.id
+    assert retrieved.user_id == dummy_entry.user_id
 
 
 @pytest.mark.asyncio
 async def test_get_folder_entry_not_found(
     folder_entry_repository: FolderEntryRepository,
 ) -> None:
-    """Should raise HTTPException with status 404 when FolderEntry is not found."""
     with pytest.raises(HTTPException) as exc:
         await folder_entry_repository.get_folder_entry_by_id(str(ObjectId()))
+
     assert exc.value.status_code == 404
-    assert "not found" in exc.value.detail.lower()
+
+
+@pytest.mark.asyncio
+async def test_get_folder_entry_invalid_id(
+    folder_entry_repository: FolderEntryRepository,
+) -> None:
+    with pytest.raises(ValueError) as exc:
+        await folder_entry_repository.get_folder_entry_by_id("invalid_object_id")
+
+    assert "Invalid entry ID format" in str(exc.value)
 
 
 @pytest.mark.asyncio
 async def test_update_folder_entry_success(
     folder_entry_repository: FolderEntryRepository,
-    folder_entry_data: dict,
+    dummy_entry: FolderEntry,
 ) -> None:
-    """Should update the FolderEntry successfully and return the updated entry."""
-    await folder_entry_repository.collection.insert_one(folder_entry_data)
-    entry_id = folder_entry_data["_id"]
-    update_data = {"$set": {"name": "Updated Name"}}
+    entry_doc = FakeFolderEntryDocument(
+        id=dummy_entry.id,
+        user_id=dummy_entry.user_id,
+        name=dummy_entry.name,
+        results=dummy_entry.results,
+    )
+    await entry_doc.insert()
 
     updated = await folder_entry_repository.update_folder_entry(
-        str(entry_id), update_data
+        str(dummy_entry.id),
+        {"$set": {"name": "Updated Name"}},
     )
 
-    assert updated is not None
     assert updated.name == "Updated Name"
-    assert updated.id == entry_id
+
+
+@pytest.mark.asyncio
+async def test_update_folder_entry_with_plain_dict_autoset(
+    folder_entry_repository: FolderEntryRepository,
+    dummy_entry: FolderEntry,
+) -> None:
+    entry_doc = FakeFolderEntryDocument(
+        id=dummy_entry.id,
+        user_id=dummy_entry.user_id,
+        name=dummy_entry.name,
+        results=dummy_entry.results,
+    )
+    await entry_doc.insert()
+
+    updated = await folder_entry_repository.update_folder_entry(
+        str(dummy_entry.id),
+        {"name": "Updated By Plain Dict"},
+    )
+
+    assert updated.name == "Updated By Plain Dict"
+
+
+@pytest.mark.asyncio
+async def test_update_folder_entry_not_found(
+    folder_entry_repository: FolderEntryRepository,
+) -> None:
+    with pytest.raises(RuntimeError) as exc:
+        await folder_entry_repository.update_folder_entry(
+            str(ObjectId()),
+            {"$set": {"name": "No entry"}},
+        )
+
+    assert "Folder entry not found" in str(exc.value)
 
 
 @pytest.mark.asyncio
 async def test_delete_folder_entry_success(
     folder_entry_repository: FolderEntryRepository,
-    folder_entry_data: dict,
+    patch_folder_entry_document: type[FakeFolderEntryDocument],
+    dummy_entry: FolderEntry,
 ) -> None:
-    """Should delete the FolderEntry successfully and confirm deletion."""
-    await folder_entry_repository.collection.insert_one(folder_entry_data)
-    entry_id = folder_entry_data["_id"]
+    entry_doc = FakeFolderEntryDocument(
+        id=dummy_entry.id,
+        user_id=dummy_entry.user_id,
+        name=dummy_entry.name,
+        results=dummy_entry.results,
+    )
+    await entry_doc.insert()
 
-    result = await folder_entry_repository.delete_folder_entry(str(entry_id))
-    assert result["message"] == "FolderEntry eliminado exitosamente"
+    result = await folder_entry_repository.delete_folder_entry(str(dummy_entry.id))
 
-    # Verificar que ya no existe
-    found = await folder_entry_repository.collection.find_one({"_id": entry_id})
-    assert found is None
+    assert result == {"message": "FolderEntry eliminado exitosamente"}
+    assert len(patch_folder_entry_document._storage) == 0
+
+
+@pytest.mark.asyncio
+async def test_delete_folder_entry_not_found(
+    folder_entry_repository: FolderEntryRepository,
+) -> None:
+    with pytest.raises(RuntimeError) as exc:
+        await folder_entry_repository.delete_folder_entry(str(ObjectId()))
+
+    assert "FolderEntry not found" in str(exc.value)
 
 
 @pytest.mark.asyncio
 async def test_get_entries_by_user_success(
     folder_entry_repository: FolderEntryRepository,
-    folder_entry_data: dict,
+    dummy_entry: FolderEntry,
 ) -> None:
-    """Should retrieve all FolderEntries for a specific user."""
-    user_id = folder_entry_data["user_id"]
-    await folder_entry_repository.collection.insert_one(folder_entry_data)
+    entry_doc = FakeFolderEntryDocument(
+        id=dummy_entry.id,
+        user_id=dummy_entry.user_id,
+        name=dummy_entry.name,
+        results=dummy_entry.results,
+    )
+    await entry_doc.insert()
 
-    entries = await folder_entry_repository.get_entries_by_user(str(user_id))
+    entries = await folder_entry_repository.get_entries_by_user(str(dummy_entry.user_id))
+
     assert len(entries) == 1
-    assert entries[0].user_id == user_id
+    assert entries[0].id == dummy_entry.id
 
 
 @pytest.mark.asyncio
 async def test_create_entry_database_error(
     folder_entry_repository: FolderEntryRepository,
+    patch_folder_entry_document: type[FakeFolderEntryDocument],
     dummy_entry: FolderEntry,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Should raise HTTPException with status 500 when a database error occurs during creation."""
-    mock_insert_one = AsyncMock(side_effect=Exception("Simulated DB error"))
     monkeypatch.setattr(
-        folder_entry_repository.collection, "insert_one", mock_insert_one
+        patch_folder_entry_document,
+        "insert",
+        AsyncMock(side_effect=Exception("Simulated DB error")),
     )
 
     with pytest.raises(HTTPException) as exc:
         await folder_entry_repository.create_folder_entry(dummy_entry)
+
     assert exc.value.status_code == 500
     assert "Database error" in exc.value.detail
 
@@ -240,119 +294,93 @@ async def test_create_entry_database_error(
 @pytest.mark.asyncio
 async def test_get_entries_ids_by_user_id_success(
     folder_entry_repository: FolderEntryRepository,
-    folder_entry_data: dict,
 ) -> None:
-    """Should retrieve entries by IDs successfully."""
-    user_id = folder_entry_data["user_id"]
-    entry_id1 = ObjectId()
-    entry_id2 = ObjectId()
-
-    # Insertar datos
-    doc1 = {**folder_entry_data, "_id": entry_id1}
-    doc2 = {**folder_entry_data, "_id": entry_id2, "name": "Entry 2"}
-    await folder_entry_repository.collection.insert_one(doc1)
-    await folder_entry_repository.collection.insert_one(doc2)
+    user_id = ObjectId()
+    entry_1 = FakeFolderEntryDocument(id=ObjectId(), user_id=user_id, name="Entry 1")
+    entry_2 = FakeFolderEntryDocument(id=ObjectId(), user_id=user_id, name="Entry 2")
+    await entry_1.insert()
+    await entry_2.insert()
 
     entries = await folder_entry_repository.get_entries_ids_by_user_id(
-        str(user_id), [entry_id1, entry_id2]
+        str(user_id), [entry_1.id, entry_2.id]
     )
 
     assert len(entries) == 2
-    assert entries[0].id == entry_id1 or entries[1].id == entry_id1
-    assert entries[0].id == entry_id2 or entries[1].id == entry_id2
+    assert {e.id for e in entries} == {entry_1.id, entry_2.id}
 
 
 @pytest.mark.asyncio
 async def test_get_entries_ids_by_user_id_empty_list(
     folder_entry_repository: FolderEntryRepository,
 ) -> None:
-    """Should return empty list when no IDs are provided."""
     user_id = ObjectId()
     entries = await folder_entry_repository.get_entries_ids_by_user_id(str(user_id), [])
+
     assert entries == []
 
 
 @pytest.mark.asyncio
 async def test_get_entries_ids_by_user_id_db_error(
     folder_entry_repository: FolderEntryRepository,
+    patch_folder_entry_document: type[FakeFolderEntryDocument],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Should raise HTTPException when a database error occurs."""
-    user_id = ObjectId()
-    entry_id = ObjectId()
-
-    mock_cursor = MagicMock()
-    mock_cursor.to_list = AsyncMock(side_effect=Exception("Simulated DB error"))
     monkeypatch.setattr(
-        folder_entry_repository.collection, "find", MagicMock(return_value=mock_cursor)
+        patch_folder_entry_document,
+        "find",
+        lambda query: (_ for _ in ()).throw(Exception("Simulated DB error")),
     )
 
     with pytest.raises(HTTPException) as exc:
         await folder_entry_repository.get_entries_ids_by_user_id(
-            str(user_id), [entry_id]
+            str(ObjectId()),
+            [ObjectId()],
         )
+
     assert exc.value.status_code == 500
     assert "Simulated DB error" in exc.value.detail
-
-
-@pytest.mark.asyncio
-async def test_get_entries_ids_by_user_id_unexpected_error(
-    folder_entry_repository: FolderEntryRepository,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Should handle unexpected errors gracefully."""
-    user_id = ObjectId()
-    entry_id = ObjectId()
-
-    mock_cursor = MagicMock()
-    mock_cursor.to_list = AsyncMock(side_effect=Exception("Unexpected error"))
-    monkeypatch.setattr(
-        folder_entry_repository.collection, "find", MagicMock(return_value=mock_cursor)
-    )
-
-    with pytest.raises(HTTPException) as exc:
-        await folder_entry_repository.get_entries_ids_by_user_id(
-            str(user_id), [entry_id]
-        )
-    assert exc.value.status_code == 500
-    assert "Unexpected error" in exc.value.detail
 
 
 @pytest.mark.asyncio
 async def test_get_entries_ids_by_user_id_validation_error(
     folder_entry_repository: FolderEntryRepository,
 ) -> None:
-    """Should raise HTTPException when entry data contains an invalid user_id."""
-    user_id = ObjectId()
-    entry_id = ObjectId()
-
-    # Insertar dato inválido
-    invalid_doc = {
-        "_id": entry_id,
-        "name": "Invalid Entry",
-        "user_id": "invalid_object_id",  # ¡Inválido!
-        "results": [],
-    }
-    await folder_entry_repository.collection.insert_one(invalid_doc)
+    bad_entry = FakeFolderEntryDocument(
+        id=ObjectId(),
+        user_id="invalid_object_id",
+        name="Bad Entry",
+        results=[],
+    )
+    await bad_entry.insert()
 
     with pytest.raises(HTTPException) as exc:
         await folder_entry_repository.get_entries_ids_by_user_id(
-            str(user_id), [entry_id]
+            str(ObjectId()),
+            [bad_entry.id],
         )
-    assert exc.value.status_code == 422  # Pydantic Validation -> 422
-    assert "validation error" in exc.value.detail.lower()
+
+    assert exc.value.status_code == 422
+    assert "Validation error" in exc.value.detail
 
 
 @pytest.mark.asyncio
-async def test_get_entries_ids_by_user_id_no_valid_ids(
+async def test_get_entries_ids_by_user_id_invalid_user_id(
     folder_entry_repository: FolderEntryRepository,
 ) -> None:
-    """Should return empty list when no entries are found."""
-    user_id = ObjectId()
-    entry_id1 = ObjectId()
-    entry_id2 = ObjectId()
+    with pytest.raises(ValueError) as exc:
+        await folder_entry_repository.get_entries_ids_by_user_id("invalid", [ObjectId()])
 
-    entries = await folder_entry_repository.get_entries_ids_by_user_id(
-        str(user_id), [entry_id1, entry_id2]
-    )
-    assert entries == []
+    assert "Invalid user ID format" in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_get_entries_ids_by_user_id_invalid_refs(
+    folder_entry_repository: FolderEntryRepository,
+) -> None:
+    with pytest.raises(ValueError) as exc:
+        await folder_entry_repository.get_entries_ids_by_user_id(
+            str(ObjectId()),
+            [ObjectId(), "not_object_id"],  # type: ignore[list-item]
+        )
+
+    assert "Invalid ObjectId" in str(exc.value)

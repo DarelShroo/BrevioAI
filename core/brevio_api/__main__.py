@@ -16,6 +16,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from core.brevio_api.core.database import AsyncDB
+from core.brevio_api.core.odm import init_odm
 from core.brevio_api.handlers.exception_handlers import (
     auth_service_exception_handler,
     expired_signature_exception_handler,
@@ -53,12 +54,14 @@ db = AsyncDB()
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Código de startup
     await db.verify_connection()
+    await init_odm(db)
     yield
     # Código de shutdown (si hace falta cerrar conexión)
     await db.close()
 
 
 app = FastAPI(
+    lifespan=lifespan,
     title="Brevio API",
     description="""
     Brevio API provides a robust backend service for managing authentication, 

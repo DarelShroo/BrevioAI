@@ -4,24 +4,32 @@ from typing import Any, Dict, Optional, Union
 from bson import ObjectId
 from bson.errors import InvalidId
 from fastapi import HTTPException
-from motor.motor_asyncio import AsyncIOMotorCollection
 from pydantic import ValidationError
 from pymongo.errors import PyMongoError
 
+from core.brevio_api.models.odm.user_document import UserDocument
 from core.brevio_api.models.user.user_model import User
 
 logger = logging.getLogger(__name__)
 
 
 class UserRepository:
-    def __init__(self, collection: AsyncIOMotorCollection):
-        try:
-            self.collection = collection
-        except Exception as e:
-            logger.error(f"Database initialization error: {str(e)}")
-            raise HTTPException(
-                status_code=500, detail=f"Database initialization error: {str(e)}"
-            )
+    def __init__(self, collection: Any | None = None):
+        # Mantener este atributo evita romper consumidores/tests antiguos.
+        self.collection = collection
+
+    @staticmethod
+    def _to_user_model(user_doc: UserDocument) -> User:
+        return User(
+            _id=ObjectId(str(user_doc.id)),
+            username=user_doc.username,
+            email=user_doc.email,
+            password=user_doc.password,
+            user_credit=user_doc.user_credit,
+            folder=user_doc.folder,
+            otp=user_doc.otp,
+            exp=user_doc.exp,
+        )
 
     async def get_user_by_field(
         self, field: str, value: Union[ObjectId, str]
@@ -38,30 +46,13 @@ class UserRepository:
 
             query = {field: value}
 
-            user_data = await self.collection.find_one(query)
+            user_doc = await UserDocument.find_one(query)
 
-            if not user_data:
+            if not user_doc:
                 logger.warning(f"No user found with {field}: {value}")
                 return None
 
-            logger.debug(f"Raw user data from DB: {user_data}")
-
-            try:
-                if "folder" in user_data and user_data["folder"]:
-                    if "entries" in user_data["folder"]:
-                        user_data["folder"]["entries"] = [
-                            e["_id"] if isinstance(e, dict) and "_id" in e else e
-                            for e in user_data["folder"]["entries"]
-                        ]
-
-                return User(**user_data)
-
-            except Exception as e:
-                logger.error(f"Validation error: {str(e)}")
-                raise HTTPException(
-                    status_code=422,
-                    detail={"message": "Invalid user data structure"},
-                )
+            return self._to_user_model(user_doc)
 
         except HTTPException:
             raise
@@ -82,16 +73,21 @@ class UserRepository:
         try:
             logger.debug("Creating new user")
 
-            user_dict = user.model_dump(by_alias=True)
+            user_doc = UserDocument(
+                id=ObjectId(str(user.id)),
+                username=user.username,
+                email=user.email,
+                password=user.password,
+                user_credit=user.user_credit,
+                folder=user.folder,
+                otp=user.otp,
+                exp=user.exp,
+            )
 
-            result = await self.collection.insert_one(user_dict)
+            await user_doc.insert()
 
-            inserted_id = result.inserted_id
-
-            created_user: User = User(**user_dict)
-
-            logger.info(f"User created successfully with ID: {inserted_id}")
-            return created_user
+            logger.info(f"User created successfully with ID: {user_doc.id}")
+            return self._to_user_model(user_doc)
         except ValidationError as e:
             logger.error(f"Invalid user data: {str(e)}")
             raise HTTPException(status_code=400, detail=f"Invalid user data: {str(e)}")
@@ -123,16 +119,14 @@ class UserRepository:
                         logger.error(f"Invalid ObjectId format: {value}")
                         raise HTTPException(status_code=400, detail="Invalid ID format")
 
-            existing = await self.collection.find_one({"_id": user_id})
+            existing = await UserDocument.find_one({"_id": user_id})
 
             if not existing:
                 raise HTTPException(status_code=404, detail="User not found")
 
-            result = await self.collection.update_one(
-                {"_id": user_id}, {"$set": fields}
-            )
+            await existing.update({"$set": fields})
 
-            updated_user = await self.collection.find_one({"_id": user_id})
+            updated_user = await UserDocument.find_one({"_id": user_id})
 
             if not updated_user:
                 raise HTTPException(
@@ -140,9 +134,7 @@ class UserRepository:
                 )
 
             try:
-                user_updated_obj = User.model_validate(updated_user)
-
-                return user_updated_obj
+                return self._to_user_model(updated_user)
             except ValidationError as e:
                 logger.error(f"Validation error: {str(e)}")
                 raise HTTPException(
@@ -167,13 +159,14 @@ class UserRepository:
             else:
                 user_id = id
 
-            result = await self.collection.delete_one({"_id": user_id})
-
-            if result.deleted_count == 0:
+            user_doc = await UserDocument.find_one({"_id": user_id})
+            if not user_doc:
                 logger.warning(f"No user found with ID: {id} to delete")
                 raise HTTPException(
                     status_code=404, detail=f"User with ID {id} not found"
                 )
+
+            await user_doc.delete()
 
             logger.info(f"User with ID: {id} deleted successfully")
             return {"message": "User deleted successfully"}

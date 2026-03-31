@@ -1,0 +1,89 @@
+services:
+  backend:
+    image: brevioai/core:amd
+    build:
+      context: ./core
+      dockerfile: Dockerfile.amd
+    volumes:
+      - ./core:/app/core
+      - ./data:/app/data
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./core/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      # HSA_OVERRIDE_GFX_VERSION: "10.3.0" # Optional: uncomment if your ROCm setup needs it
+    depends_on:
+      - database
+      - redis
+    networks:
+      - app_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "8080:80"
+    networks:
+      - app_network
+
+  database:
+    build:
+      context: ./database
+      dockerfile: Dockerfile
+    volumes:
+      - db_data:/data/db
+    ports:
+      - "27017:27017"
+    networks:
+      - app_network
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: brevio
+
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "6380:6379"
+    networks:
+      - app_network
+    restart: always
+
+  celery:
+    image: brevioai/core:amd
+    build:
+      context: ./core
+      dockerfile: Dockerfile.amd
+    command: celery -A core.brevio_api.celery worker --loglevel=info --time-limit=7200 --soft-time-limit=3600
+    volumes:
+      - ./core:/app/core
+      - ./data:/app/data
+    env_file:
+      - ./core/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      # HSA_OVERRIDE_GFX_VERSION: "10.3.0" # Optional: uncomment if your ROCm setup needs it
+    depends_on:
+      - database
+      - redis
+    networks:
+      - app_network
+
+volumes:
+  db_data:
+
+
+networks:
+  app_network:
+    driver: bridge

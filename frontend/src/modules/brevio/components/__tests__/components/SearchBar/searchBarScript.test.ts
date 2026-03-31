@@ -5,20 +5,20 @@ import { api } from '@/utils/api'
 import SearchBar from '../../../SearchBar/SearchBar.vue'
 
 vi.mock('@/utils/api', () => ({
-  api: vi.fn(() => ({
+  api: {
     post: vi.fn(),
-  })),
+  },
 }))
 
-vi.mock('@/ConfigBrevioRequest/composables/useStoreNotification', () => ({
+vi.mock('@/modules/brevio/composables/useStoreNotification', () => ({
   useStoreNotification: vi.fn(() => ({
     configNotification: vi.fn(),
   })),
 }))
 
-vi.mock('@/ConfigBrevioRequest/composables/useStoreDeviceType', () => ({
+vi.mock('@/modules/brevio/composables/useStoreDeviceType', () => ({
   useStoreDeviceType: vi.fn(() => ({
-    placement: { value: 'top-right' },
+    placement: { value: 'topRight' },
   })),
 }))
 
@@ -52,11 +52,12 @@ describe('SearchBar.ts', () => {
     const mockApiResponse = {
       summary_result: ['Test Summary'],
     }
-    const mockPost = vi.fn().mockResolvedValue(mockApiResponse)
-    ;(api as any).mockImplementation(() => ({ post: mockPost }))
+    const mockPost = vi.mocked(api.post)
+    mockPost.mockResolvedValue(mockApiResponse as any)
 
     wrapper.vm.searchValue = 'http://example.com'
     await wrapper.vm.onSearch()
+    await wrapper.vm.$nextTick()
 
     expect(mockPost).toHaveBeenCalledWith('http://localhost:8000/brevio', {
       url: 'http://example.com',
@@ -72,11 +73,12 @@ describe('SearchBar.ts', () => {
 
 
   it('should handle API failure and trigger error notification', async () => {
-    const mockPost = vi.fn().mockRejectedValue(new Error('API failure'))
-    ;(api as any).mockImplementation(() => ({ post: mockPost }))
+    const mockPost = vi.mocked(api.post)
+    mockPost.mockRejectedValue(new Error('API failure'))
 
     wrapper.vm.searchValue = 'http://example.com'
     await wrapper.vm.onSearch()
+    await wrapper.vm.$nextTick()
 
     expect(mockPost).toHaveBeenCalledWith('http://localhost:8000/brevio', {
       url: 'http://example.com',
@@ -88,11 +90,11 @@ describe('SearchBar.ts', () => {
   })
 
   it('should not call API if searchValue is empty', async () => {
-    const mockPost = vi.fn()
-    ;(api as any).mockImplementation(() => ({ post: mockPost }))
+    const mockPost = vi.mocked(api.post)
 
     wrapper.vm.searchValue = ''
     await wrapper.vm.onSearch()
+    await wrapper.vm.$nextTick()
 
     expect(mockPost).not.toHaveBeenCalled()
     expect(wrapper.emitted('update:loading')[0]).toEqual([false])
