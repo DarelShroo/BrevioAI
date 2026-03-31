@@ -9,6 +9,10 @@ build/
 
 # Archivos de configuración del entorno
 .env
+.env.dev
+.env.prod
+**/.env.dev
+**/.env.prod
 
 # Archivos de caché
 .cache/
