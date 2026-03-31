@@ -9,6 +9,8 @@ build/
 
 # Archivos de configuración del entorno
 .env
+.env.*
+**/.env.*
 
 # Archivos de caché
 .cache/
