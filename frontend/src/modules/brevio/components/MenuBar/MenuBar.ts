@@ -1,9 +1,7 @@
-import { notification, type UploadFile } from 'ant-design-vue';
+import { type UploadFile } from 'ant-design-vue';
 import { computed, defineComponent, ref } from 'vue';
 import { AppstoreOutlined } from '@ant-design/icons-vue';
 import { useMenuBravioStore } from '../../../../stores/useMenuBravioStore';
-import { selectedKeysNames } from '../../constants/selected-keys-name.constants';
-import { ConfigurationKeys } from '../../enums/configuration-keys.enum';
 import { MenuBravioKeys } from '../../enums/menu-bravio-keys';
 import { TextToolBoxKeys } from '../../enums/text-tool-box-keys.enum';
 import UploadContentView from './../UploadContent/UploadContentView.vue';

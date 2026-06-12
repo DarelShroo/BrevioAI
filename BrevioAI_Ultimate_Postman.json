@@ -1,0 +1,716 @@
+{
+    "info": {
+        "name": "BrevioAI API Ultimate Edition",
+        "description": "Exhaustive Postman Collection for BrevioAI backend API. Includes all possible enum values (Categories, Styles, Languages, Output Formats, Models), detailed parameters, authentication flows, edge cases, and mocked responses for 200, 400, 401, and 422.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:8000/api",
+            "type": "string"
+        },
+        {
+            "key": "api_key",
+            "value": "local_api_key_123",
+            "type": "string"
+        },
+        {
+            "key": "token",
+            "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+            "type": "string"
+        }
+    ],
+    "item": [
+        {
+            "name": "Authentication",
+            "description": "Endpoints for user registration, login, and password recovery.",
+            "item": [
+                {
+                    "name": "Login User",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"username\": \"johndoe\",\n    \"password\": \"SecurePassword123!\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/auth/login",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "login"
+                            ]
+                        },
+                        "description": "Authenticates a user and returns a JWT access token.\n\n**Possible Errors:**\n- `401 Unauthorized`: Invalid credentials.\n- `422 Unprocessable Entity`: Validation error (missing fields)."
+                    },
+                    "response": [
+                        {
+                            "name": "200 OK - Success",
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"access_token\": \"eyJhb...\",\n        \"token_type\": \"bearer\",\n        \"user\": {\n            \"id\": \"507f1f77bcf86cd799439011\",\n            \"username\": \"johndoe\",\n            \"email\": \"johndoe@example.com\"\n        }\n    }\n}"
+                        },
+                        {
+                            "name": "401 Unauthorized",
+                            "status": "Unauthorized",
+                            "code": 401,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"detail\": \"Invalid credentials\"\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Register User",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"username\": \"newuser99\",\n    \"email\": \"newuser@example.com\",\n    \"password\": \"StrongPassword!9\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/auth/register",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "register"
+                            ]
+                        },
+                        "description": "Registers a new user in the system.\n\n**Possible Errors:**\n- `400 Bad Request`: User already exists.\n- `422 Unprocessable Entity`: Invalid email format or missing fields."
+                    },
+                    "response": [
+                        {
+                            "name": "201 Created - Success",
+                            "status": "Created",
+                            "code": 201,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"user_id\": \"507f1f77bcf86cd799439011\",\n        \"message\": \"User registered successfully\"\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Password Recovery Handshake",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"email\": \"user@example.com\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/auth/password-recovery-handshake",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "password-recovery-handshake"
+                            ]
+                        },
+                        "description": "Initiates the password recovery flow by sending an OTP to the user's email."
+                    }
+                },
+                {
+                    "name": "Password Recovery Verify",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"email\": \"user@example.com\",\n    \"otp\": \"123456\",\n    \"new_password\": \"NewSecurePassword123!\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/auth/password-recovery-verify",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "password-recovery-verify"
+                            ]
+                        },
+                        "description": "Verifies the OTP and updates the user's password."
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Users",
+            "description": "Endpoints to manage user-specific data like folders and entries. Requires JWT Authorization.",
+            "item": [
+                {
+                    "name": "Get User Entries",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}",
+                                "description": "JWT Access Token"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"entries_refs\": [\n        \"507f1f77bcf86cd799439011\",\n        \"607f1f77bcf86cd799439012\"\n    ]\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/users/entries",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "users",
+                                "entries"
+                            ]
+                        },
+                        "description": "Retrieves user entries (histories, files, summaries) by their MongoDB ObjectIds.\n\n**Possible Errors:**\n- `400`: Invalid ObjectId format.\n- `401`: Unauthorized (missing/invalid token).\n- `403`: Forbidden (user tries to access entries belonging to someone else).\n- `404`: No entries found."
+                    },
+                    "response": [
+                        {
+                            "name": "200 OK - Success",
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"entries\": [\n        {\n            \"_id\": \"507f1f77bcf86cd799439011\",\n            \"name\": \"Summary 1\",\n            \"type\": \"history\"\n        }\n    ]\n}"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Billing & Estimations",
+            "description": "Endpoints to calculate and predict API token costs and billing limits. Requires X-API-KEY.",
+            "item": [
+                {
+                    "name": "Estimate Media Cost",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "X-API-KEY",
+                                "value": "{{api_key}}",
+                                "description": "Static API Key"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/billing/estimate-media?minutes=45.5&model=gpt-4o-mini&language=ENGLISH",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "billing",
+                                "estimate-media"
+                            ],
+                            "query": [
+                                {
+                                    "key": "minutes",
+                                    "value": "45.5",
+                                    "description": "Duration of media in minutes (Float)"
+                                },
+                                {
+                                    "key": "model",
+                                    "value": "gpt-4o-mini",
+                                    "description": "AI Model (e.g. gpt-4o, gpt-4o-mini, gpt-4-turbo)"
+                                },
+                                {
+                                    "key": "language",
+                                    "value": "ENGLISH",
+                                    "description": "Input language (e.g. ENGLISH, SPANISH)"
+                                }
+                            ]
+                        },
+                        "description": "Calculates the estimated token cost for transcribing and summarizing an audio/video file of a given duration."
+                    }
+                },
+                {
+                    "name": "Estimate Documents Cost",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "X-API-KEY",
+                                "value": "{{api_key}}",
+                                "description": "Static API Key"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/billing/estimate-documents?file_tokens=15000&model=gpt-4o&language_input=SPANISH&language_output=ENGLISH&category=EDUCATION&style=guide&output_format=markdown&summary_level=detailed",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "billing",
+                                "estimate-documents"
+                            ],
+                            "query": [
+                                {
+                                    "key": "file_tokens",
+                                    "value": "15000",
+                                    "description": "Token count from frontend tokenizer"
+                                },
+                                {
+                                    "key": "model",
+                                    "value": "gpt-4o",
+                                    "description": "Model type"
+                                },
+                                {
+                                    "key": "language_input",
+                                    "value": "SPANISH",
+                                    "description": "Input text language"
+                                },
+                                {
+                                    "key": "language_output",
+                                    "value": "ENGLISH",
+                                    "description": "Target output language"
+                                },
+                                {
+                                    "key": "category",
+                                    "value": "EDUCATION",
+                                    "description": "Category (e.g. EDUCATION, TECHNOLOGY)"
+                                },
+                                {
+                                    "key": "style",
+                                    "value": "guide",
+                                    "description": "Output style (e.g. guide, report)"
+                                },
+                                {
+                                    "key": "output_format",
+                                    "value": "markdown",
+                                    "description": "Output format (markdown, html, json, text)"
+                                },
+                                {
+                                    "key": "summary_level",
+                                    "value": "detailed",
+                                    "description": "Summary length level (concise, detailed, etc.)"
+                                }
+                            ]
+                        },
+                        "description": "Calculates the exact token usage projection for a document summarization request based on advanced prompt combinations."
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Brevio Core Options",
+            "description": "Main endpoints for obtaining options, counting media, and dispatching summary tasks.",
+            "item": [
+                {
+                    "name": "Catalog Options",
+                    "item": [
+                        {
+                            "name": "Get Languages",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "X-API-KEY",
+                                        "value": "{{api_key}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/brevio/languages",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "brevio",
+                                        "languages"
+                                    ]
+                                },
+                                "description": "Returns all 100+ supported languages (e.g. ENGLISH, SPANISH, FRENCH, MANDARIN)."
+                            }
+                        },
+                        {
+                            "name": "Get Models",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "X-API-KEY",
+                                        "value": "{{api_key}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/brevio/models",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "brevio",
+                                        "models"
+                                    ]
+                                },
+                                "description": "Returns all active LLM Models configured."
+                            }
+                        },
+                        {
+                            "name": "Get Categories & Styles",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "X-API-KEY",
+                                        "value": "{{api_key}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/brevio/categories-styles",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "brevio",
+                                        "categories-styles"
+                                    ]
+                                },
+                                "description": "Returns a nested object mapping Categories (e.g. TECHNOLOGY, EDUCATION) to their supported Styles (e.g. changelog, guide, report)."
+                            }
+                        },
+                        {
+                            "name": "Get Output Formats",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "X-API-KEY",
+                                        "value": "{{api_key}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/brevio/output-formats",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "brevio",
+                                        "output-formats"
+                                    ]
+                                },
+                                "description": "Returns supported output structures (html, markdown, json, text)."
+                            }
+                        },
+                        {
+                            "name": "Get Summary Levels",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "X-API-KEY",
+                                        "value": "{{api_key}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/brevio/summary-levels",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "brevio",
+                                        "summary-levels"
+                                    ]
+                                },
+                                "description": "Returns levels: very_concise, concise, moderate, detailed, very_detailed."
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "YouTube Utils",
+                    "item": [
+                        {
+                            "name": "Count YT Playlist Videos",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "X-API-KEY",
+                                        "value": "{{api_key}}"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"url\": \"https://www.youtube.com/playlist?list=PLxyz\"\n}"
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/brevio/count-yt-videos",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "brevio",
+                                        "count-yt-videos"
+                                    ]
+                                },
+                                "description": "Counts the number of videos present in a given YouTube Playlist URL."
+                            }
+                        },
+                        {
+                            "name": "Count YT Video Time",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "X-API-KEY",
+                                        "value": "{{api_key}}"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"url\": \"https://www.youtube.com/watch?v=xyz\"\n}"
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/brevio/count-time-yt-video",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "brevio",
+                                        "count-time-yt-video"
+                                    ]
+                                },
+                                "description": "Calculates the total duration in seconds of a YouTube video."
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Generation (Asynchronous Celery)",
+                    "item": [
+                        {
+                            "name": "Summary Media (MP3)",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "formdata",
+                                    "formdata": [
+                                        {
+                                            "key": "files",
+                                            "type": "file",
+                                            "src": [],
+                                            "description": "Array of MP3 files"
+                                        },
+                                        {
+                                            "key": "language",
+                                            "value": "ENGLISH",
+                                            "type": "text"
+                                        },
+                                        {
+                                            "key": "model",
+                                            "value": "gpt-4o",
+                                            "type": "text"
+                                        },
+                                        {
+                                            "key": "category",
+                                            "value": "EDUCATION",
+                                            "type": "text"
+                                        },
+                                        {
+                                            "key": "style",
+                                            "value": "guide",
+                                            "type": "text"
+                                        },
+                                        {
+                                            "key": "format",
+                                            "value": "markdown",
+                                            "type": "text"
+                                        },
+                                        {
+                                            "key": "summary_level",
+                                            "value": "concise",
+                                            "type": "text"
+                                        }
+                                    ]
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/brevio/summary-media",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "brevio",
+                                        "summary-media"
+                                    ]
+                                },
+                                "description": "Submits MP3 files for transcription and summarization. Returns a 202 Accepted with a Celery `task_id`."
+                            },
+                            "response": [
+                                {
+                                    "name": "202 Accepted",
+                                    "status": "Accepted",
+                                    "code": 202,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"task_id\": \"8a7s9d8a7sd-9a8s7d98a7s-98d7sa98d7\",\n    \"data\": {\n        \"message\": \"Processing started\"\n    }\n}"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Summary Documents (PDF, DOCX)",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "formdata",
+                                    "formdata": [
+                                        {
+                                            "key": "files",
+                                            "type": "file",
+                                            "src": [],
+                                            "description": "Array of PDF or DOCX files"
+                                        },
+                                        {
+                                            "key": "language",
+                                            "value": "SPANISH",
+                                            "type": "text"
+                                        },
+                                        {
+                                            "key": "model",
+                                            "value": "gpt-4o-mini",
+                                            "type": "text"
+                                        },
+                                        {
+                                            "key": "category",
+                                            "value": "TECHNOLOGY",
+                                            "type": "text"
+                                        },
+                                        {
+                                            "key": "style",
+                                            "value": "changelog",
+                                            "type": "text"
+                                        },
+                                        {
+                                            "key": "format",
+                                            "value": "html",
+                                            "type": "text"
+                                        },
+                                        {
+                                            "key": "summary_level",
+                                            "value": "detailed",
+                                            "type": "text"
+                                        }
+                                    ]
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/brevio/summary-documents",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "brevio",
+                                        "summary-documents"
+                                    ]
+                                },
+                                "description": "Submits document files for summarization. Returns a 202 Accepted with a Celery `task_id`."
+                            }
+                        },
+                        {
+                            "name": "Summary YouTube Playlist",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"prompt_config\": {\n        \"model\": \"gpt-4o\",\n        \"category\": \"JOURNALISM\",\n        \"style\": \"analysis\",\n        \"format\": \"json\",\n        \"language\": \"ENGLISH\",\n        \"summary_level\": \"very_detailed\"\n    },\n    \"data\": [\n        {\n            \"url\": \"https://www.youtube.com/watch?v=xyz\"\n        }\n    ]\n}"
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/brevio/summary-yt-playlist",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "brevio",
+                                        "summary-yt-playlist"
+                                    ]
+                                },
+                                "description": "Submits YouTube links for summarization. Returns a 202 Accepted with a Celery `task_id`."
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

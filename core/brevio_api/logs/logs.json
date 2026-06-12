@@ -8123,5 +8123,197 @@
         ],
         "total_total_tokens": 232805,
         "timestamp": "2025-11-14 10:16:15"
+    },
+    {
+        "model": "gpt-4o-mini",
+        "language_input": "english",
+        "language_output": "spanish",
+        "category": "education",
+        "style": "guide",
+        "output_format": "markdown",
+        "source_type": "text",
+        "summary_level": "very_concise",
+        "num_tokens_file": 1109,
+        "num_chars_file": 0,
+        "total_tokens_summary_input": 1632,
+        "total_tokens_summary_output": 159,
+        "total_tokens_postprocess_output": 0,
+        "total_tokens_postprocess_input": 0,
+        "total_time": 0.0,
+        "history_tokens_per_call": [
+            {
+                "type_call": "summary",
+                "system_prompt_tokens": 523,
+                "user_prompt_tokens": 1109,
+                "response_tokens": 159
+            }
+        ],
+        "total_total_tokens": 1791,
+        "timestamp": "2026-06-12 16:00:58"
+    },
+    {
+        "model": "gpt-4o-mini",
+        "language_input": "english",
+        "language_output": "spanish",
+        "category": "education",
+        "style": "guide",
+        "output_format": "markdown",
+        "source_type": "text",
+        "summary_level": "very_concise",
+        "num_tokens_file": 54324,
+        "num_chars_file": 186411,
+        "total_tokens_summary_input": 66296,
+        "total_tokens_summary_output": 12443,
+        "total_tokens_postprocess_output": 11737,
+        "total_tokens_postprocess_input": 63405,
+        "total_time": 0.0,
+        "history_tokens_per_call": [
+            {
+                "type_call": "summary",
+                "system_prompt_tokens": 523,
+                "user_prompt_tokens": 3000,
+                "response_tokens": 565
+            },
+            {
+                "type_call": "summary",
+                "system_prompt_tokens": 523,
+                "user_prompt_tokens": 3000,
+                "response_tokens": 598
+            },
+            {
+                "type_call": "summary",
+                "system_prompt_tokens": 523,
+                "user_prompt_tokens": 3000,
+                "response_tokens": 998
+            },
+            {
+                "type_call": "summary",
+                "system_prompt_tokens": 523,
+                "user_prompt_tokens": 3000,
+                "response_tokens": 584
+            },
+            {
+                "type_call": "summary",
+                "system_prompt_tokens": 523,
+                "user_prompt_tokens": 3000,
+                "response_tokens": 381
+            },
+            {
+                "type_call": "summary",
+                "system_prompt_tokens": 523,
+                "user_prompt_tokens": 3000,
+                "response_tokens": 518
+            },
+            {
+                "type_call": "summary",
+                "system_prompt_tokens": 523,
+                "user_prompt_tokens": 3000,
+                "response_tokens": 333
+            },
+            {
+                "type_call": "summary",
+                "system_prompt_tokens": 523,
+                "user_prompt_tokens": 3000,
+                "response_tokens": 663
+            },
+            {
+                "type_call": "summary",
+                "system_prompt_tokens": 708,
+                "user_prompt_tokens": 3000,
+                "response_tokens": 695
+            },
+            {
+                "type_call": "summary",
+                "system_prompt_tokens": 708,
+                "user_prompt_tokens": 3000,
+                "response_tokens": 652
+            },
+            {
+                "type_call": "summary",
+                "system_prompt_tokens": 708,
+                "user_prompt_tokens": 3000,
+                "response_tokens": 872
+            },
+            {
+                "type_call": "summary",
+                "system_prompt_tokens": 708,
+                "user_prompt_tokens": 3000,
+                "response_tokens": 672
+            },
+            {
+                "type_call": "summary",
+                "system_prompt_tokens": 708,
+                "user_prompt_tokens": 3000,
+                "response_tokens": 823
+            },
+            {
+                "type_call": "summary",
+                "system_prompt_tokens": 708,
+                "user_prompt_tokens": 3000,
+                "response_tokens": 509
+            },
+            {
+                "type_call": "summary",
+                "system_prompt_tokens": 708,
+                "user_prompt_tokens": 3000,
+                "response_tokens": 683
+            },
+            {
+                "type_call": "summary",
+                "system_prompt_tokens": 708,
+                "user_prompt_tokens": 3000,
+                "response_tokens": 564
+            },
+            {
+                "type_call": "summary",
+                "system_prompt_tokens": 708,
+                "user_prompt_tokens": 324,
+                "response_tokens": 517
+            },
+            {
+                "type_call": "summary",
+                "system_prompt_tokens": 708,
+                "user_prompt_tokens": 3000,
+                "response_tokens": 733
+            },
+            {
+                "type_call": "summary",
+                "system_prompt_tokens": 708,
+                "user_prompt_tokens": 3000,
+                "response_tokens": 1083
+            },
+            {
+                "type_call": "postprocessing",
+                "system_prompt_tokens": 114,
+                "user_prompt_tokens": 12567,
+                "response_tokens": 2992
+            },
+            {
+                "type_call": "postprocessing",
+                "system_prompt_tokens": 114,
+                "user_prompt_tokens": 12567,
+                "response_tokens": 2880
+            },
+            {
+                "type_call": "postprocessing",
+                "system_prompt_tokens": 114,
+                "user_prompt_tokens": 12567,
+                "response_tokens": 2942
+            },
+            {
+                "type_call": "postprocessing",
+                "system_prompt_tokens": 114,
+                "user_prompt_tokens": 12567,
+                "response_tokens": 2365
+            },
+            {
+                "type_call": "postprocessing",
+                "system_prompt_tokens": 114,
+                "user_prompt_tokens": 12567,
+                "response_tokens": 558
+            }
+        ],
+        "total_total_tokens": 153881,
+        "timestamp": "2026-06-12 16:51:09"
     }
 ]

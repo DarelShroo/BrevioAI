@@ -20,25 +20,42 @@ Make sure you have **Docker** and **Docker Compose** installed. If you don't hav
 2. Navigate to the project root directory:
 
    ```bash
-   cd <project-directory>
+   cd BrevioAI
    ```
 
-3. Build and start the containers with Docker Compose:
+3. Create the `.env` file from the example:
 
    ```bash
-   docker-compose up --build
+   cp .env.example .env
    ```
+   *Note:* The default configuration sets `OPENAI_API_URL` to `http://host.docker.internal:8080/v1` so the containers can connect to a local LLM API running on your host machine at port 8080. If your local API is running on a different port, update the `.env` accordingly.
 
-   This will build the necessary Docker images and start the containers for the project.
+### 🚀 Running in Development Mode (Hot-Reload)
 
-4. Once the containers are up and running, you can access the application through your browser or API, depending on the configuration.
+This mode runs the Frontend using Vite's development server on port **3000** with Hot-Module Replacement (HMR). Changes to your Vue code will reflect instantly in the browser without rebuilding Docker.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:8000/api/docs
+
+### 🏭 Running in Production Mode
+
+This mode builds the frontend for production and serves it using an ultra-fast Nginx web server on port **80**. Use this for final testing or deployment.
+
+```bash
+docker compose up -d --build
+```
+- **Frontend**: http://localhost:80
+- **Backend API**: http://localhost:8000/api/docs
 
 ## Stopping the Project
 
 To stop the running containers, execute the following command in the project root directory:
 
 ```bash
-docker-compose down
+docker compose down
 ```
 
 This will stop and remove the containers, networks, and volumes associated with the project.

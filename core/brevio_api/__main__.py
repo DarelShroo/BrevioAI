@@ -100,9 +100,9 @@ app.add_exception_handler(AuthServiceException, auth_service_exception_handler) 
 app.add_exception_handler(PyJWTError, jwt_error_exception_handler)  # type: ignore[arg-type]
 
 app.include_router(auth_router)
+app.include_router(billing_router)
 app.include_router(brevio_router)
 app.include_router(user_router)
-app.include_router(billing_router)
 
 
 def setup_logging() -> None:

@@ -2,7 +2,7 @@ from typing import Annotated, Any, Dict, Optional
 
 from bson import ObjectId
 from pydantic import BaseModel as PydanticBaseModel
-from pydantic import ConfigDict, Field, PlainSerializer, field_validator
+from pydantic import ConfigDict, Field, PlainSerializer, WithJsonSchema, field_validator
 
 
 def serialize_object_id(value: ObjectId) -> str:
@@ -18,7 +18,9 @@ def validate_object_id(value: Any) -> ObjectId:
 
 
 SerializedObjectId = Annotated[
-    ObjectId, PlainSerializer(serialize_object_id, return_type=str)
+    ObjectId,
+    PlainSerializer(serialize_object_id, return_type=str),
+    WithJsonSchema({"type": "string", "example": "507f1f77bcf86cd799439011"}),
 ]
 
 

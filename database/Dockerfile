@@ -1,3 +1,3 @@
-FROM mongodb/mongodb-community-server
+FROM mongo:7.0
 
 EXPOSE 27017

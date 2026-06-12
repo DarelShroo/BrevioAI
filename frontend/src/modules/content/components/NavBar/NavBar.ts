@@ -1,4 +1,4 @@
-import { computed, defineComponent, onMounted, ref } from 'vue'
+import { computed, defineComponent, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useStoreDeviceType } from '../../../brevio/composables/useStoreDeviceType'
 import { useAuthStore } from '@/stores/useAuthStore'

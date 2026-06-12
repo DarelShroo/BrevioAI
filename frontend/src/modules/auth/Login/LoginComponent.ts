@@ -39,7 +39,7 @@ export default defineComponent({
           message.success(`Bienvenido, ${formState.identity}`)
           router.push({ name: 'brevio' })
         }
-      } catch (error) {
+      } catch {
         message.error('Error al iniciar sesión. Verifica tus credenciales.')
       } finally {
         loading.value = false

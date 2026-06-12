@@ -1,13 +1,12 @@
 import { useStoreDeviceType } from '@/modules/brevio/composables/useStoreDeviceType'
 import { useStoreNotification } from '@/modules/brevio/composables/useStoreNotification'
 import axios from 'axios'
-import { h } from 'vue'
 import type { RequestHeaders } from './interfaces/request-headers'
 
 export const brevio_api = () => {
   const base_url = import.meta.env.VITE_API_URL
 
-  const get = async (path: string, parameters: { key: string; value: string }[] = []) => {
+  const get = async (path: string) => {
     try {
       const response = await axios.get(base_url + path, {
         headers: {
@@ -30,10 +29,11 @@ export const brevio_api = () => {
     try {
       const isFormData = body instanceof FormData
 
+      const authToken = token || localStorage.getItem('token') || ''
       const requestHeaders: RequestHeaders = {
         headers: {
           'X-API-KEY': api_key,
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${authToken}`,
         },
       }
 

@@ -11,7 +11,6 @@ import markdown
 from bs4 import BeautifulSoup, Tag
 from docx import Document
 from dotenv import load_dotenv
-from googletrans import Translator
 from openai import (
     APIConnectionError,
     AsyncOpenAI,
@@ -87,7 +86,6 @@ class SummaryService:
         self.clients: dict[str, AsyncOpenAI] = {}
         self.advanced_prompt_generator = AdvancedPromptGenerator()
         self.history_token_model = HistoryTokenModel()
-        self.translator = Translator()
         self.api_service = ApiService(
             self.running,
             self.task_queue,
@@ -934,37 +932,7 @@ class SummaryService:
 
     async def detect_language_with_retry_safe(self, text: str) -> str:
         fallback_lang = "en"
-
-        @retry(
-            wait=wait_exponential(multiplier=5, min=10, max=60),
-            stop=stop_after_attempt(10),
-            retry=retry_if_exception_type(
-                (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.HTTPError, Exception)
-            ),
-            reraise=True,
-        )
-        async def _detect(text: str) -> str:
-            try:
-                result = await asyncio.to_thread(self.translator.detect, text)
-                return getattr(result, "lang", fallback_lang)
-            except Exception as e:
-                logger.error(f"Error detectando idioma: {e}", exc_info=True)
-                raise
-
-        try:
-            if not text.strip():
-                logger.warning(
-                    "No text available for language detection, using fallback English"
-                )
-                return fallback_lang
-            detected_lang = await _detect(text[:2000])
-            logger.info(f"Detected language: {detected_lang}")
-            return detected_lang
-        except Exception as e:
-            logger.warning(
-                f"Language detection ultimately failed, falling back to English: {e}"
-            )
-            return fallback_lang
+        return fallback_lang
 
     async def _process_single_document(
         self,

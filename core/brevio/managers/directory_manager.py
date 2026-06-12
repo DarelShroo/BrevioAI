@@ -3,8 +3,9 @@ import logging
 from collections.abc import AsyncGenerator
 from typing import Generator, Optional
 
-from core.shared.models.history_token_model import HistoryTokenModel
-
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from core.shared.models.history_token_model import HistoryTokenModel
 try:
     import aiofiles
 except ImportError:
@@ -145,6 +146,20 @@ class DirectoryManager:
             for i, pagina in enumerate(lector.pages):
                 texto = pagina.extract_text() or ""
                 texto_limpio = re.sub(r"\n+", "\n", texto.strip())
+                
+                # Intentar OCR si no hay texto
+                if not texto_limpio:
+                    try:
+                        import pytesseract
+                        from pdf2image import convert_from_path
+                        logger.debug(f"Intentando OCR en la página {i+1}")
+                        images = convert_from_path(path, first_page=i+1, last_page=i+1)
+                        if images:
+                            texto = pytesseract.image_to_string(images[0], lang='spa+eng')
+                            texto_limpio = re.sub(r"\n+", "\n", texto.strip())
+                    except Exception as e:
+                        logger.warning(f"OCR falló en la página {i+1}: {e}")
+
                 if texto_limpio:
                     if history_token_model:
                         history_token_model.num_chars_file += len(texto_limpio)

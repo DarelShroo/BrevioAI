@@ -1,6 +1,6 @@
 import { api } from '@/utils/api'
 import { Form, message } from 'ant-design-vue'
-import { defineComponent, onMounted, reactive, ref, toRaw } from 'vue'
+import { defineComponent, onMounted, reactive, ref } from 'vue'
 import { useAuthStore } from '../../../../stores/useAuthStore';
 import type {
   LanguageTypeResponse,
@@ -24,7 +24,7 @@ export default defineComponent({
       default: () => [],
     }
   },
-  setup(props, { emit }) {
+  setup(props) {
     const typeConfiguration = ref(props.typeConfiguration)
     const validSourceTypes = ref({
       'summary-youtube': ['video', 'audio'],
@@ -33,7 +33,6 @@ export default defineComponent({
     })
 
     const authStore = useAuthStore()
-    const token = authStore.getToken()
 
     const validSourceTypesConfiguration = ref(validSourceTypes.value[typeConfiguration.value as keyof typeof validSourceTypes.value] || [])
 
@@ -205,7 +204,7 @@ export default defineComponent({
 
       console.log('Cuerpo de la solicitud:', formData)
 
-      const response = await api.post('/brevio/summary-documents', formData, token as string)
+      const response = await api.post('/brevio/summary-documents', formData, authStore.getToken() as string)
 
       if (response) {
         console.log('Respuesta recibida:', response.data)
@@ -228,7 +227,7 @@ export default defineComponent({
           fetchBrevio()
           message.success('Form submitted successfully')
         })
-        .catch((err) => {
+        .catch(() => {
           message.error('Please fill all required fields')
         })
     }

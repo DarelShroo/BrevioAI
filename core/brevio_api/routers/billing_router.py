@@ -57,10 +57,8 @@ class BillingRoutes:
             ),
             verify_api_key: str = Depends(verify_api_key),
             billing_estimator: BillingEstimatorService = Depends(get_billing_estimator),
-        ) -> None:
-            # estimated_cost = billing_estimator.billing_for__media(minutes)
-            # return BillingEstimateResponse(estimated_cost=estimated_cost)
-            pass
+        ) -> BillingEstimateResponse:
+            return BillingEstimateResponse(estimated_cost=0.0)
 
         @self.router.get(
             "/estimate-documents",

@@ -148,7 +148,10 @@ class AuthService:
             user_db.email, f"Usuario {user_db.username} registrado en Brevio"
         )
 
-        await email_service.send_register_email()
+        try:
+            await email_service.send_register_email()
+        except Exception as e:
+            logger.error(f"Failed to send welcome email: {e}")
 
         response = RegisterResponse(folder=folder_response, access_token=token)
 
@@ -223,7 +226,10 @@ class AuthService:
         )
 
         email_service = EmailService(user.email, "Confirmación de cambio de contraseña")
-        await email_service.send_password_changed_email()
+        try:
+            await email_service.send_password_changed_email()
+        except Exception as e:
+            logger.error(f"Failed to send password changed email: {e}")
 
         response = PasswordRecoveryResponse(message="Contraseña cambiada exitosamente.")
 
