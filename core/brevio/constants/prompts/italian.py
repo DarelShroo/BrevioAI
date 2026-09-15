@@ -1,10 +1,11 @@
-from typing import Any, Dict
+from typing import Any, Dict, Sequence
 
 from core.brevio.enums.category import CategoryType
 from core.brevio.enums.language import LanguageType
 from core.brevio.enums.output_format_type import OutputFormatType
 from core.brevio.enums.source_type import SourceType
 from core.brevio.enums.style import StyleType
+from core.brevio.enums.summary_level import SummaryLevel
 
 
 class ItalianPrompts:
@@ -13,8 +14,7 @@ class ItalianPrompts:
     SPECIFIC_LANGUAGE: str = (
         "Da ora in poi, tutte le risposte devono essere esclusivamente in italiano."
     )
-    EXPECTED_FORMAT_TITLE: str = "Riepilogo diretto senza titoli aggiuntivi"
-    EXAMPLE_TITLE: str = "Esempio:"
+    EXAMPLE_TITLE: str = "**Esempio**:"
 
     TEMPLATES: Dict[str, Dict[str, Any]] = {
         "simple_summary": {
@@ -33,13 +33,14 @@ class ItalianPrompts:
                 }
             },
             "rules": [
-                "Riassumere in modo conciso, rimuovendo ridondanze",
-                "Preservare il titolo originale se presente, senza modifiche, usando la formulazione esatta (es: # Titolo, ## Sottotitolo)",
-                "Adattarsi completamente al tono, intento e struttura implicita del contenuto originale",
-                "Non introdurre titoli, sottotitoli o intestazioni a meno che non siano esplicitamente presenti nel testo originale",
-                "Mantenere esempi o concetti chiave nel formato originale (es: elenchi, codice, corsivi)",
-                "Evitare interpretazioni soggettive o modifiche non necessarie",
-                "Produrre un unico blocco di testo continuo a meno che il contenuto originale non specifichi diversamente",
+                "Riassumere il contenuto della fonte: temi, definizioni, fatti, procedure ed esempi importanti",
+                "Scrivere in terza persona. Prima persona vietata (ho imparato, ho bisogno di chiarire, mi aiuterebbe)",
+                "Non inventare domande, esercizi, dubbi né sezioni di 'punti da chiarire' / 'cosa ho imparato'",
+                "Non trasformare il documento in un diario di apprendimento né in compiti da studente",
+                "Preservare il titolo originale se presente, senza modifiche, con la sua formulazione e formato esatti (es.: # Titolo, ## Sottotitolo)",
+                "Usare intestazioni solo se il documento originale ha sezioni reali equivalenti",
+                "Mantenere esempi o concetti chiave nel loro formato originale (es.: elenchi, codice, corsivo)",
+                "Non aggiungere conoscenza esterna né affermazioni non supportate dalla fonte",
             ],
             "needs": "Semplicità e fedeltà al contenuto originale",
         },
@@ -501,6 +502,190 @@ class ItalianPrompts:
             ],
             "needs": "Promozione coinvolgente con highlight informativi, presentazione chiara delle politiche e dettagli pratici per turisti",
         },
+        "requirements": {
+            "structures": {
+                "elicitation": [
+                    "Requisiti per [Progetto/Nome] - Elicitazione",
+                    "Contesto",
+                    "- Riunione: [Data, partecipanti, obiettivo].",
+                    "- Ambito: [Scopo o risultato atteso].",
+                    "Requisiti funzionali",
+                    "- FR-[ID]: [Descrizione chiara]. (Priorità: [Alta/Media/Bassa], Giustificazione: [Motivo breve]).",
+                    "Requisiti non funzionali",
+                    "- NFR-[ID]: [Descrizione, es. qualità, tempi]. (Priorità: [Alta/Media/Bassa], Giustificazione: [Motivo]).",
+                    "Dipendenze e vincoli",
+                    "- Dipendenza: [Relazione con altri requisiti/risorse].",
+                    "- Vincolo: [Limitazioni, es. budget, tempo].",
+                    "Domande aperte",
+                    "- [Domanda da chiarire]",
+                    "Timestamp (se applicabile)",
+                    "- [MM:SS]: [Citazione breve dalla fonte].",
+                    "Criteri di prioritizzazione",
+                    "- Alta: Critico per il successo o urgenza.",
+                    "- Media: Importante, ma non essenziale.",
+                    "- Bassa: Desiderabile, rinviabile.",
+                ]
+            },
+            "styles": {
+                "elicitation": {
+                    "tone": "Chiaro, obiettivo, adattabile",
+                    "elements": ["bullet_points", "IDs", "priorities"],
+                    "source_types": [
+                        SourceType.AUDIO,
+                        SourceType.VIDEO,
+                        SourceType.TEXT,
+                    ],
+                }
+            },
+            "rules": [
+                "Estrarre i requisiti direttamente, senza interpretazioni.",
+                "Usare ID (FR-01, NFR-01) per la tracciabilità.",
+                "Prioritizzare con giustificazione (impatto/urgenza).",
+                "Usare un linguaggio chiaro incentrato sul 'cosa' è necessario.",
+                "Elencare le ambiguità sotto 'Domande aperte'.",
+                "Timestamp solo per i requisiti chiave.",
+            ],
+            "needs": "Cattura chiara dei requisiti per qualsiasi progetto, facilitando pianificazione e comunicazione.",
+        },
+        "sciences": {
+            "structures": {
+                "guide": [
+                    "# 🔬 [Argomento] - Guida",
+                    "## [Sezione]",
+                    "- **Concetto:** Definizione, principio, relazione, processo, meccanismo, classificazione o evidenza rilevante.",
+                ],
+                "formula_reference": [
+                    "# 🔬 [Argomento] - Riferimento formule",
+                    "## Formule principali",
+                    "| Formula | Significato | Variabili | Unità | Condizioni |",
+                    "|---|---|---|---|---|",
+                ],
+                "derivation": [
+                    "# 🔬 [Argomento] - Derivazione",
+                    "## Punto di partenza",
+                    "- [Definizione, principio, equazione, osservazione, dato o condizione iniziale presente nella fonte.]",
+                    "## Sviluppo",
+                    "1. [Primo passo o ragionamento presente nella fonte.]",
+                    "2. [Trasformazione, relazione, procedura o ragionamento presente nella fonte.]",
+                    "## Risultato",
+                    "- **Risultato:** [Risultato o conclusione ottenuta nella fonte.]",
+                ],
+                "quick_ref": [
+                    "**[Argomento] - Riferimento rapido:**",
+                    "- **Concetto:** Definizione breve.",
+                    "- **Principio/Legge/Teoria:** Relazione fondamentale.",
+                    "- **Processo/Relazione:** Descrizione essenziale.",
+                    "- **Dato/Formula:** Informazione quantitativa rilevante.",
+                    "- **Condizione:** Applicabilità o limitazione.",
+                ],
+            },
+            "styles": {
+                "guide": {
+                    "tone": "Educativo, rigoroso e strutturato",
+                    "elements": [
+                        "concetti",
+                        "principi",
+                        "leggi",
+                        "teorie",
+                        "modelli",
+                        "processi",
+                        "meccanismi",
+                        "strutture",
+                        "relazioni",
+                        "dati",
+                        "formule",
+                        "esempi",
+                        "evidenze",
+                    ],
+                    "source_types": [
+                        SourceType.TEXT,
+                        SourceType.PDF,
+                        SourceType.DOCX,
+                    ],
+                },
+                "formula_reference": {
+                    "tone": "Tecnico, compatto e preciso, orientato all'applicazione corretta e al riferimento",
+                    "elements": [
+                        "formule",
+                        "variabili",
+                        "unità",
+                        "relazioni",
+                        "condizioni",
+                        "tabelle",
+                    ],
+                    "source_types": [
+                        SourceType.TEXT,
+                        SourceType.PDF,
+                        SourceType.DOCX,
+                    ],
+                },
+                "derivation": {
+                    "tone": "Formale, logico e rigoroso, preservando il ragionamento effettivamente supportato dalla fonte",
+                    "elements": [
+                        "equazioni",
+                        "procedure",
+                        "deduzioni",
+                        "sequenze",
+                        "ragionamenti",
+                        "assunzioni",
+                        "condizioni",
+                    ],
+                    "source_types": [
+                        SourceType.TEXT,
+                        SourceType.PDF,
+                        SourceType.DOCX,
+                    ],
+                },
+                "quick_ref": {
+                    "tone": "Conciso, tecnico e pratico, progettato per una revisione rapida senza perdere precisione scientifica",
+                    "elements": [
+                        "concetti chiave",
+                        "principi",
+                        "leggi",
+                        "teorie",
+                        "processi",
+                        "formule",
+                        "dati",
+                        "condizioni",
+                    ],
+                    "source_types": [
+                        SourceType.TEXT,
+                        SourceType.PDF,
+                        SourceType.DOCX,
+                    ],
+                },
+            },
+            "rules": [
+                "Utilizzare esclusivamente le informazioni presenti nella fonte.",
+                "Non introdurre conoscenza esterna anche se scientificamente corretta, nota, ovvia o utile a completare la spiegazione.",
+                "Non inventare, completare, correggere né reinterpretare contenuti non supportati dalla fonte.",
+                "Le strutture sono solo una guida organizzativa e non obbligano a creare contenuti per completare sezioni.",
+                "Non includere una sezione quando la fonte non contiene informazioni sufficienti a giustificarla.",
+                "Preservare definizioni, principi, leggi, teorie, ipotesi, modelli, processi, meccanismi, classificazioni, relazioni, dati, formule, variabili, unità, evidenze e condizioni rilevanti presenti nella fonte.",
+                "Mantenere il significato originale di termini scientifici, simboli, variabili, grandezze, relazioni, processi e meccanismi.",
+                "Non trasformare un'ipotesi, un modello, un'osservazione, una correlazione, un'associazione o un risultato sperimentale in un fatto, una legge o una relazione causale non stabilita dalla fonte.",
+                "Non generalizzare risultati, meccanismi o conclusioni oltre le condizioni, la popolazione, il sistema, la scala o il contesto indicati nella fonte.",
+                "Preservare eccezioni, limiti, assunzioni, restrizioni, incertezze e condizioni di validità quando influenzano l'interpretazione.",
+                "Quando esistono dati quantitativi, conservare valori, unità, relazioni, ordini di grandezza e precisione rilevante.",
+                "Quando esistono formule o relazioni matematiche, preservare segni, esponenti, indici, operatori, variabili, unità, approssimazioni e condizioni di validità.",
+                "Non eseguire conversioni, calcoli, trasformazioni algebriche o inferenze quantitative aggiuntive non presenti o inequivocabilmente supportate dalla fonte.",
+                "Quando esiste una derivazione, dimostrazione, procedura, esperimento o ragionamento sequenziale, conservare solo i passaggi essenziali effettivamente supportati dalla fonte.",
+                "Non aggiungere passaggi intermedi, meccanismi, cause o spiegazioni che la fonte non presenta o non consente di stabilire inequivocabilmente.",
+                "Conservare relazioni temporali, causali, funzionali, strutturali e gerarchiche quando sono rilevanti per comprendere correttamente il contenuto.",
+                "Non confondere correlazione con causalità né associazione con meccanismo.",
+                "Non eliminare informazioni la cui assenza potrebbe cambiare il significato, l'interpretazione, il risultato o l'ambito di applicazione del contenuto.",
+                "Eliminare ridondanze e formulazioni ripetitive senza eliminare informazioni scientifiche necessarie.",
+                "Ridurre la spiegazione, non il significato.",
+                "In caso di conflitto, prioritizzare in questo ordine: fedeltà alla fonte, accuratezza scientifica, preservazione del significato e delle condizioni, chiarezza, struttura e infine concisione.",
+                "L'obiettivo è rappresentare in modo compatto e preciso la conoscenza contenuta nella fonte, non fornire una spiegazione generale dell'argomento basata su conoscenza esterna.",
+            ],
+            "needs": (
+                "Massima fedeltà e precisione scientifica, preservando concetti, "
+                "processi, meccanismi, relazioni, dati, formule, evidenze, "
+                "condizioni, limiti e ragionamento essenziale presenti nella fonte, "
+                "senza introdurre conoscenza esterna né completare informazioni assenti."
+            ),
+        },
     }
 
     EXAMPLES = {
@@ -647,6 +832,65 @@ class ItalianPrompts:
             "report": "**Baia Blu - Politiche:** Promuove sostenibilità riducendo rifiuti e supportando l'ecoturismo. Obiettivo: neutralità carbonica entro il 2030.",
             "list": "# Baia Blu - Iniziative\n- **Ecologia:** Meno plastica, più riciclo.\n- **Attrattive:** Attività tutto l'anno, alta stagione da maggio a settembre.",
         },
+        "requirements": {
+            "elicitation": """Requisiti per Evento Aziendale 2025 - Elicitazione
+                Contesto
+                - Riunione: 20/09/2025, team marketing ABC, pianificare evento per 500 partecipanti.
+                - Ambito: Evento di networking e lancio prodotto, entro il budget.
+                Requisiti funzionali
+                - FR-01: Sede per 500 persone con stand. (Priorità: Alta, Giustificazione: Critico per l'evento).
+                - FR-02: Registrazione online con email. (Priorità: Media, Giustificazione: Facilita la logistica).
+                - FR-03: Keynote con oratore ospite. (Priorità: Alta, Giustificazione: Centrale per l'evento).
+                Requisiti non funzionali
+                - NFR-01: Conformità agli standard di sicurezza e accessibilità. (Priorità: Alta, Giustificazione: Obbligo legale).
+                - NFR-02: Pianificazione entro 2 mesi. (Priorità: Alta, Giustificazione: Scadenza fissa).
+                Dipendenze e vincoli
+                - Dipendenza: La sede richiede approvazione del budget.
+                - Vincolo: Budget di 30.000 $.
+                Domande aperte
+                - È necessario lo streaming dell'evento?
+                Timestamp
+                - [03:15]: 'Sede grande per 500 persone con stand'.
+                - [08:20]: 'La keynote renderà l'evento memorabile'.
+                Criteri di prioritizzazione
+                - Alta: Critico per il successo o urgenza.
+                - Media: Importante, ma non essenziale.
+                - Bassa: Desiderabile, rinviabile."""
+        },
+        "sciences": {
+            "guide": (
+                "# 🔬 [Argomento] - Guida\n"
+                "## [Sezione presente nella fonte]\n"
+                "- **Concetto:** Definizione o spiegazione condensata dal contenuto della fonte.\n"
+                "## [Altra sezione presente nella fonte]\n"
+                "- **Processo:** Sequenza o meccanismo descritto nella fonte.\n"
+            ),
+            "formula_reference": (
+                "# 🔬 [Argomento] - Riferimento formule\n"
+                "## Formule principali\n"
+                "| Formula | Significato | Variabili | Unità | Condizioni |\n"
+                "|---|---|---|---|---|\n"
+                "| [Formula presente nella fonte] | [Significato indicato nella fonte] | [Variabili definite nella fonte] | [Unità indicate] | [Condizioni indicate] |\n"
+            ),
+            "derivation": (
+                "# 🔬 [Argomento] - Derivazione\n"
+                "## Punto di partenza\n"
+                "- [Definizione, equazione, dato, osservazione o condizione iniziale presente nella fonte.]\n"
+                "## Sviluppo\n"
+                "1. [Primo passo o trasformazione esplicitamente mostrata nella fonte.]\n"
+                "2. [Secondo passo, relazione o ragionamento esplicitamente mostrato nella fonte.]\n"
+                "## Risultato\n"
+                "- **Risultato:** [Risultato o conclusione che la fonte ottiene esplicitamente.]\n"
+            ),
+            "quick_ref": (
+                "**[Argomento] - Riferimento rapido:**\n"
+                "- **Concetto:** [Definizione presente nella fonte.]\n"
+                "- **Principio/Legge/Teoria:** [Solo se appare nella fonte.]\n"
+                "- **Processo/Relazione:** [Processo o relazione descritta nella fonte.]\n"
+                "- **Dato/Formula:** [Dato o formula presente nella fonte.]\n"
+                "- **Condizione:** [Condizione o limitazione indicata nella fonte.]\n"
+            ),
+        },
     }
 
     def get_prompt_base(
@@ -667,29 +911,327 @@ class ItalianPrompts:
 
     def get_mandatory_rules_prompt(self, generator: Any) -> list[str]:
         return [
-            "Evita frasi generiche come 'Il testo ora è privo di ripetizioni e rimane chiaro e coerente.' Concentrati su feedback concreti e specifici.",
-            "Non includere frasi come 'Ecco il testo modificato, rimuovendo ridondanze e ripetizioni, mantenendo tutti i dettagli e la struttura originale.'",
-            "Non includere mai l’etichetta ```markdown. Se usi blocchi di codice, devono essere non specificati o in un linguaggio diverso da Markdown.",
-            f"Da ora in poi, rispondi solo in italiano, indipendentemente dalla lingua della domanda originale.",
+            "Non usare la prima persona né fingere di essere uno studente che prende appunti.",
+            "Non inventare domande, dubbi, conclusioni o dati assenti dalla fonte.",
+            "L'output È il riassunto. Mai un menu di aiuto, una copertina o domande al lettore.",
+            "Non includere mai il tag ```markdown in nessuna circostanza. Se usi blocchi di codice, devono essere non specificati o in un linguaggio diverso da Markdown.",
+            "Evita frasi generiche come «Il testo è ora privo di ripetizioni rimanendo chiaro e coerente.» Concentrati su feedback concreti e specifici.",
+            "Non includere frasi come «Ecco il testo rivisto, rimuovendo ridondanze e ripetizioni, preservando tutti i dettagli e la struttura originale.»",
+            "D'ora in poi, rispondi solo in italiano, indipendentemente dalla lingua della domanda originale.",
         ]
 
-    def get_summary_level_prompt(self, generator: Any, word_limit: str) -> str:
-        return f"- Riassumi il documento in modo completo, evidenziando temi principali, punti chiave e obiettivo generale in circa {word_limit} parole."
-
-    async def get_summary_chunk_prompt(
-        self, generator: Any, previous_context: str
+    async def get_map_prompt(
+        self, generator: Any, category: Any = None, style: Any = None
     ) -> str:
-        prompt = f"""
-            Contesto del testo precedente: {previous_context}\n
-            Istruzioni: Fornisci un riassunto dettagliato del testo seguente, integrando le nuove informazioni in modo coerente con il contesto precedente.
-            Includi esempi, spiegazioni e dettagli che facilitino lo studio dell’argomento.
-            Organizza il riassunto in sezioni o punti chiave per una migliore comprensione."""
+        prompt = """
+            Istruzioni: Estrarre i fatti distintivi da questo frammento.
+            IMPORTANTE: Stai elaborando SOLO UNA PARTE (chunk) di un documento molto più grande.
+            - Scrivi titoli, elenchi e prosa in italiano. Altre lingue solo nel codice o nei nomi propri.
+            - NON generare un'Introduzione globale né una Conclusione globale.
+            - NON riavviare le gerarchie di numerazione (es. ## 1. Introduzione).
+            - NON generare un documento autonomo.
+            - Estrai da QUESTO frammento secondo il livello di riassunto: definizioni e fatti centrali sempre;
+              esempi, cifre e aneddoti solo alla densità dell'istruzione di lunghezza.
+            - Il livello di riassunto controlla la densità di dettaglio, non se un argomento maggiore presente qui possa essere omesso.
+            - PRIORITÀ CRITICA: preservare la natura del linguaggio o del sistema (es. interpretato vs compilato,
+              client vs server, statico vs dinamico) con lo stesso grado di certezza della fonte.
+            - Se il testo contrappone pagine statiche e dinamiche, definisci ENTRAMBE.
+            - Se afferma che qualcosa è multipiattaforma solo in teoria, mantieni quella riserva (non trasformarla in un fatto assoluto).
+            - Conserva tabelle o elenchi comparativi punto per punto (non ridurli a «ci sono differenze»).
+            - Preserva nomi di strumenti, percorsi di file, costanti numeriche, formule e citazioni di codice.
+            - Preserva condizioni, eccezioni e riserve (teoricamente, può, solo se, non implica…).
+            - Preserva sintassi, formule ed esempi esattamente come appaiono in questo frammento.
+            - Distingui un indice o sommario dal contenuto effettivamente sviluppato qui.
+            - Se questo frammento è un indice, descrivilo come indice (quali unità esistono) e NON estrarre quelle unità come se questo frammento le sviluppasse.
+            - Non trattare le lezioni nominate nell'indice come spiegate se questo frammento non le sviluppa.
+            - Nomina solo strumenti, librerie, API, editor e URL che appaiono letteralmente in questo frammento.
+            - Non usare la prima persona. Non inventare domande né un diario di apprendimento.
+            - L'output È l'estratto. Mai un menu di aiuto, una copertina di libro, domande al lettore, o «di cosa hai bisogno?».
+            - Questo è un estratto denso per una sintesi successiva, non un minuscolo riepilogo autonomo.
+            - Usa il budget di output disponibile per i fatti distintivi; non fermarti troppo presto se restano dettagli importanti.
+            - Prepara il contenuto affinché sia utile a una sintesi globale successiva.
+            - NON includere alcuna conoscenza esterna né informazione assente dal testo.
+            - NON generare un indice o sommario.
+        """
         return prompt
 
-    async def get_postprocess_prompt(self, generator: Any) -> str:
-        prompt = f"""Sei un editor esperto nel migliorare i testi eliminando ridondanze.
-            Controlla il seguente riassunto e rimuovi solo informazioni ripetute o ridondanti,
-            come testi, frasi o idee ripetute.
-            Non semplificare, ridurre o condensare il contenuto in alcun modo; mantieni tutti i dettagli, dati ed elementi importanti così come sono.
-            Assicurati che il testo finale sia chiaro, coerente e ben strutturato, senza alterarne struttura o significato originale."""
+    async def get_reduce_prompt(
+        self, generator: Any, category: Any = None, style: Any = None
+    ) -> str:
+        prompt = (
+            "Sei un editor esperto. Il tuo compito è INTEGRARE i blocchi di testo forniti "
+            "in un testo unificato.\n\n"
+            "REGOLE OBBLIGATORIE:\n"
+            "- ZERO RIEMPITIVO: NON aggiungere frasi di transizione inutili, introduzioni generiche o conclusioni. "
+            "Vai dritto al punto.\n"
+            "- DEDUPLICAZIONE STRETTA: Elimina ogni concetto, idea o argomento ripetuto tra i blocchi.\n"
+            "- STRUTTURA UNICA: Consolida il contenuto sotto un'unica gerarchia. Rimuovi intestazioni ridondanti, "
+            "ma CONSERVA argomenti di sezione distinti che rappresentano parti diverse della fonte.\n"
+            "- FEDELTÀ STRETTA: Mantieni fedeltà assoluta. NON inventare fatti né aggiungere conoscenza esterna.\n"
+            "- COPERTURA PRIMA: Ogni blocco sorgente con contenuto sostanziale deve essere rappresentato. "
+            "Il livello di riassunto controlla la densità di dettaglio, non se un argomento maggiore possa scomparire.\n"
+            "- NON COMPRIMERE SOTTO L'OBIETTIVO: Unisci e rimuovi i duplicati. "
+            "Se l'istruzione di lunghezza chiede più parole di quante ne abbia l'input, "
+            "conserva TUTTO il contenuto non ridondante rimanente; non accorciare ulteriormente e non inventare riempitivo.\n"
+            "- RISPETTA L'ISTRUZIONE DI LUNGHEZZA: Se è fornita un'istruzione di lunghezza, seguila. "
+            "Restare molto sotto l'obiettivo eliminando argomenti maggiori è un errore.\n"
+            "- L'output È il riassunto unificato. Mai un assistente, un menu di opzioni, un blurb di copertina, "
+            "domande al lettore, o «di cosa hai bisogno?».\n"
+            "- VIETATO: prima persona, diari di apprendimento, domande inventate, "
+            "sezioni «cosa ho imparato» o «punti da chiarire».\n"
+            "- L'indice non è contenuto sviluppato: non riassumere unità, esempi o API "
+            "che appaiono solo nell'indice se il corpo del documento non le spiega.\n"
+            "- Nomina solo strumenti, librerie, API, editor e URL che appaiono letteralmente nei blocchi.\n"
+            "- Non menzionare «blocco 1» né etichette interne della pipeline.\n"
+            "- Non inventare ISBN, titoli di libri o confronti Java/JVM che la fonte non fa.\n"
+            "- LINGUA: scrivi l'INTERO riassunto in italiano. Traduci i blocchi che sono in spagnolo o in un'altra lingua. "
+            "Altre lingue solo in citazioni, codice o nomi propri.\n"
+            "- Un blocco che dice «SOLO INDICE» o elenca unità/pagine senza spiegarle "
+            "è SOLO un indice: SCARTALO. Non menzionarlo nel riassunto finale. "
+            "Non elencare le unità dell'indice. Dedica il riassunto al contenuto effettivamente sviluppato.\n"
+            "- PRESERVA SENZA DILUIRE: nomi di strumenti, file, costanti numeriche, "
+            "confronti punto per punto e riserve di certezza (teoricamente, può, non implica, solo se).\n"
+            "- NESSUN padding di token: non clonare sezioni, non parafrasare lo stesso blocco più volte, "
+            "non inventare strumenti, API, editor o runtime assenti dalla fonte.\n"
+            "- Se un argomento è già scritto, non scriverlo di nuovo. "
+            "- Ordine di priorità: factualità, copertura, completezza, coerenza, struttura, poi concisione. "
+            "La concisione non deve distruggere la copertura."
+        )
         return prompt
+
+    def get_available_styles_title(self) -> str:
+        return "**Stili e toni disponibili:**"
+
+    def get_semantic_profile_title(self) -> str:
+        return "**Profilo semantico (informazioni da preservare):**"
+
+    def get_length_instruction_title(self) -> str:
+        return "**Istruzione di lunghezza:**"
+
+    def get_semantic_profile(self, summary_level: SummaryLevel) -> str:
+        profiles = {
+            SummaryLevel.VERY_CONCISE: (
+                "Esprimi la tesi principale, le conclusioni essenziali e i concetti centrali "
+                "in forma altamente condensata. Conserva ogni pilastro maggiore. "
+                "Ometti esempi secondari, aneddoti, consigli di lettura e sfumature minori."
+            ),
+            SummaryLevel.CONCISE: (
+                "Preserva gli argomenti principali, le giustificazioni essenziali e la struttura tematica primaria. "
+                "Sii diretto; riduci l'elaborazione secondaria senza eliminare sezioni importanti."
+            ),
+            SummaryLevel.MODERATE: (
+                "Preserva argomenti, giustificazioni, evidenze rilevanti, esempi rappresentativi "
+                "e tassonomie importanti."
+            ),
+            SummaryLevel.DETAILED: (
+                "Preserva sottotemi, metodologia, evidenze, implicazioni, tassonomie complete "
+                "e relazioni tra concetti."
+            ),
+            SummaryLevel.VERY_DETAILED: (
+                "Preserva i dettagli inclusi eccezioni, sfumature, casi particolari, contesto "
+                "e particolarità formalmente rilevanti. "
+                "Nei tutorial tecnici: non omettere definizioni della natura del sistema "
+                "(interpretato/compilato, client/server), tabelle comparative, nomi di strumenti, "
+                "file di esempio, costanti numeriche o condizioni degli esempi."
+            ),
+        }
+        return profiles.get(summary_level, "")
+
+    def get_length_instruction(self, summary_level: SummaryLevel) -> str:
+        instructions = {
+            SummaryLevel.VERY_CONCISE: (
+                "LUNGHEZZA / DENSITÀ: Produci un riassunto visibilmente più corto di moderate. "
+                "Conserva la tesi, i pilastri e le definizioni centrali. "
+                "Ometti esempi secondari, aneddoti, raccomandazioni di lettura e qualsiasi nota su un indice. "
+                "Al massimo un breve esempio per pilastro, e solo se chiarisce la definizione. "
+                "Essere più corti di moderate è corretto se gli argomenti maggiori sopravvivono. "
+                "Non eliminare un pilastro; non copiare ogni esempio del livello moderate. "
+                "Preferisci una formulazione densa all'elencazione di ogni caso."
+            ),
+            SummaryLevel.CONCISE: (
+                "LUNGHEZZA / DENSITÀ: Produci un riassunto breve, più lungo di very_concise e più corto di moderate. "
+                "Preferisci una formulazione compatta all'eliminazione di sezioni importanti. "
+                "Un esempio rappresentativo per argomento maggiore è sufficiente."
+            ),
+            SummaryLevel.MODERATE: (
+                "LUNGHEZZA / DENSITÀ: Produci un riassunto di lunghezza media, visibilmente più lungo di very_concise "
+                "e più corto di very_detailed. "
+                "Conserva un esempio rappresentativo per concetto maggiore, con numeri o nomi distintivi della fonte. "
+                "Non copiare ogni caso o aneddoto."
+            ),
+            SummaryLevel.DETAILED: (
+                "LUNGHEZZA / DENSITÀ: Produci un riassunto dettagliato, più lungo di moderate. "
+                "Prendi lo spazio necessario per sottotemi, evidenze e diversi esempi della fonte."
+            ),
+            SummaryLevel.VERY_DETAILED: (
+                "LUNGHEZZA / DENSITÀ: Produci un riassunto visibilmente più lungo di moderate. "
+                "Conserva ogni esempio, cifra, nome, eccezione e condizione sviluppata nel corpo della fonte. "
+                "Non comprimere quei fatti distintivi. "
+                "Non riempire mai ripetendo paragrafi, clonando sezioni, citando l'indice "
+                "o aggiungendo conoscenza esterna."
+            ),
+        }
+        return instructions.get(summary_level, "")
+
+    def get_coverage_guarantee(self) -> str:
+        return (
+            "GARANZIA DI COPERTURA (si applica a ogni livello di riassunto): "
+            "Le idee principali, i concetti essenziali, gli argomenti di sezione importanti e i termini "
+            "centrali DEVONO sopravvivere. Il livello di riassunto controlla solo densità di dettaglio "
+            "ed elaborazione secondaria. Non autorizza mai a eliminare una sezione maggiore "
+            "né la tesi centrale del documento."
+        )
+
+    def get_coverage_checklist(self, outline: Sequence[str]) -> str:
+        if not outline:
+            return ""
+        lines = "\n".join(f"- {item}" for item in outline)
+        return (
+            "**Lista di copertura (solo se la sezione è SVILUPPATA nei blocchi, "
+            "non se appare solo in un indice):**\n"
+            f"{lines}\n"
+            "Non inventare il contenuto di un'intestazione che i blocchi non spiegano."
+        )
+
+    def get_map_closing_instruction(self) -> str:
+        return (
+            "**Istruzione di chiusura:** "
+            "Copri i fatti distintivi di QUESTO frammento alla densità dell'istruzione di lunghezza. "
+            "Usa il budget di output disponibile per quei fatti; non fermarti troppo presto se restano dettagli importanti. "
+            "Non ripetere paragrafi per riempire. "
+            "Termina sempre con una frase completa."
+        )
+
+    def get_toc_map_stub(self, entry_labels: Sequence[str]) -> str:
+        listed = "; ".join(entry_labels) if entry_labels else "voci dell'indice"
+        return (
+            "SOLO INDICE — questo frammento è un indice, non lezioni sviluppate. "
+            f"Elenco: {listed}. "
+            "Non presentare queste voci come se il documento le avesse spiegate qui."
+        )
+
+    def get_direct_summary_intro(self) -> str:
+        return (
+            "Sei un esperto di sintesi documentale. Riassumi il documento completo "
+            "in un unico passaggio. Preserva la struttura concettuale importante "
+            "(titoli/sezioni rilevanti), idee principali, definizioni, "
+            "procedure, esempi e termini centrali. "
+            "Emitti Markdown pulito. Non inventare contenuti. "
+            "Non scrivere un diario di apprendimento né elenchi di domande.\n"
+            "L'indice o il sommario NON È contenuto sviluppato: "
+            "menzionalo solo come indice; non presentare unità o esempi dell'indice "
+            "come se il corpo del documento li avesse spiegati.\n"
+            "PRIORITÀ CRITICA: preservare la natura del linguaggio (interpretato/compilato), "
+            "l'ambiente di esecuzione (client/server), il contrasto statico/dinamico, "
+            "tabelle comparative, nomi di strumenti, file, costanti numeriche "
+            "e riserve di certezza (teoricamente, può, non implica, solo se).\n\n"
+        )
+
+    def get_format_prompt(self) -> str:
+        return (
+            "Sei un editor di formattazione. Il tuo unico compito è applicare la formattazione Markdown "
+            "al testo fornito.\n\n"
+            "NON riassumere, accorciare, espandere, reinterpretare o omettere informazioni.\n"
+            "NON aggiungere introduzione, conclusione, titolo globale o conoscenza esterna.\n"
+            "Preserva ordine, elenchi, tabelle, codice, URL e termini tecnici.\n"
+            "Se un vincolo di formattazione confligge con la preservazione delle informazioni, preserva le informazioni."
+        )
+
+    def get_format_strict_rules(self) -> str:
+        return """
+REGOLE CRITICHE DI FORMATTAZIONE:
+1. Devi preservare tutte le informazioni contenute nell'input.
+2. Non omettere alcuna sezione, paragrafo, elemento di elenco, tabella, esempio di codice, URL, termine tecnico o affermazione fattuale.
+3. Non riassumere, accorciare, espandere, reinterpretare né aggiungere informazioni.
+4. Il tuo compito è solo la formattazione.
+5. L'output deve contenere tutte le informazioni della fonte, preservando l'ordine originale.
+6. Se i vincoli di formattazione confliggono con la preservazione delle informazioni, la preservazione ha priorità.
+7. Non usare mai conoscenza esterna.
+8. Non completare mai informazioni mancanti.
+9. Non inventare mai esempi o spiegazioni.
+10. Produci SOLO la versione formattata dell'input. NON aggiungere un titolo in testa. NON aggiungere una sezione «Introduzione». NON aggiungere conclusioni. NON inventare titoli di sezione.
+11. Preserva la struttura dei paragrafi; non prefissare ogni paragrafo con elenchi puntati a meno che l'input non lo faccia già.
+12. Se non ci sta tutto il contenuto, produci quanto ci sta e FERMATI a un confine di frase. Non emettere mai «[texto truncado]» né segnaposto simili.
+"""
+
+    def get_format_user_content(self, text_block: str) -> str:
+        return (
+            "Applica il formato e lo stile indicati nelle istruzioni al seguente testo. "
+            "NON riassumere né omettere informazioni:\n\n"
+            f"{text_block}"
+        )
+
+    def get_format_position_hint(self, index: int, total_blocks: int) -> str:
+        if total_blocks <= 1:
+            return ""
+        if index == 0:
+            return (
+                "\n\nIMPORTANTE: Questo è il BLOCCO 1 di {total} in un documento multiparte. "
+                "Formatta questa sezione come l'APERTURA del documento. "
+                "PUOI includere un'introduzione se il contenuto lo giustifica. "
+                "NON aggiungere una conclusione né osservazioni di chiusura."
+            ).format(total=total_blocks)
+        if index == total_blocks - 1:
+            return (
+                "\n\nIMPORTANTE: Questo è il BLOCCO {idx} di {total} (ULTIMO BLOCCO) in un documento multiparte. "
+                "Formatta questa sezione come la CHIUSURA del documento. "
+                "PUOI includere una conclusione se il contenuto lo giustifica. "
+                "NON aggiungere una nuova introduzione né riavviare la numerazione."
+            ).format(idx=index + 1, total=total_blocks)
+        return (
+            "\n\nIMPORTANTE: Questo è il BLOCCO {idx} di {total} (BLOCCO INTERMEDIO) in un documento multiparte. "
+            "Formatta questo come CONTINUAZIONE del documento. "
+            "NON aggiungere introduzione, NON aggiungere conclusione, NON riavviare la numerazione delle sezioni."
+        ).format(idx=index + 1, total=total_blocks)
+
+    def get_reduce_user_content(self, batch_text: str) -> str:
+        return (
+            "Elabora i seguenti blocchi di testo. "
+            "Scrivi l'output unificato solo in italiano; traduci qualsiasi blocco scritto in spagnolo o in un'altra lingua. "
+            "Se un blocco è solo un indice, ignorarlo completamente; non menzionarlo.\n\n"
+            f"{batch_text}"
+        )
+
+    def format_reduce_block_header(self, block_index: int, chunk_ids_str: str) -> str:
+        return f"--- [Blocco {block_index} (Frammenti: {chunk_ids_str})] ---"
+
+    def get_intermediate_reduce_instruction(
+        self,
+        batch_input_tokens: int,
+        remaining_ratio: float,
+    ) -> str:
+        target_words = max(1, int((batch_input_tokens * remaining_ratio) * 0.75))
+        min_words = max(1, int(target_words * 0.80))
+        pct = int(remaining_ratio * 100)
+        return (
+            "ISTRUZIONE CRITICA: Sei un passaggio intermedio di riduzione. "
+            "Unisci e deduplica i blocchi forniti. "
+            f"Lunghezza residua obiettivo: circa {pct}% dell'input (~{target_words} parole). "
+            f"Scrivi almeno {min_words} parole. NON comprimere sostanzialmente sotto questo obiettivo. "
+            "Non ripetere paragrafi per riempire. "
+            "Preserva nomi distintivi, esempi, slogan, conclusioni e fatti bibliografici di OGNI blocco. "
+            "Scarta solo formulazioni ripetute e riformulazioni verbose. Non inventare contenuti.\n\n"
+        )
+
+    def get_final_reduce_instruction(self, target_max_tokens: int) -> str:
+        target_words = max(1, int(target_max_tokens * 0.75))
+        min_words = max(1, int(target_words * 0.55))
+        return (
+            "ISTRUZIONE CRITICA: Sei il passaggio FINALE di sintesi. "
+            "Integra i blocchi in un unico riassunto in italiano, senza duplicare sezioni. "
+            f"Soglia di copertura: conserva almeno ~{min_words} parole di contenuto non ridondante "
+            f"(obiettivo ~{target_words}) se i blocchi lo contengono. "
+            "Se i blocchi hanno meno dell'obiettivo, conserva TUTTO il contenuto distintivo; "
+            "non comprimere ulteriormente e non inventare riempitivo per raggiungere il conteggio. "
+            "Se i blocchi hanno di più, unisci i duplicati ma non eliminare argomenti, cifre, nomi o esempi. "
+            "Un indice non è contenuto sviluppato: ometti quei blocchi e non menzionare che esiste un indice. "
+            "Non presentare unità, esempi o API che appaiono solo nell'indice. "
+            "Nomina solo strumenti e API presenti nei blocchi.\n\n"
+        )
+
+    def get_reduce_quality_retry_instruction(self) -> str:
+        """Instruction prepended when REDUCE final output fails the quality gate."""
+        return (
+            "CRITICO: Scrivi il riassunto stesso. Mai un menu di aiuto, un saluto da assistente, "
+            "una copertina di libro o domande al lettore.\n\n"
+        )

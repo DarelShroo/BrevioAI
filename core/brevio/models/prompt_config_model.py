@@ -1,13 +1,17 @@
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Type
+from typing import TYPE_CHECKING, Any, Optional, Type
 
-from pydantic import field_serializer, field_validator
+from pydantic import field_serializer, field_validator, model_validator
 
 from core.brevio.enums.language import LanguageType
 from core.brevio.enums.output_format_type import OutputFormatType
 from core.brevio.enums.summary_level import SummaryLevel
 from core.brevio.models.base_model import BaseModel
 from core.shared.enums.model import ModelType
+from core.shared.utils.generation_params import (
+    GenerationParamError,
+    validate_generation_params,
+)
 
 
 class PromptConfig(BaseModel):
@@ -17,6 +21,18 @@ class PromptConfig(BaseModel):
     format: OutputFormatType
     language: LanguageType
     summary_level: SummaryLevel
+    max_output_tokens: Optional[int] = None
+    temperature: Optional[float] = None
+    reasoning_effort: Optional[str] = None
+
+    @property
+    def target_language(self) -> LanguageType:
+        """User-configured output language for instructions and the summary.
+
+        Distinct from the detected document/source language
+        (``HistoryTokenModel.language_input`` / document_language).
+        """
+        return self.language
 
     @field_validator("category", "style")
     @classmethod
@@ -104,3 +120,16 @@ class PromptConfig(BaseModel):
     @classmethod
     def serialize_summary_level(cls, value: SummaryLevel) -> str:
         return value.value
+
+    @model_validator(mode="after")
+    def validate_generation_fields(self) -> "PromptConfig":
+        self.max_output_tokens = None
+        self.temperature = None
+        try:
+            validate_generation_params(
+                self.model,
+                reasoning_effort=self.reasoning_effort,
+            )
+        except GenerationParamError as exc:
+            raise ValueError(str(exc)) from exc
+        return self

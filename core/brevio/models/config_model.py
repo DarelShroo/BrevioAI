@@ -1,4 +1,3 @@
-from os import getenv
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -6,6 +5,11 @@ from dotenv import load_dotenv
 from core.brevio.constants.constants import Constants
 from core.brevio.enums.language import LanguageType
 from core.shared.enums.model import ModelType
+from core.shared.utils.environment import max_tokens_fallback, tokens_per_minute
+from core.shared.utils.model_capabilities import (
+    generation_temperature,
+    get_model_capabilities,
+)
 
 
 class ConfigModel:
@@ -29,34 +33,19 @@ class ConfigModel:
 
         load_dotenv()
 
-        self._api_key: str = getenv("OPENAI_API_KEY", "")
-
-        self._max_tokens: int = self._safe_cast_int(getenv("MAX_TOKENS", "4096"))
-        self._tokens_per_minute: int = self._safe_cast_int(
-            getenv("TOKENS_PER_MINUTE", "200000")
-        )
-        self._temperature: float = self._safe_cast_float(getenv("TEMPERATURE", "0.2"))
-
-    @staticmethod
-    def _safe_cast_int(value: str) -> int:
-        try:
-            return int(value)
-        except (ValueError, TypeError):
-            return 0
-
-    @staticmethod
-    def _safe_cast_float(value: str) -> float:
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return 0.0
-
-    @property
-    def api_key(self) -> str:
-        return self._api_key
+        self._max_tokens: int = max_tokens_fallback()
+        self._tokens_per_minute: int = tokens_per_minute()
+        self._temperature: float = 1.0
 
     @property
     def max_tokens(self) -> int:
+        if self._model:
+            from core.shared.utils.model_capabilities import get_model_capabilities
+
+            try:
+                return get_model_capabilities(self._model).native_max_output_tokens
+            except ValueError:
+                pass
         return self._max_tokens
 
     @property
@@ -73,6 +62,11 @@ class ConfigModel:
 
     @property
     def temperature(self) -> float:
+        if self._model:
+            try:
+                return generation_temperature(get_model_capabilities(self._model))
+            except ValueError:
+                pass
         return self._temperature
 
     @temperature.setter

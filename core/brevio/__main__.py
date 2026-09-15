@@ -6,12 +6,13 @@ from bson import ObjectId
 from fastapi.exceptions import HTTPException
 from pydantic import HttpUrl
 
-from core.brevio.enums import LanguageType, ModelType
+from core.brevio.enums import LanguageType
 from core.brevio.enums.output_format_type import OutputFormatType
-from core.brevio.enums.summary_level import WORD_LIMITS_BY_SUMMARY_LEVEL, SummaryLevel
+from core.brevio.enums.summary_level import SummaryLevel
 from core.brevio.services.advanced_content_generator import AdvancedPromptGenerator
 
 from .generate import Generate
+from .services.summary_pipeline import PipelineDocumentError
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +53,7 @@ class Main:
             logger.error(
                 f"Unexpected error getting duration for {url}: {str(e)}", exc_info=True
             )
-            raise HTTPException(
-                status_code=500, detail=f"Unexpected error getting duration"
-            )
+            raise RuntimeError(f"Unexpected error getting duration: {str(e)}")
 
     @staticmethod
     def get_languages() -> Any:
@@ -77,7 +76,11 @@ class Main:
     @staticmethod
     def get_models() -> List[str]:
         try:
-            models = [member.value for member in ModelType]
+            from core.brevio.services.summary_providers.access_policy import (
+                SummaryAccessPolicy,
+            )
+
+            models = SummaryAccessPolicy().selectable_model_ids()
             logger.debug(f"Retrieved {len(models)} models")
             return models
         except Exception as e:
@@ -109,11 +112,11 @@ class Main:
             logger.error(
                 f"Unexpected error getting combinations: {str(e)}", exc_info=True
             )
-            raise HTTPException(500, f"Unexpected error getting combinations")
+            raise RuntimeError(f"Unexpected error getting combinations: {str(e)}")
 
     def get_all_summary_levels(self) -> Any:
         try:
-            return {"summary_levels": WORD_LIMITS_BY_SUMMARY_LEVEL}
+            return {"summary_levels": [level.value for level in SummaryLevel]}
         except Exception as e:
             logger.error(
                 f"Unexpected error getting summary levels: {str(e)}", exc_info=True
@@ -136,7 +139,6 @@ class Main:
         current_folder_entry_id: str,
         _user_folder_id: str,
         user_id: str,
-        _usage_cost_tracker: Any,
     ) -> Dict[str, Any]:
         try:
             result: Dict[str, Any] = await self._generate._process_online_audio_data(
@@ -145,15 +147,16 @@ class Main:
                 current_folder_entry_id,
                 _user_folder_id,
                 user_id,
-                _usage_cost_tracker,
             )
             logger.debug(f"Successfully generated audio data for user {user_id}")
             return result
+        except PipelineDocumentError:
+            raise
         except Exception as e:
             logger.error(
                 f"Unexpected error generating audio data: {str(e)}", exc_info=True
             )
-            raise Exception(f"Unexpected error generating data: {str(e)}")
+            raise Exception(f"Unexpected error generating data: {str(e)}") from e
 
     async def generate_summary_documents(
         self,
@@ -162,7 +165,6 @@ class Main:
         _user_folder_id: str,
         user_id: str,
         _create_data_result: Optional[Callable] = None,
-        _usage_cost_tracker: Any = None,
     ) -> Dict[str, Any]:
         try:
             result: Dict[str, Any] = await self._generate._process_documents(
@@ -171,14 +173,13 @@ class Main:
                 _user_folder_id,
                 user_id,
                 _create_data_result,
-                _usage_cost_tracker,
             )
             logger.debug(f"Successfully generated summary for user {user_id}")
             return result
+        except PipelineDocumentError:
+            raise
         except Exception as e:
             logger.error(
                 f"Unexpected error generating summary: {str(e)}", exc_info=True
             )
-            raise HTTPException(
-                status_code=500, detail=f"Unexpected error generating summary"
-            )
+            raise RuntimeError(f"Unexpected error generating summary: {str(e)}") from e

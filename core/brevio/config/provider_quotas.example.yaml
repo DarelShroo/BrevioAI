@@ -1,0 +1,185 @@
+# Provider quota policies (ADMIN-OWNED).
+#
+# Copy RPM/TPM from the provider console (AI Studio, OpenAI dashboard, etc).
+# Do NOT treat example numbers as discovered Google quotas.
+# max_in_flight is a Brevio operational burst cap, NOT a provider-discovered quota.
+#
+# quota_scope:
+#   Prefer "gcp-project:YOUR_PROJECT_ID" when known.
+#   Fallback "platform" or omit (resolver uses platform|cred:{id}).
+#   Two API keys in the SAME Google project share Google's quota — map them
+#   to the same gcp-project:X scope.
+#
+# quota_group:
+#   Optional Redis bucket shared by several models of the same provider quota.
+#   If omitted, the model name is the bucket.
+#
+# Circuit after HTTP 429:
+#   Redis cooldown blocks every worker sharing the quota.
+#   degraded_max_in_flight (default 1) is the half-open probe until a success.
+#   There is no separate circuit-breaker library; cooldown + degraded inflight
+#   + RPM is the global resume control.
+#
+# RPD is intentionally omitted (v2: Pacific midnight alignment).
+
+version: 1
+policies:
+  - provider: google
+    model: gemini-3.1-flash-lite
+    # quota_scope: gcp-project:REPLACE_ME
+    # quota_group: gemini-flash-lite
+    # requests_per_minute: REPLACE_FROM_AI_STUDIO
+    # tpm: REPLACE_FROM_AI_STUDIO
+    # Free-tier RPD is tiny; serialize MAP/REDUCE to avoid burning the day quota.
+    max_in_flight: 1
+    lease_ttl_ms: 180000
+    acquire_timeout_ms: 300000
+    cooldown_on_429_seconds: 60
+    rate_limit_safety_margin: 0.2
+    degraded_max_in_flight: 1
+    allow_map_original_text_fallback: false
+    max_attempts: 3
+    backoff_base_seconds: 2.0
+    backoff_max_seconds: 60.0
+    jitter_ratio: 0.25
+  - provider: openai
+    model: "*"
+    max_in_flight: 8
+    lease_ttl_ms: 180000
+    acquire_timeout_ms: 300000
+    cooldown_on_429_seconds: 5
+    rate_limit_safety_margin: 0.1
+    degraded_max_in_flight: 1
+    max_attempts: 5
+    backoff_base_seconds: 1.0
+    backoff_max_seconds: 60.0
+    jitter_ratio: 0.25
+  - provider: deepseek
+    model: "*"
+    max_in_flight: 8
+    lease_ttl_ms: 180000
+    acquire_timeout_ms: 300000
+    cooldown_on_429_seconds: 5
+    rate_limit_safety_margin: 0.1
+    degraded_max_in_flight: 1
+    max_attempts: 5
+    backoff_base_seconds: 1.0
+    backoff_max_seconds: 60.0
+    jitter_ratio: 0.25
+  - provider: xai
+    model: "*"
+    max_in_flight: 8
+    lease_ttl_ms: 180000
+    acquire_timeout_ms: 300000
+    cooldown_on_429_seconds: 5
+    rate_limit_safety_margin: 0.1
+    degraded_max_in_flight: 1
+    max_attempts: 5
+    backoff_base_seconds: 1.0
+    backoff_max_seconds: 60.0
+    jitter_ratio: 0.25
+  - provider: anthropic
+    model: "*"
+    max_in_flight: 8
+    lease_ttl_ms: 180000
+    acquire_timeout_ms: 300000
+    cooldown_on_429_seconds: 5
+    rate_limit_safety_margin: 0.1
+    degraded_max_in_flight: 1
+    max_attempts: 5
+    backoff_base_seconds: 1.0
+    backoff_max_seconds: 60.0
+    jitter_ratio: 0.25
+  # Local 32B saturates a single GPU. Long lease: generation is slow.
+  - provider: ollama
+    model: gpt-oss:20b
+    max_in_flight: 1
+    lease_ttl_ms: 600000
+    acquire_timeout_ms: 600000
+    cooldown_on_429_seconds: 10
+    rate_limit_safety_margin: 0.0
+    degraded_max_in_flight: 1
+    allow_map_original_text_fallback: false
+    max_attempts: 3
+    backoff_base_seconds: 2.0
+    backoff_max_seconds: 60.0
+    jitter_ratio: 0.25
+  - provider: ollama
+    model: deepseek-r1-local:iq3-xs
+    max_in_flight: 1
+    lease_ttl_ms: 600000
+    acquire_timeout_ms: 600000
+    cooldown_on_429_seconds: 10
+    rate_limit_safety_margin: 0.0
+    degraded_max_in_flight: 1
+    allow_map_original_text_fallback: false
+    max_attempts: 3
+    backoff_base_seconds: 2.0
+    backoff_max_seconds: 60.0
+    jitter_ratio: 0.25
+  - provider: ollama
+    model: qwen3:14b
+    max_in_flight: 1
+    lease_ttl_ms: 600000
+    acquire_timeout_ms: 600000
+    cooldown_on_429_seconds: 10
+    rate_limit_safety_margin: 0.0
+    degraded_max_in_flight: 1
+    allow_map_original_text_fallback: false
+    max_attempts: 3
+    backoff_base_seconds: 2.0
+    backoff_max_seconds: 60.0
+    jitter_ratio: 0.25
+  # Local Qwen3-14B Q6_K (~12.1GB) saturates a 16GB GPU. Long lease: generation is slow.
+  - provider: ollama
+    model: qwen3:14b-q6
+    max_in_flight: 1
+    lease_ttl_ms: 600000
+    acquire_timeout_ms: 600000
+    cooldown_on_429_seconds: 10
+    rate_limit_safety_margin: 0.0
+    degraded_max_in_flight: 1
+    allow_map_original_text_fallback: false
+    max_attempts: 3
+    backoff_base_seconds: 2.0
+    backoff_max_seconds: 60.0
+    jitter_ratio: 0.25
+  - provider: ollama
+    model: qwen3:32b
+    max_in_flight: 1
+    lease_ttl_ms: 600000
+    acquire_timeout_ms: 600000
+    cooldown_on_429_seconds: 10
+    rate_limit_safety_margin: 0.0
+    degraded_max_in_flight: 1
+    allow_map_original_text_fallback: false
+    max_attempts: 3
+    backoff_base_seconds: 2.0
+    backoff_max_seconds: 60.0
+    jitter_ratio: 0.25
+  # Local Gemma 4 31B IQ3 (~13GB / ~24GB VRAM) saturates a single GPU. Long lease: dense 31B is slow.
+  - provider: ollama
+    model: batiai/gemma4-31b:iq3
+    max_in_flight: 1
+    lease_ttl_ms: 600000
+    acquire_timeout_ms: 600000
+    cooldown_on_429_seconds: 10
+    rate_limit_safety_margin: 0.0
+    degraded_max_in_flight: 1
+    allow_map_original_text_fallback: false
+    max_attempts: 3
+    backoff_base_seconds: 2.0
+    backoff_max_seconds: 60.0
+    jitter_ratio: 0.25
+  - provider: ollama
+    model: "*"
+    max_in_flight: 1
+    lease_ttl_ms: 300000
+    acquire_timeout_ms: 300000
+    cooldown_on_429_seconds: 5
+    rate_limit_safety_margin: 0.0
+    degraded_max_in_flight: 1
+    max_attempts: 3
+    backoff_base_seconds: 1.0
+    backoff_max_seconds: 60.0
+    jitter_ratio: 0.25

@@ -23,6 +23,25 @@ vi.mock('@/services/sse.client', () => ({
   disconnectSummaryEvents: vi.fn(),
 }))
 
+vi.mock('@/services/http', () => ({
+  http: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}))
+
+vi.mock('@/stores/auth.store', () => ({
+  useAuthStore: () => ({
+    isAuthenticated: false,
+    user: null,
+    profile: null,
+    fetchProfile: vi.fn(),
+  }),
+}))
+
 function event(overrides: Partial<SummaryJobEvent> = {}): SummaryJobEvent {
   return {
     type: 'summary.completed',

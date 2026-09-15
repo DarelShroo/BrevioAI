@@ -3,7 +3,7 @@ import re
 
 import pytest
 
-from core.brevio.constants.prompts import ENGLISH
+from core.brevio.constants.prompts import ENGLISH, SPANISH
 from core.brevio.enums.category import CategoryType
 from core.brevio.enums.language import LanguageType
 from core.brevio.enums.output_format_type import OutputFormatType
@@ -130,3 +130,45 @@ def test_sanitize_markdown(generator: AdvancedPromptGenerator) -> None:
     sanitized_text = generator.sanitize_markdown(raw_text)
     expected_text = "Text with &lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt; and *unclosed Markdown"
     assert sanitized_text == expected_text
+
+
+@pytest.mark.asyncio
+async def test_map_reduce_prompts_inject_category_style_not_examples(
+    generator: AdvancedPromptGenerator,
+) -> None:
+    map_edu = await generator.get_map_prompt(
+        LanguageType.SPANISH,
+        CategoryType.EDUCATION,
+        StyleType.EDUCATION_GUIDE,
+        SummaryLevel.MODERATE,
+    )
+    reduce_edu = await generator.get_reduce_prompt(
+        LanguageType.SPANISH,
+        CategoryType.EDUCATION,
+        StyleType.EDUCATION_GUIDE,
+        SummaryLevel.MODERATE,
+    )
+    reduce_sci = await generator.get_reduce_prompt(
+        LanguageType.SPANISH,
+        CategoryType.SCIENCES,
+        StyleType.SCIENCES_QUICK_REF,
+        SummaryLevel.MODERATE,
+    )
+    assert (
+        "Education" in reduce_edu
+        or "Educación" in reduce_edu
+        or "education" in reduce_edu.lower()
+    )
+    assert (
+        "Guide" in reduce_edu or "Guía" in reduce_edu or "guide" in reduce_edu.lower()
+    )
+    assert (
+        "Sciences" in reduce_sci
+        or "ciencias" in reduce_sci.lower()
+        or "Ciencias" in reduce_sci
+    )
+    assert reduce_edu != reduce_sci
+    example = SPANISH.EXAMPLES.get("education", {}).get("guide", "")
+    if example:
+        assert example not in map_edu
+        assert example not in reduce_edu

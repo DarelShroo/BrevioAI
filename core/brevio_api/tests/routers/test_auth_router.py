@@ -13,21 +13,38 @@ from core.brevio_api.models.auth.auth import (
     RecoveryPasswordOtp,
     RegisterUser,
 )
-from core.brevio_api.models.responses.auth_response import (
-    LoginResponse,
-    PasswordRecoveryResponse,
-    RegisterResponse,
+from core.brevio_api.models.responses.auth_response import PasswordRecoveryResponse
+from core.brevio_api.services.auth_cookies import (
+    ACCESS_COOKIE_NAME,
+    REFRESH_COOKIE_NAME,
 )
+from core.brevio_api.services.auth_service import AuthSession
 
 default_folder = FolderResponse(success=True, message="folder created")
 
 
-class StubAuthService:
-    async def login(self, login_user: LoginUser) -> LoginResponse:
-        return LoginResponse(access_token="testtoken")
+def _session(folder: FolderResponse | None = None) -> AuthSession:
+    return AuthSession(
+        access_token="access-token",
+        refresh_token="refresh-token",
+        access_max_age=900,
+        refresh_max_age=604800,
+        folder=folder,
+    )
 
-    async def register(self, register_user: RegisterUser) -> RegisterResponse:
-        return RegisterResponse(folder=default_folder, access_token="testtoken")
+
+class StubAuthService:
+    async def login(self, login_user: LoginUser) -> AuthSession:
+        return _session()
+
+    async def register(self, register_user: RegisterUser) -> AuthSession:
+        return _session(default_folder)
+
+    async def refresh(self, refresh_token: str) -> AuthSession:
+        return _session()
+
+    async def logout(self, refresh_token: str | None) -> None:
+        return None
 
     async def password_recovery_handshake(
         self, recovery_password: RecoveryPassword
@@ -40,15 +57,30 @@ class StubAuthService:
         return PasswordRecoveryResponse(message="Contraseña cambiada exitosamente.")
 
 
+client = TestClient(app)
+
+
 @pytest.fixture(autouse=True)
 def override_auth_service() -> Any:
-    """Override the AuthService dependency with a stub for all tests by default."""
     app.dependency_overrides[get_auth_service] = lambda: StubAuthService()
+    client.cookies.clear()
     yield
     app.dependency_overrides.clear()
+    client.cookies.clear()
 
 
-client = TestClient(app)
+def _cookie_header(response: Any, name: str) -> str:
+    headers = response.headers
+    if hasattr(headers, "get_list"):
+        items = headers.get_list("set-cookie")
+    elif hasattr(headers, "getlist"):
+        items = headers.getlist("set-cookie")
+    else:
+        value = headers.get("set-cookie")
+        items = [value] if value else []
+    match = next((item for item in items if item.startswith(f"{name}=")), "")
+    assert match, f"missing {name} cookie in {items}"
+    return match
 
 
 def test_login_success() -> None:
@@ -57,12 +89,21 @@ def test_login_success() -> None:
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert data["status"] == "success"
-    assert data["data"]["access_token"] == "testtoken"
+    assert data["data"]["authenticated"] is True
+    assert "access_token" not in data["data"]
+    access = _cookie_header(response, ACCESS_COOKIE_NAME)
+    refresh = _cookie_header(response, REFRESH_COOKIE_NAME)
+    assert "HttpOnly" in access
+    assert "HttpOnly" in refresh
+    assert "samesite=strict" in access.lower()
+    assert "samesite=strict" in refresh.lower()
+    assert ACCESS_COOKIE_NAME in response.cookies
+    assert REFRESH_COOKIE_NAME in response.cookies
 
 
 def test_login_invalid_credentials() -> None:
     class ErrorAuthService(StubAuthService):
-        async def login(self, login_user: LoginUser) -> LoginResponse:
+        async def login(self, login_user: LoginUser) -> AuthSession:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Credenciales inválidas",
@@ -91,13 +132,39 @@ def test_register_success() -> None:
     assert response.status_code == status.HTTP_201_CREATED
     data = response.json()
     assert data["status"] == "success"
-    assert data["data"]["access_token"] == "testtoken"
+    assert data["data"]["authenticated"] is True
+    assert "access_token" not in data["data"]
     assert data["data"]["folder"]["success"] is True
+    assert ACCESS_COOKIE_NAME in response.cookies
+
+
+def test_refresh_rotates_cookies() -> None:
+    response = client.post(
+        "/auth/refresh", cookies={REFRESH_COOKIE_NAME: "refresh-token"}
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["data"]["authenticated"] is True
+    assert ACCESS_COOKIE_NAME in response.cookies
+
+
+def test_refresh_requires_cookie() -> None:
+    response = client.post("/auth/refresh")
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+def test_logout_clears_cookies() -> None:
+    response = client.post(
+        "/auth/logout", cookies={REFRESH_COOKIE_NAME: "refresh-token"}
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["data"]["authenticated"] is False
+    access = _cookie_header(response, ACCESS_COOKIE_NAME)
+    assert "max-age=0" in access.lower() or "max-age=0" in access
 
 
 def test_register_user_exists() -> None:
     class ErrorAuthService(StubAuthService):
-        async def register(self, register_user: RegisterUser) -> RegisterResponse:
+        async def register(self, register_user: RegisterUser) -> AuthSession:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="User already exists"
             )

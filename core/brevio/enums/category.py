@@ -12,3 +12,4 @@ class CategoryType(Enum):
     FINANCE = "finance"
     TOURISM = "tourism"
     REQUIREMENTS = "requirements"
+    SCIENCES = "sciences"

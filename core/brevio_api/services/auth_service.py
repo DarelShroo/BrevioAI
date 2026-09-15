@@ -1,11 +1,15 @@
+import hashlib
+import hmac
 import logging
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from os import path
 from typing import Optional
+from uuid import uuid4
 
+from bson import ObjectId
 from fastapi import HTTPException, status
-from motor.motor_asyncio import AsyncIOMotorCollection
-from pydantic import ValidationError
+from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorDatabase
 
 from core.brevio.constants.constants import Constants
 from core.brevio.managers.directory_manager import DirectoryManager
@@ -16,14 +20,14 @@ from core.brevio_api.models.auth.auth import (
     RecoveryPasswordOtp,
     RegisterUser,
 )
-from core.brevio_api.models.responses.auth_response import (
-    LoginResponse,
-    PasswordRecoveryResponse,
-    RegisterResponse,
-)
+from core.brevio_api.models.responses.auth_response import PasswordRecoveryResponse
+from core.brevio_api.models.user.refresh_session import RefreshSession
 from core.brevio_api.models.user.user_folder import UserFolder
 from core.brevio_api.models.user.user_model import User
 from core.brevio_api.repositories.folder_entry_repository import FolderEntryRepository
+from core.brevio_api.repositories.refresh_session_repository import (
+    RefreshSessionRepository,
+)
 from core.brevio_api.repositories.user_repository import UserRepository
 from core.brevio_api.services.email_service import EmailService
 from core.brevio_api.services.token_service import TokenService
@@ -35,12 +39,32 @@ from core.brevio_api.utils.password_utils import hash_password, verify_password
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class AuthSession:
+    access_token: str
+    refresh_token: str
+    access_max_age: int
+    refresh_max_age: int
+    folder: Optional[FolderResponse] = None
+
+
+def hash_refresh_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 class AuthService:
-    def __init__(self, collection: AsyncIOMotorCollection, token_service: TokenService):
+    def __init__(
+        self,
+        collection: AsyncIOMotorCollection | AsyncIOMotorDatabase,
+        token_service: TokenService,
+    ):
         self._db = collection
         self._user_repository = UserRepository(self._db.get_collection("users"))
         self._folder_entry_repository = FolderEntryRepository(
             self._db.get_collection("entries")
+        )
+        self._refresh_sessions = RefreshSessionRepository(
+            self._db.get_collection("refresh_sessions")
         )
         self._user_service = UserService(
             self._user_repository, self._folder_entry_repository
@@ -48,7 +72,103 @@ class AuthService:
         self._token_service = token_service
         self.directory_manager = DirectoryManager()
 
-    async def login(self, user_login: LoginUser) -> LoginResponse:
+    async def _issue_session(
+        self, user_id: str, folder: Optional[FolderResponse] = None
+    ) -> AuthSession:
+        family_id = uuid4().hex
+        access_token = self._token_service.create_access_token({"id": user_id})
+        refresh_token, jti = self._token_service.create_refresh_token(
+            user_id, family_id
+        )
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            seconds=self._token_service.refresh_max_age_seconds
+        )
+        await self._refresh_sessions.create(
+            RefreshSession(
+                user_id=ObjectId(user_id),
+                jti=jti,
+                family_id=family_id,
+                token_hash=hash_refresh_token(refresh_token),
+                expires_at=expires_at,
+            )
+        )
+        return AuthSession(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            access_max_age=self._token_service.access_max_age_seconds,
+            refresh_max_age=self._token_service.refresh_max_age_seconds,
+            folder=folder,
+        )
+
+    def _session_expired(self, expires_at: datetime) -> bool:
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        return expires_at < datetime.now(timezone.utc)
+
+    async def refresh(self, refresh_token: str) -> AuthSession:
+        payload = self._token_service.validate_refresh_token(refresh_token)
+        family_id = str(payload["fam"])
+        session = await self._refresh_sessions.get_by_family(family_id)
+        presented_hash = hash_refresh_token(refresh_token)
+
+        if (
+            session is None
+            or session.revoked
+            or session.jti != str(payload["jti"])
+            or not hmac.compare_digest(session.token_hash, presented_hash)
+        ):
+            if session is not None:
+                await self._refresh_sessions.revoke_family(family_id)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token inválido",
+            )
+
+        if self._session_expired(session.expires_at):
+            await self._refresh_sessions.revoke_family(family_id)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token expirado",
+            )
+
+        user_id = str(payload["id"])
+        access_token = self._token_service.create_access_token({"id": user_id})
+        new_refresh, new_jti = self._token_service.create_refresh_token(
+            user_id, family_id
+        )
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            seconds=self._token_service.refresh_max_age_seconds
+        )
+        rotated = await self._refresh_sessions.rotate(
+            family_id,
+            jti=new_jti,
+            token_hash=hash_refresh_token(new_refresh),
+            expires_at=expires_at,
+        )
+        if rotated is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token inválido",
+            )
+        return AuthSession(
+            access_token=access_token,
+            refresh_token=new_refresh,
+            access_max_age=self._token_service.access_max_age_seconds,
+            refresh_max_age=self._token_service.refresh_max_age_seconds,
+        )
+
+    async def logout(self, refresh_token: Optional[str]) -> None:
+        if not refresh_token:
+            return
+        try:
+            payload = self._token_service.validate_refresh_token(refresh_token)
+        except HTTPException:
+            return
+        family_id = str(payload.get("fam") or "")
+        if family_id:
+            await self._refresh_sessions.revoke_family(family_id)
+
+    async def login(self, user_login: LoginUser) -> AuthSession:
         user: User | None = None
 
         if isEmail(user_login.identity):
@@ -78,16 +198,9 @@ class AuthService:
                 detail="Credenciales inválidas",
             )
 
-        logger.debug(f"Password verified, creating token for user: {user.email}")
-        token = self._token_service.create_access_token(
-            {"id": str(user.id)},
-            timedelta(hours=1),
-        )
-        logger.debug(f"Token created: {token}")
+        return await self._issue_session(str(user.id))
 
-        return LoginResponse(access_token=token)
-
-    async def register(self, user_register: RegisterUser) -> RegisterResponse:
+    async def register(self, user_register: RegisterUser) -> AuthSession:
         if not isEmail(user_register.email):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Email inválido"
@@ -136,14 +249,6 @@ class AuthService:
                 detail="La carpeta no se creó correctamente.",
             )
 
-        token: str = self._token_service.create_access_token(
-            {
-                "id": str(user.id),
-                "folder_id": str(user.folder.id),
-            },
-            timedelta(hours=1),
-        )
-
         email_service = EmailService(
             user_db.email, f"Usuario {user_db.username} registrado en Brevio"
         )
@@ -153,9 +258,7 @@ class AuthService:
         except Exception as e:
             logger.error(f"Failed to send welcome email: {e}")
 
-        response = RegisterResponse(folder=folder_response, access_token=token)
-
-        return response
+        return await self._issue_session(str(user.id), folder=folder_response)
 
     async def password_recovery_handshake(
         self, recovery_password_user: RecoveryPassword
@@ -224,6 +327,7 @@ class AuthService:
         await self._user_service.change_password(
             user.email, recovery_password_otp.password
         )
+        await self._refresh_sessions.revoke_all_for_user(user.id)
 
         email_service = EmailService(user.email, "Confirmación de cambio de contraseña")
         try:

@@ -2,8 +2,8 @@ class ContentsType:
     """Constants for content-related messages and values"""
 
     MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
-    SUPPORTED_AUDIO_FORMATS = [".mp3", ".wav", ".m4a", ".mp4"]
-    SUPPORTED_VIDEO_FORMATS = [".mp4", ".avi", ".mov"]
+    SUPPORTED_AUDIO_FORMATS = [".mp3", ".wav", ".m4a"]
+    SUPPORTED_VIDEO_FORMATS = [".mp4"]
     SUPPORTED_TEXT_FORMATS = [".txt", ".doc", ".docx"]
     SUPPORTED_PDF_FORMAT = ".pdf"
 

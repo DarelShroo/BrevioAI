@@ -1,0 +1,27 @@
+version: 1
+policies:
+  - provider: google
+    model: gemini-3.1-flash-lite
+    quota_scope: gcp-project:test
+    rpm: 30
+    tpm: 100000
+    max_in_flight: 3
+    lease_ttl_ms: 2000
+    acquire_timeout_ms: 10000
+    cooldown_on_429_seconds: 2
+    max_attempts: 3
+    backoff_base_seconds: 0.01
+    backoff_max_seconds: 0.05
+    jitter_ratio: 0.1
+  - provider: google
+    model: "*"
+    rpm: 20
+    tpm: 50000
+    max_in_flight: 2
+    lease_ttl_ms: 2000
+    acquire_timeout_ms: 5000
+    cooldown_on_429_seconds: 1
+    max_attempts: 3
+    backoff_base_seconds: 0.01
+    backoff_max_seconds: 0.05
+    jitter_ratio: 0.1

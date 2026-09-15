@@ -19,8 +19,7 @@ from core.shared.utils.model_tokens_utils import get_encoder
 def set_env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
     """Set necessary environment variables for SummaryService."""
     monkeypatch.setenv("MAX_TOKENS", "1000")
-    monkeypatch.setenv("MAX_TOKENS_PER_CHUNK", "250")
-    monkeypatch.setenv("TOKENS_PER_MINUTE", "500")
+    monkeypatch.setenv("MAX_TOKEN_PER_MINUTE", "500")
     monkeypatch.setenv("TEMPERATURE", "0.7")
     monkeypatch.setenv("OPENAI_API_KEY", "fake_api_key")
     monkeypatch.setenv(
@@ -40,6 +39,8 @@ def summary_service() -> SummaryService:
         mock_openai.return_value = mock_client
         service = SummaryService()
         service.client = mock_client
+        service.api_service._initialize_client = AsyncMock(return_value=mock_client)
+        service.history_token_model.user_id = "test_user_id"
         return service
 
 
@@ -87,14 +88,13 @@ async def test_generate_summary_chunk_success(
     caplog.set_level(logging.DEBUG)
 
     mock_response = MagicMock(spec=ChatCompletion)
-    mock_response.choices = [
-        MagicMock(
-            message=MagicMock(
-                spec=ChatCompletionMessage,
-                content="Este es un resumen de prueba con suficientes palabras para pasar la validación",
-            )
-        )
-    ]
+    mock_choice = MagicMock()
+    mock_choice.message = MagicMock(
+        spec=ChatCompletionMessage,
+        content="Este es un resumen de prueba con suficientes palabras para pasar la validación",
+    )
+    mock_choice.finish_reason = "stop"
+    mock_response.choices = [mock_choice]
     mock_response.usage = MagicMock(
         spec=CompletionUsage, total_tokens=150, prompt_tokens=100, completion_tokens=50
     )
@@ -105,20 +105,24 @@ async def test_generate_summary_chunk_success(
         summary_service.client.chat.completions,
         "create",
         new=AsyncMock(return_value=mock_response),
+    ), patch.object(
+        summary_service, "_map_completion_token_limit", return_value=500
+    ), patch.object(
+        summary_service, "_check_token_limit", return_value=True
     ):
         index, summary, tokens_used = await summary_service.generate_summary_chunk(
             0,
             "Texto de prueba",
             "Prompt de prueba",
-            "Resumen acumulado",
-            ModelType.DEEPSEEK_CHAT,
+            ModelType.DEEPSEEK_V4_PRO,
             LanguageType.SPANISH,
+            total_document_tokens=1000,
         )
 
     assert index == 0
     assert (
         summary
-        == "Este es un resumen de prueba con suficientes palabras para pasar la validación\n\n\u200b"
+        == "Este es un resumen de prueba con suficientes palabras para pasar la validación"
     )
     assert tokens_used == 150
 
@@ -133,19 +137,20 @@ async def test_generate_summary_chunk_failure(
         summary_service.client.chat.completions,
         "create",
         new=AsyncMock(side_effect=Exception("Error API")),
+    ), patch.object(
+        summary_service, "_check_token_limit", return_value=True
+    ), patch.object(
+        summary_service, "_map_completion_token_limit", return_value=500
     ):
-        index, summary, tokens_used = await summary_service.generate_summary_chunk(
-            1,
-            "Otro texto",
-            "Prompt",
-            "Acumulado",
-            ModelType.DEEPSEEK_CHAT,
-            LanguageType.SPANISH,
-        )
-
-    assert index == 1
-    assert summary is None  # Should return None on failure
-    assert tokens_used == 0
+        with pytest.raises(Exception, match="Error API"):
+            await summary_service.generate_summary_chunk(
+                1,
+                "Otro texto",
+                "Prompt",
+                ModelType.DEEPSEEK_V4_PRO,
+                LanguageType.SPANISH,
+                total_document_tokens=1000,
+            )
 
 
 @pytest.mark.asyncio
@@ -158,26 +163,31 @@ async def test_generate_summary_chunk_timeout(
         summary_service.client.chat.completions,
         "create",
         new=AsyncMock(side_effect=asyncio.TimeoutError("Timeout")),
+    ), patch.object(
+        summary_service, "_check_token_limit", return_value=True
+    ), patch.object(
+        summary_service, "_map_completion_token_limit", return_value=500
+    ), patch.object(
+        summary_service.provider_executor.retry,
+        "should_retry",
+        return_value=False,
     ):
-        index, summary, tokens_used = await summary_service.generate_summary_chunk(
-            2,
-            "Texto con timeout",
-            "Prompt",
-            "Acumulado",
-            ModelType.DEEPSEEK_CHAT,
-            LanguageType.SPANISH,
-        )
-
-    assert index == 2
-    assert summary is None  # Should return None on timeout
-    assert tokens_used == 0
+        with pytest.raises((TimeoutError, asyncio.TimeoutError)):
+            await summary_service.generate_summary_chunk(
+                2,
+                "Texto con timeout",
+                "Prompt",
+                ModelType.DEEPSEEK_V4_PRO,
+                LanguageType.SPANISH,
+                total_document_tokens=1000,
+            )
 
 
 @pytest.mark.asyncio
-async def test_process_chunks_in_groups(
+async def test_run_map_phase(
     summary_service: SummaryService,
 ) -> None:
-    """Test processing text chunks in groups and aggregating summaries."""
+    """Test Map phase processing chunks and aggregating summaries."""
     chunks = ["Chunk 1", "Chunk 2"]
     prompt = "Prompt de prueba"
 
@@ -185,9 +195,10 @@ async def test_process_chunks_in_groups(
         index: int,
         chunk: str,
         prompt: str,
-        acc: str,
         model: ModelType,
         language: LanguageType,
+        *args,
+        **kwargs,
     ) -> Tuple[int, str, int]:
         return index, f"Resumen: {chunk}", len(chunk)
 
@@ -197,21 +208,23 @@ async def test_process_chunks_in_groups(
         new=AsyncMock(side_effect=fake_generate_summary_chunk),
     ), patch.object(summary_service, "_check_token_limit", return_value=True):
         (
-            full_summary,
+            mapped_summaries,
             total_tokens_used,
-        ) = await summary_service.process_chunks_in_groups(
-            chunks, prompt, ModelType.DEEPSEEK_CHAT, LanguageType.SPANISH
+        ) = await summary_service.run_map_phase(
+            chunks, prompt, ModelType.DEEPSEEK_V4_PRO, LanguageType.SPANISH
         )
+        texts = [m.summary_text for m in mapped_summaries if m and m.summary_text]
+        full_summary = "\n".join(texts)
         assert "Resumen: Chunk 1" in full_summary
         assert "Resumen: Chunk 2" in full_summary
         assert total_tokens_used == len("Chunk 1") + len("Chunk 2")
 
 
 @pytest.mark.asyncio
-async def test_process_chunks_in_groups_with_callback(
+async def test_run_map_phase_with_callback(
     summary_service: SummaryService,
 ) -> None:
-    """Test processing text chunks with callback function."""
+    """Test map phase with callback function."""
     chunks = ["Chunk 1", "Chunk 2"]
     prompt = "Prompt de prueba"
 
@@ -224,9 +237,10 @@ async def test_process_chunks_in_groups_with_callback(
         index: int,
         chunk: str,
         prompt: str,
-        acc: str,
         model: ModelType,
         language: LanguageType,
+        *args,
+        **kwargs,
     ) -> Tuple[int, str, int]:
         return index, f"Resumen: {chunk}", len(chunk)
 
@@ -236,11 +250,17 @@ async def test_process_chunks_in_groups_with_callback(
         new=AsyncMock(side_effect=fake_generate_summary_chunk),
     ), patch.object(summary_service, "_check_token_limit", return_value=True):
         (
-            full_summary,
+            mapped_summaries,
             total_tokens_used,
-        ) = await summary_service.process_chunks_in_groups(
-            chunks, prompt, ModelType.DEEPSEEK_CHAT, LanguageType.SPANISH, mock_callback
+        ) = await summary_service.run_map_phase(
+            chunks,
+            prompt,
+            ModelType.DEEPSEEK_V4_PRO,
+            LanguageType.SPANISH,
+            mock_callback,
         )
+        texts = [m.summary_text for m in mapped_summaries if m and m.summary_text]
+        full_summary = "\n".join(texts)
         assert "Resumen: Chunk 1" in full_summary
         assert "Resumen: Chunk 2" in full_summary
         assert len(callback_calls) > 0  # Callback should have been called
@@ -249,8 +269,6 @@ async def test_process_chunks_in_groups_with_callback(
 def test_summary_service_initialization(summary_service: SummaryService) -> None:
     """Test that SummaryService is initialized correctly."""
     assert summary_service is not None
-    assert hasattr(summary_service, "max_tokens")
-    assert hasattr(summary_service, "max_tokens_per_chunk")
     assert hasattr(summary_service, "temperature")
     assert summary_service.client is not None
     assert hasattr(summary_service.client, "chat")
@@ -264,14 +282,13 @@ async def test_generate_summary_chunk_with_mock_patching(
 ) -> None:
     """Test generate_summary_chunk using mock patching."""
     mock_response = MagicMock(spec=ChatCompletion)
-    mock_response.choices = [
-        MagicMock(
-            message=MagicMock(
-                spec=ChatCompletionMessage,
-                content="Este es un resumen simulado con suficientes palabras para validación",
-            )
-        )
-    ]
+    mock_choice = MagicMock()
+    mock_choice.message = MagicMock(
+        spec=ChatCompletionMessage,
+        content="Este es un resumen simulado con suficientes palabras para validación",
+    )
+    mock_choice.finish_reason = "stop"
+    mock_response.choices = [mock_choice]
     mock_response.usage = MagicMock(
         spec=CompletionUsage, total_tokens=100, prompt_tokens=70, completion_tokens=30
     )
@@ -282,19 +299,94 @@ async def test_generate_summary_chunk_with_mock_patching(
         summary_service.client.chat.completions,
         "create",
         new=AsyncMock(return_value=mock_response),
+    ), patch.object(
+        summary_service, "_map_completion_token_limit", return_value=500
+    ), patch.object(
+        summary_service, "_check_token_limit", return_value=True
     ):
         index, summary, tokens_used = await summary_service.generate_summary_chunk(
             0,
             "Test text",
             "Test prompt",
-            "Accumulated summary",
-            ModelType.DEEPSEEK_CHAT,
+            ModelType.DEEPSEEK_V4_PRO,
             LanguageType.SPANISH,
+            total_document_tokens=1000,
         )
 
     assert index == 0
     assert (
         summary
-        == "Este es un resumen simulado con suficientes palabras para validación\n\n\u200b"
+        == "Este es un resumen simulado con suficientes palabras para validación"
     )
     assert tokens_used == 100
+
+
+@pytest.mark.asyncio
+async def test_run_reduce_phase_hierarchical(summary_service: SummaryService) -> None:
+    """Test hierarchical Reduce testing."""
+    summaries = [f"Resumen {i}" for i in range(10)]
+    reduce_prompt = "Prompt"
+
+    async def mock_execute_reduce(
+        batch,
+        prompt,
+        model,
+        client,
+        target_max_tokens=None,
+        language=None,
+        *args,
+        **kwargs,
+    ):
+        return f"Reduced: {len(batch)}", 100, "stop"
+
+    with patch.object(
+        summary_service,
+        "_execute_reduce_call",
+        new=AsyncMock(side_effect=mock_execute_reduce),
+    ):
+        # Make tokens limit force multiple batches
+        with patch("core.shared.utils.model_tokens_utils.get_encoder") as mock_encoder:
+            mock_enc = MagicMock()
+            # Encode returns length 50 for each summary so that batching kicks in
+            mock_enc.encode.return_value = [1] * 100
+            mock_encoder.return_value = mock_enc
+
+            summary_service.max_tokens_per_chunk = (
+                1200  # 1000 + 200 (so 2 summaries per batch)
+            )
+
+            final_summary, tokens = await summary_service.run_reduce_phase(
+                summaries,
+                reduce_prompt,
+                ModelType.DEEPSEEK_V4_PRO,
+                LanguageType.SPANISH,
+            )
+
+            assert "Reduced:" in final_summary
+            assert tokens > 0
+
+
+@pytest.mark.asyncio
+async def test_run_formatting_phase(summary_service: SummaryService) -> None:
+    """Test formatting phase."""
+    mock_response = MagicMock()
+    mock_response.choices = [
+        MagicMock(message=MagicMock(content="Raw factual"), finish_reason="stop")
+    ]
+    mock_response.usage = MagicMock(total_tokens=50, completion_tokens=20)
+
+    assert summary_service.client is not None
+    with patch.object(
+        summary_service.client.chat.completions,
+        "create",
+        new=AsyncMock(return_value=mock_response),
+    ):
+        with patch.object(summary_service, "_check_token_limit", return_value=True):
+            summary, tokens = await summary_service.run_formatting_phase(
+                "Raw factual",
+                "Format prompt",
+                ModelType.DEEPSEEK_V4_PRO,
+                LanguageType.ENGLISH,
+            )
+            assert summary == "Raw factual"
+            assert tokens == 50

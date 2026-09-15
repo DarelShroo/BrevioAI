@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Dict, List
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 from bson import ObjectId
 from bson.errors import InvalidId
@@ -17,6 +18,54 @@ DB_ERROR_MSG = "Database error"
 NOT_FOUND_MSG = "FolderEntry not found"
 
 
+def data_result_to_mongo(result: DataResult) -> Dict[str, Any]:
+    """Serialize a DataResult for $push. Always persist ObjectId _id.
+
+    model_dump(exclude_unset=True) drops default_factory _id, so later
+    positional updates on results._id match nothing.
+    """
+    payload = result.model_dump(by_alias=True, exclude_none=True)
+    result_id = result.id
+    if not isinstance(result_id, ObjectId):
+        result_id = ObjectId(str(result_id))
+    payload["_id"] = result_id
+    return payload
+
+
+def _canonical_result_oid(result_id: Any) -> ObjectId:
+    if isinstance(result_id, ObjectId):
+        return result_id
+    if isinstance(result_id, str) and ObjectId.is_valid(result_id):
+        return ObjectId(result_id)
+    raise ValueError("Invalid result ID format")
+
+
+def _index_of_data_result(
+    results: List[Dict[str, Any]], result_id: Any, fields: Dict[str, Any]
+) -> int | None:
+    target = str(result_id)
+    for index, row in enumerate(results):
+        stored = row.get("_id")
+        if stored is not None and str(stored) == target:
+            return index
+    orphans: List[int] = []
+    for index, row in enumerate(results):
+        if row.get("_id") is not None:
+            continue
+        orphans.append(index)
+        if fields.get("index") is not None and row.get("index") == fields["index"]:
+            return index
+        location = fields.get("download_location")
+        if location and row.get("download_location") == location:
+            return index
+        name = fields.get("name")
+        if name and row.get("name") == name:
+            return index
+    if len(orphans) == 1:
+        return orphans[0]
+    return None
+
+
 class FolderEntryRepository:
     def __init__(self, collection: AsyncIOMotorCollection) -> None:
         self.collection = collection
@@ -27,6 +76,11 @@ class FolderEntryRepository:
             entry_dict = entry.model_dump()
             entry_dict["_id"] = ObjectId(entry_dict["_id"])
             entry_dict["user_id"] = ObjectId(entry_dict["user_id"])
+            folder_ref = entry_dict.get("library_folder_id")
+            if folder_ref:
+                entry_dict["library_folder_id"] = ObjectId(str(folder_ref))
+            else:
+                entry_dict["library_folder_id"] = None
 
             result = await self.collection.insert_one(entry_dict)
             entry_dict["_id"] = result.inserted_id
@@ -107,6 +161,42 @@ class FolderEntryRepository:
             logger.error(f"Database error updating folder entry: {e}", exc_info=True)
             raise RuntimeError(f"Database error: {e}")
 
+    async def update_data_result(
+        self,
+        folder_entry_id: str,
+        result_id: Any,
+        fields: Dict[str, Any],
+    ) -> FolderEntry:
+        if not ObjectId.is_valid(folder_entry_id):
+            raise ValueError("Invalid entry ID format")
+        try:
+            entry = await self.collection.find_one({"_id": ObjectId(folder_entry_id)})
+            if not entry:
+                raise ValueError("Folder entry not found")
+            results = entry.get("results") or []
+            if not isinstance(results, list):
+                raise ValueError("DataResult not found in folder entry")
+            index = _index_of_data_result(results, result_id, fields)
+            if index is None:
+                raise ValueError("DataResult not found in folder entry")
+            set_fields = {
+                f"results.{index}.{key}": value for key, value in fields.items()
+            }
+            set_fields[f"results.{index}._id"] = _canonical_result_oid(result_id)
+            set_fields["updated_at"] = datetime.now(timezone.utc)
+            result = await self.collection.update_one(
+                {"_id": ObjectId(folder_entry_id)},
+                {"$set": set_fields},
+            )
+            if result.matched_count == 0:
+                raise ValueError("DataResult not found in folder entry")
+            return await self.get_folder_entry_by_id(folder_entry_id)
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.error(f"Database error updating data result: {e}", exc_info=True)
+            raise RuntimeError(f"Database error: {e}")
+
     async def get_entries_ids_by_user_id(
         self, user_id: str, entries_refs: List[ObjectId]
     ) -> List[FolderEntry]:
@@ -118,7 +208,10 @@ class FolderEntryRepository:
                 raise ValueError(f"Invalid ObjectId: {entry_id}")
 
         try:
-            query = {"_id": {"$in": entries_refs}}
+            query = {
+                "_id": {"$in": entries_refs},
+                "user_id": ObjectId(user_id),
+            }
             raw = self.collection.find(query)
             found_entries = await raw.to_list(length=None)
 
@@ -154,11 +247,29 @@ class FolderEntryRepository:
             logger.error(f"Database error deleting entry: {e}", exc_info=True)
             raise RuntimeError(f"Database error: {e}")
 
-    async def get_entries_by_user(self, user_id: str) -> List[FolderEntry]:
+    async def ensure_indexes(self) -> None:
+        await self.collection.create_index(
+            [("user_id", 1), ("library_folder_id", 1)],
+            name="entries_user_library_folder",
+        )
+
+    async def get_entries_by_user(
+        self, user_id: str, library_folder_id: Optional[str] = None
+    ) -> List[FolderEntry]:
         if not ObjectId.is_valid(user_id):
             raise ValueError("Invalid user ID format")
         try:
-            raw = self.collection.find({"user_id": ObjectId(user_id)})
+            query: Dict[str, Any] = {"user_id": ObjectId(user_id)}
+            if library_folder_id == "unfiled":
+                query["$or"] = [
+                    {"library_folder_id": None},
+                    {"library_folder_id": {"$exists": False}},
+                ]
+            elif library_folder_id:
+                if not ObjectId.is_valid(library_folder_id):
+                    raise ValueError("Invalid folder ID format")
+                query["library_folder_id"] = ObjectId(library_folder_id)
+            raw = self.collection.find(query)
             entries = await raw.to_list(length=None)
 
             for entry in entries:
@@ -179,3 +290,54 @@ class FolderEntryRepository:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Database error fetching entries by user: {e}",
             )
+
+    async def count_by_library_folders(self, user_id: str) -> Dict[str, int]:
+        pipeline = [
+            {"$match": {"user_id": ObjectId(user_id)}},
+            {
+                "$group": {
+                    "_id": "$library_folder_id",
+                    "count": {"$sum": 1},
+                }
+            },
+        ]
+        counts: Dict[str, int] = {"unfiled": 0}
+        async for row in self.collection.aggregate(pipeline):
+            key = row.get("_id")
+            if key is None:
+                counts["unfiled"] += int(row.get("count") or 0)
+            else:
+                counts[str(key)] = int(row.get("count") or 0)
+        return counts
+
+    async def clear_library_folder(self, user_id: str, folder_id: str) -> int:
+        result = await self.collection.update_many(
+            {
+                "user_id": ObjectId(user_id),
+                "library_folder_id": ObjectId(folder_id),
+            },
+            {
+                "$set": {
+                    "library_folder_id": None,
+                    "updated_at": datetime.now(timezone.utc),
+                }
+            },
+        )
+        return int(result.modified_count)
+
+    async def set_library_folder(
+        self,
+        user_id: str,
+        entry_ids: List[ObjectId],
+        folder_id: Optional[ObjectId],
+    ) -> int:
+        result = await self.collection.update_many(
+            {"_id": {"$in": entry_ids}, "user_id": ObjectId(user_id)},
+            {
+                "$set": {
+                    "library_folder_id": folder_id,
+                    "updated_at": datetime.now(timezone.utc),
+                }
+            },
+        )
+        return int(result.matched_count)

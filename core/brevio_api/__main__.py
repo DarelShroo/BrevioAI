@@ -15,6 +15,8 @@ from pydantic import ValidationError
 from starlette.requests import Request
 from starlette.responses import Response
 
+from core.brevio.services.transcription.errors import TranscriptionError
+from core.brevio_api.config.dotenv import cors_allow_origins
 from core.brevio_api.core.database import AsyncDB
 from core.brevio_api.handlers.exception_handlers import (
     auth_service_exception_handler,
@@ -23,15 +25,19 @@ from core.brevio_api.handlers.exception_handlers import (
     http_exception_handler,
     invalid_file_extension_exception_handler,
     jwt_error_exception_handler,
+    provider_error_exception_handler,
     request_validation_exception_handler,
+    transcription_error_exception_handler,
     value_error_exception_handler,
 )
 from core.brevio_api.models.errors.auth_service_exception import AuthServiceException
 from core.brevio_api.models.errors.invalid_file_extension import InvalidFileExtension
+from core.brevio_api.models.errors.provider_errors import ProviderError
 from core.brevio_api.routers import (
     auth_router,
-    billing_router,
     brevio_router,
+    events_router,
+    user_credential_router,
     user_router,
 )
 
@@ -82,7 +88,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_allow_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -98,11 +104,14 @@ app.add_exception_handler(Exception, global_exception_handler)  # type: ignore[a
 app.add_exception_handler(ValueError, value_error_exception_handler)  # type: ignore[arg-type]
 app.add_exception_handler(AuthServiceException, auth_service_exception_handler)  # type: ignore[arg-type]
 app.add_exception_handler(PyJWTError, jwt_error_exception_handler)  # type: ignore[arg-type]
+app.add_exception_handler(ProviderError, provider_error_exception_handler)  # type: ignore[arg-type]
+app.add_exception_handler(TranscriptionError, transcription_error_exception_handler)  # type: ignore[arg-type]
 
 app.include_router(auth_router)
-app.include_router(billing_router)
 app.include_router(brevio_router)
+app.include_router(events_router)
 app.include_router(user_router)
+app.include_router(user_credential_router)
 
 
 def setup_logging() -> None:

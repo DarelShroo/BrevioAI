@@ -68,3 +68,7 @@ class BaseBrevioGenerate(BaseModel):
 
 class BrevioGenerate(BaseBrevioGenerate):
     data: List[MediaEntry]
+    library_folder_id: Optional[str] = None
+    folder_name: Optional[str] = None
+    transcription_provider: Optional[str] = None
+    transcription_model: Optional[str] = None

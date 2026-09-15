@@ -1,13 +1,12 @@
 import asyncio
 import logging
-import os
-from typing import Any, Callable, Coroutine, List, Tuple
+from typing import Any, Callable, Coroutine, List, Optional, Tuple
 
-import httpx
 from openai import AsyncOpenAI
 
+from core.brevio_api.models.errors.provider_errors import ProviderError
 from core.shared.enums.model import ModelType
-from core.shared.utils.model_tokens_utils import get_encoder, is_deepseek
+from core.shared.utils.model_capabilities import get_model_capabilities
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -31,8 +30,11 @@ class ApiService:
         tasks_put: int,
         task_done_calls: int,
         running_tasks: List[asyncio.Task],
+        credential_resolver=None,
     ):
         self.clients: dict[str, AsyncOpenAI] = {}
+        self._client_versions: dict[str, tuple[str, str]] = {}
+        self.credential_resolver = credential_resolver
         self.client_lock = client_lock
         self.task_done_calls = task_done_calls
         self.tasks_put = tasks_put
@@ -42,30 +44,79 @@ class ApiService:
             Tuple[Callable[..., Coroutine[Any, Any, Any]], List[Any]]
         ] = task_queue
         self.running = running
+        # Last resolved provider quota identity (never contains API keys)
+        self.last_provider: Optional[str] = None
+        self.last_quota_scope_id: Optional[str] = None
+        self.last_model: Optional[str] = None
 
-    async def _initialize_client(self, model: ModelType) -> AsyncOpenAI:
-        model_key = model.value
+    async def _initialize_client(
+        self, model: ModelType, user_id: Optional[str] = None
+    ) -> AsyncOpenAI:
+        provider = get_model_capabilities(model).provider.lower()
         async with self.client_lock:
-            if model_key not in self.clients:
-                api_key = (
-                    os.getenv("DEEPSEEK_API_KEY", "")
-                    if is_deepseek(model)
-                    else os.getenv("OPENAI_API_KEY", "")
+            if not self.credential_resolver:
+                logger.error("Credential resolver is missing in ApiService")
+                raise ValueError("Credential resolver is not configured")
+
+            if not user_id:
+                raise ValueError(
+                    f"user_id is required to resolve credentials for {model.value}"
                 )
-                base_url = (
-                    os.getenv("DEEPSEEK_API_URL", "https://api.deepseek.com")
-                    if is_deepseek(model)
-                    else os.getenv("OPENAI_API_URL", "https://api.openai.com/v1")
+
+            # Use CredentialResolver
+            try:
+                cred = await self.credential_resolver.resolve(user_id, provider)
+            except ProviderError as e:
+                # If a credential was revoked or deleted, it fails here. Clear any existing cache to prevent leaks.
+                cache_key = f"usr:{user_id}:{provider}"
+                if cache_key in self.clients:
+                    old_client = self.clients.pop(cache_key)
+                    self._client_versions.pop(cache_key, None)
+                    try:
+                        await old_client.close()
+                        logger.info(
+                            f"Invalidated and closed cached client for cache_key {cache_key} due to resolution error"
+                        )
+                    except Exception as ex:
+                        logger.warning(f"Error closing invalidated client: {ex}")
+                raise e
+
+            if cred.is_platform:
+                # Assuming v1 for now, or extending it globally later if dynamic rotation inside memory is needed
+                cache_key = f"plt:{provider}:v1:{cred.base_url}"
+            else:
+                cache_key = f"usr:{user_id}:{provider}"
+
+            cred_version = (cred.credential_id, str(cred.updated_at.timestamp()))
+
+            # Check for credential rotation via explicit metadata
+            if cache_key in self.clients:
+                if self._client_versions.get(cache_key) != cred_version:
+                    logger.info(
+                        f"Credential rotated for cache_key {cache_key}, closing old client"
+                    )
+                    old_client = self.clients.pop(cache_key)
+                    try:
+                        await old_client.close()
+                    except Exception as e:
+                        logger.warning(f"Error closing old client during rotation: {e}")
+
+            if cache_key not in self.clients:
+                # Sole app RetryCoordinator owns retries — disable SDK retries.
+                client = AsyncOpenAI(
+                    api_key=cred.api_key,
+                    base_url=cred.base_url,
+                    max_retries=0,
                 )
-                if not api_key:
-                    logger.error(f"API key not set for model {model.value}")
-                    raise ValueError(f"API key not configured for {model.value}")
-                client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-                self.clients[model_key] = client
-                logger.info(
-                    f"Initialized new client for model {model.value} with base_url={base_url}"
-                )
-            return self.clients[model_key]
+                self.clients[cache_key] = client
+                self._client_versions[cache_key] = cred_version
+                logger.info(f"Initialized new client for cache_key {cache_key}")
+
+            self.last_provider = provider
+            self.last_quota_scope_id = cred.quota_scope_id
+            self.last_model = model.value
+
+            return self.clients[cache_key]
 
     async def shutdown(self) -> None:
         if self.running:
@@ -96,21 +147,17 @@ class ApiService:
 
             # Close clients
             async with self.client_lock:
-                for model_key, client in self.clients.items():
+                for cache_key, client in self.clients.items():
                     try:
-                        if hasattr(client, "aclose"):
-                            await client.close()
-                        else:
-                            logger.warning(
-                                f"Client {model_key} does not support aclose()"
-                            )
-                        logger.info(f"Closed client for model {model_key}")
+                        await client.close()
+                        logger.info(f"Closed client for cache_key {cache_key}")
                     except Exception as e:
                         logger.error(
-                            f"Error closing client for model {model_key}: {str(e)}",
+                            f"Error closing client for cache_key {cache_key}: {str(e)}",
                             exc_info=True,
                         )
                 self.clients.clear()
+                self._client_versions.clear()
 
             logger.info(
                 f"Total tasks put: {self.tasks_put}, total task_done calls: {self.task_done_calls}"
@@ -119,25 +166,19 @@ class ApiService:
     async def get_clients(self) -> dict[str, AsyncOpenAI]:
         return self.clients
 
-    async def set_client(self, model: ModelType) -> None:
-        logger.warning(
-            "set_client is deprecated; client is now managed via _initialize_client"
-        )
-        await self._initialize_client(model)
+    async def check_api_connectivity(
+        self, model: ModelType, user_id: Optional[str] = None
+    ) -> bool:
+        """Validate credentials and client construction. Does not consume a completion.
 
-    async def check_api_connectivity(self, model: ModelType) -> bool:
-        logger.debug(f"Checking API connectivity for model {model.value}")
+        The first MAP/REDUCE request is the live connectivity check.
+        """
+        logger.debug(f"Checking API client initialization for model {model.value}")
         try:
-            client = await self._initialize_client(model)
-            await asyncio.wait_for(
-                client.chat.completions.create(
-                    model=model.value,
-                    messages=[{"role": "user", "content": "Test"}],
-                    max_tokens=10,
-                ),
-                timeout=10,
+            await self._initialize_client(model, user_id)
+            logger.info(
+                f"API client initialized for {model.value} (no completion probe)"
             )
-            logger.info(f"API connectivity check passed for {model.value}")
             return True
         except Exception as e:
             logger.error(f"API connectivity check failed for {model.value}: {str(e)}")

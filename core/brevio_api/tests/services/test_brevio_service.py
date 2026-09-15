@@ -15,14 +15,13 @@ from core.brevio.enums.summary_level import SummaryLevel
 from core.brevio.models.prompt_config_model import PromptConfig
 from core.brevio_api.models.user.user_folder import UserFolder
 from core.brevio_api.models.user.user_model import User
-from core.brevio_api.services.billing.usage_cost_tracker import UsageCostTracker
 from core.brevio_api.services.brevio_service import BrevioService
 from core.brevio_api.services.user_service import UserService
 from core.brevio_api.utils.password_utils import hash_password
 from core.shared.enums.model import ModelType
 from core.shared.models.brevio.brevio_generate import BrevioGenerate, MediaEntry
 
-usage_cost_tracker = UsageCostTracker()
+brevio_service = BrevioService()
 
 
 @pytest.fixture
@@ -75,6 +74,9 @@ def brevio_service(mock_user: User) -> Generator[BrevioService, None, None]:
             return_value=str(ObjectId())
         )
         mock_user_service_instance.create_data_result = AsyncMock(return_value=None)
+        mock_user_service_instance.fail_processing_results = AsyncMock(
+            return_value=None
+        )
 
         # Reemplazar el _user_service de la instancia de BrevioService con nuestro mock
         service._user_service = mock_user_service_instance
@@ -111,15 +113,21 @@ async def test_generate_success(
             brevio_service, "get_total_duration", AsyncMock(return_value=60.0)
         ):
             user_id = str(mock_user.id)
-            result = await brevio_service.generate(data, user_id, usage_cost_tracker)
+            result = await brevio_service.generate(data, user_id)
 
             assert result == {"result": "success"}
             mock_generate: AsyncMock = cast(AsyncMock, brevio_service._main.generate)
             mock_generate.assert_awaited_once()
 
-            # Verificar que se llamó a create_folder_entry
+            # Verificar que se llamó a create_folder_entry con metadata del prompt
             mock_user_service = cast(MagicMock, brevio_service._user_service)
-            mock_user_service.create_folder_entry.assert_awaited_once_with(user_id)
+            mock_user_service.create_folder_entry.assert_awaited_once()
+            call_args = mock_user_service.create_folder_entry.await_args
+            assert call_args is not None
+            assert call_args.args[0] == user_id
+            assert call_args.kwargs.get("source_type") == "youtube"
+            assert call_args.kwargs.get("language") == mock_prompt_config.language.name
+            assert call_args.kwargs.get("model") == mock_prompt_config.model.value
 
 
 @pytest.mark.asyncio
@@ -147,10 +155,12 @@ async def test_generate_brevio_error(
         ):
             with pytest.raises(HTTPException) as exc_info:
                 user_id = str(mock_user.id)
-                await brevio_service.generate(data, user_id, usage_cost_tracker)
+                await brevio_service.generate(data, user_id)
 
             assert exc_info.value.status_code == 500
             assert "boom from main.generate" in str(exc_info.value.detail)
+            mock_user_service = cast(MagicMock, brevio_service._user_service)
+            mock_user_service.fail_processing_results.assert_awaited()
 
 
 @pytest.mark.asyncio
@@ -179,7 +189,7 @@ async def test_generate_summary_media_upload_success(
 
         user_id = str(mock_user.id)
         result = await brevio_service.generate_summary_media_upload(
-            files_data, user_id, mock_prompt_config, usage_cost_tracker
+            files_data, user_id, mock_prompt_config
         )
 
         assert result == {"result": "success"}
@@ -213,7 +223,7 @@ async def test_generate_summary_documents_success(
 
         user_id = str(mock_user.id)
         result = await brevio_service.generate_summary_documents(
-            files_data, user_id, mock_prompt_config, usage_cost_tracker
+            files_data, user_id, mock_prompt_config
         )
 
         assert result == {"summary": "done"}

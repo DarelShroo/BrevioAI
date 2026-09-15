@@ -1,5 +1,5 @@
 import json
-from typing import Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 from core.brevio.enums.language import LanguageType
 from core.brevio.models.base_model import BaseModel
@@ -13,24 +13,49 @@ class SummaryResponse:
         summary: str = "",
         message: str = "",
         error_message: str = "",
+        phase: str = "",
+        error_type: str = "",
+        partial_available: bool = False,
+        diagnostics: Optional[Dict[str, Any]] = None,
+        status: str = "",
+        job_phase: str = "",
     ) -> None:
         self.success: bool = success
         self.summary: str = summary
         self.message: str = message
         self.error_message: str = error_message
+        self.phase: str = phase
+        self.error_type: str = error_type
+        self.partial_available: bool = partial_available
+        self.diagnostics: Dict[str, Any] = diagnostics or {}
+        self.status: str = status
+        self.job_phase: str = job_phase
 
-    def to_dict(self) -> Dict[str, Union[bool, str]]:
-        response: Dict[str, Union[bool, str]] = {
+    def to_dict(self) -> Dict[str, Union[bool, str, Dict[str, Any]]]:
+        response: Dict[str, Union[bool, str, Dict[str, Any]]] = {
             "success": self.success,
             "summary": self.summary,
             "message": self.message,
+            "phase": self.phase,
+            "status": self.status,
+            "job_phase": self.job_phase,
+            "partial_available": self.partial_available,
         }
         if self.error_message:
             response["error_message"] = self.error_message
+        if self.error_type:
+            response["error_type"] = self.error_type
+        if self.diagnostics:
+            response["diagnostics"] = self.diagnostics
         return response
 
     def __str__(self) -> str:
-        return f"SummaryResponse(success={self.success}, summary={self.summary}, message={self.message}, error_message={self.error_message})"
+        return (
+            f"SummaryResponse(success={self.success}, status={self.status}, "
+            f"phase={self.phase}, job_phase={self.job_phase}, "
+            f"error_type={self.error_type}, partial_available={self.partial_available}, "
+            f"message={self.message}, error_message={self.error_message})"
+        )
 
 
 class TranscriptionResponse:

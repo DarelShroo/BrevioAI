@@ -3,11 +3,14 @@ from typing import List, cast
 
 from fastapi import HTTPException, UploadFile, status
 
+from core.brevio_api.models.errors.api_codes import ApiErrorCode
 from core.brevio_api.models.errors.invalid_file_extension import InvalidFileExtension
 
 
 def validate_file_extension(
-    file: UploadFile, allowed_extensions: List[str]
+    file: UploadFile,
+    allowed_extensions: List[str],
+    code: ApiErrorCode | str = ApiErrorCode.FILE_FORMAT_NOT_ALLOWED,
 ) -> UploadFile:
     try:
         if file.filename is None:
@@ -20,17 +23,17 @@ def validate_file_extension(
 
         if not ext or ext not in allowed_extensions:
             raise InvalidFileExtension(
-                filename=filename, allowed_extensions=allowed_extensions
+                filename=filename,
+                allowed_extensions=allowed_extensions,
+                code=code,
             )
 
         return file
 
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except InvalidFileExtension as e:
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=str(e)
-        )
+    except InvalidFileExtension:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

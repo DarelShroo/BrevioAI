@@ -30,6 +30,12 @@ class StyleType(Enum):
     EDUCATION_QUICK_REF = "quick_ref"
     EDUCATION_TIMELINE = "timeline"
 
+    # sciences
+    SCIENCES_GUIDE = "guide"
+    SCIENCES_FORMULA_REFERENCE = "formula_reference"
+    SCIENCES_DERIVATION = "derivation"
+    SCIENCES_QUICK_REF = "quick_ref"
+
     # architecture
     ARCHITECTURE_CHRONICLE = "chronicle"
     ARCHITECTURE_REPORT = "report"

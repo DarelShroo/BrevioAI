@@ -7,6 +7,23 @@ from fastapi import HTTPException
 
 from core.brevio_api.models.user.folder_entry import FolderEntry
 from core.brevio_api.repositories.folder_entry_repository import FolderEntryRepository
+from core.shared.enums.job_status import JobStatus
+from core.shared.models.user.data_result import DataResult
+
+
+def _apply_dotted_set(doc: Dict[str, Any], dotted_key: str, value: Any) -> None:
+    parts = dotted_key.split(".")
+    cursor: Any = doc
+    for part in parts[:-1]:
+        if part.isdigit():
+            cursor = cursor[int(part)]
+        else:
+            cursor = cursor[part]
+    last = parts[-1]
+    if last.isdigit():
+        cursor[int(last)] = value
+    else:
+        cursor[last] = value
 
 
 # Mock para AsyncIOMotorCollection
@@ -57,7 +74,13 @@ class MockAsyncCollection:
         for doc in self._data:
             if all(doc.get(k) == v for k, v in query.items()):
                 set_fields = update.get("$set", {})
-                doc.update(set_fields)
+                for key, value in set_fields.items():
+                    _apply_dotted_set(doc, key, value)
+                push_fields = update.get("$push", {})
+                for key, value in push_fields.items():
+                    each = value.get("$each") if isinstance(value, dict) else None
+                    items = each if each is not None else [value]
+                    doc.setdefault(key, []).extend(items)
                 mock_result = MagicMock()
                 mock_result.matched_count = 1
                 mock_result.modified_count = 1
@@ -329,8 +352,8 @@ async def test_get_entries_ids_by_user_id_validation_error(
     # Insertar dato inválido
     invalid_doc = {
         "_id": entry_id,
-        "name": "Invalid Entry",
-        "user_id": "invalid_object_id",  # ¡Inválido!
+        "name": "x" * 300,
+        "user_id": user_id,
         "results": [],
     }
     await folder_entry_repository.collection.insert_one(invalid_doc)
@@ -356,3 +379,88 @@ async def test_get_entries_ids_by_user_id_no_valid_ids(
         str(user_id), [entry_id1, entry_id2]
     )
     assert entries == []
+
+
+@pytest.mark.asyncio
+async def test_update_data_result_matches_by_id(
+    folder_entry_repository: FolderEntryRepository,
+) -> None:
+    from core.brevio_api.repositories.folder_entry_repository import (
+        data_result_to_mongo,
+    )
+
+    folder_id = ObjectId()
+    user_id = ObjectId()
+    result = DataResult(
+        name="Document 0",
+        index=0,
+        download_location="data/u/f/0",
+        status=JobStatus.PROCESSING.value,
+        phase="QUEUED",
+        success=False,
+    )
+    await folder_entry_repository.collection.insert_one(
+        {
+            "_id": folder_id,
+            "user_id": user_id,
+            "results": [data_result_to_mongo(result)],
+        }
+    )
+    await folder_entry_repository.update_data_result(
+        str(folder_id),
+        result.id,
+        {"status": JobStatus.FAILED.value, "phase": "MAP", "success": False},
+    )
+    stored = await folder_entry_repository.collection.find_one({"_id": folder_id})
+    assert stored["results"][0]["status"] == JobStatus.FAILED.value
+    assert stored["results"][0]["_id"] == result.id
+
+
+@pytest.mark.asyncio
+async def test_update_data_result_heals_legacy_row_without_id(
+    folder_entry_repository: FolderEntryRepository,
+) -> None:
+    folder_id = ObjectId()
+    user_id = ObjectId()
+    result_id = ObjectId()
+    await folder_entry_repository.collection.insert_one(
+        {
+            "_id": folder_id,
+            "user_id": user_id,
+            "results": [
+                {
+                    "download_location": "data/u/f/0",
+                    "name": "Document 0",
+                    "status": JobStatus.PROCESSING.value,
+                    "phase": "QUEUED",
+                }
+            ],
+        }
+    )
+    await folder_entry_repository.update_data_result(
+        str(folder_id),
+        result_id,
+        {
+            "status": JobStatus.FAILED.value,
+            "phase": "FAILED",
+            "success": False,
+            "download_location": "data/u/f/0",
+            "name": "Document 0",
+        },
+    )
+    stored = await folder_entry_repository.collection.find_one({"_id": folder_id})
+    assert stored["results"][0]["status"] == JobStatus.FAILED.value
+    assert stored["results"][0]["_id"] == result_id
+
+
+def test_data_result_to_mongo_always_includes_object_id():
+    from core.brevio_api.repositories.folder_entry_repository import (
+        data_result_to_mongo,
+    )
+
+    result = DataResult(name="Document 0", status=JobStatus.PROCESSING.value)
+    payload = data_result_to_mongo(result)
+    assert payload["_id"] == result.id
+    assert isinstance(payload["_id"], ObjectId)
+    dumped = result.model_dump(by_alias=True, exclude_unset=True, mode="json")
+    assert "_id" not in dumped

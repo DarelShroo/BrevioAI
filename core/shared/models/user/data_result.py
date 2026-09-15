@@ -3,20 +3,47 @@ from typing import Optional, Type
 from bson import ObjectId
 from pydantic import ConfigDict, Field, field_validator
 
-from .base_model import BaseModel
+from core.shared.enums.job_status import JobStatus
+
+from .base_model import BaseModel, SerializedObjectId
 
 
 class DataResult(BaseModel):
-    id: ObjectId = Field(default_factory=ObjectId, alias="_id")
+    id: SerializedObjectId = Field(default_factory=ObjectId, alias="_id")
     index: Optional[int] = None
     url: Optional[str] = None
     download_location: Optional[str] = None
     name: Optional[str] = Field(
-        None, strict=True, max_length=100, description="Name of the data result"
+        None,
+        strict=True,
+        max_length=255,
+        description="Editable display name of the data result",
+    )
+    original_name: Optional[str] = Field(
+        None, max_length=255, description="Immutable original source filename"
     )
     duration: Optional[float] = 0.0
+    # None = legacy documents written before explicit job status existed.
+    status: Optional[str] = None
+    phase: Optional[str] = None
+    success: Optional[bool] = None
+    error_type: Optional[str] = None
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def is_completed(self) -> bool:
+        if self.status == JobStatus.COMPLETED.value:
+            return True
+        if self.status == JobStatus.FAILED.value:
+            return False
+        if self.status == JobStatus.PROCESSING.value:
+            return False
+        if self.success is False:
+            return False
+        # Legacy rows: a download_location was only written after success.
+        return bool(self.download_location)
 
     @field_validator("download_location", mode="before")
     @classmethod

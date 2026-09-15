@@ -1,9 +1,9 @@
 import asyncio
 import logging
 from collections.abc import AsyncGenerator
-from typing import Generator, Optional
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Generator, Optional
 
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from core.shared.models.history_token_model import HistoryTokenModel
 try:
@@ -32,10 +32,25 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 
+@dataclass
+class ExtractionReport:
+    extractor: str = "generation"
+    pages_total: int = 0
+    pages_extracted: int = 0
+    pages_empty: int = 0
+    pages_ocr: int = 0
+    pages_ocr_failed: int = 0
+    pages_dropped: int = 0
+    characters_extracted: int = 0
+    tokens_extracted: int = 0
+    notes: list[str] = field(default_factory=list)
+
+
 class DirectoryManager:
     def __init__(self, config: Optional[ConfigModel] = None) -> None:
         logger.info("DirectoryManager initialized")
         self._config: Optional[ConfigModel] = config if config else None
+        self.last_extraction_report = ExtractionReport()
 
     async def createFolder(self, path: Optional[str] = None) -> FolderResponse:
         if path is None:
@@ -141,32 +156,96 @@ class DirectoryManager:
             total_paginas = len(lector.pages)
             logger.info(f"PDF tiene {total_paginas} páginas")
             encoder = tiktoken.encoding_for_model("gpt-4")
+            report = ExtractionReport(
+                extractor="generation",
+                pages_total=total_paginas,
+            )
 
             fragments = []
             for i, pagina in enumerate(lector.pages):
+                page_no = i + 1
                 texto = pagina.extract_text() or ""
                 texto_limpio = re.sub(r"\n+", "\n", texto.strip())
-                
-                # Intentar OCR si no hay texto
+                used_ocr = False
+
                 if not texto_limpio:
+                    report.pages_empty += 1
                     try:
                         import pytesseract
                         from pdf2image import convert_from_path
-                        logger.debug(f"Intentando OCR en la página {i+1}")
-                        images = convert_from_path(path, first_page=i+1, last_page=i+1)
-                        if images:
-                            texto = pytesseract.image_to_string(images[0], lang='spa+eng')
-                            texto_limpio = re.sub(r"\n+", "\n", texto.strip())
-                    except Exception as e:
-                        logger.warning(f"OCR falló en la página {i+1}: {e}")
 
-                if texto_limpio:
-                    if history_token_model:
-                        history_token_model.num_chars_file += len(texto_limpio)
-                        history_token_model.num_tokens_file += len(
-                            encoder.encode(texto_limpio)
+                        logger.debug(f"Intentando OCR en la página {page_no}")
+                        images = convert_from_path(
+                            path, first_page=page_no, last_page=page_no
                         )
-                    fragments.append(texto_limpio)
+                        if images:
+                            texto = pytesseract.image_to_string(
+                                images[0], lang="spa+eng"
+                            )
+                            texto_limpio = re.sub(r"\n+", "\n", texto.strip())
+                            used_ocr = True
+                            if texto_limpio:
+                                report.pages_ocr += 1
+                            else:
+                                report.pages_ocr_failed += 1
+                                report.notes.append(
+                                    f"page {page_no}: OCR returned empty"
+                                )
+                    except Exception as e:
+                        report.pages_ocr_failed += 1
+                        report.notes.append(f"page {page_no}: OCR failed ({e})")
+                        logger.warning(f"OCR falló en la página {page_no}: {e}")
+
+                if not texto_limpio:
+                    marker = (
+                        f"[página {page_no}: texto no extraíble"
+                        + (
+                            "; OCR falló"
+                            if report.notes and str(page_no) in report.notes[-1]
+                            else ""
+                        )
+                        + "]"
+                    )
+                    fragments.append(marker)
+                    report.pages_dropped += 1
+                    report.pages_extracted += 1
+                    report.characters_extracted += len(marker)
+                    if history_token_model:
+                        history_token_model.num_chars_file += len(marker)
+                        history_token_model.num_tokens_file += len(
+                            encoder.encode(marker)
+                        )
+                    continue
+
+                if history_token_model:
+                    history_token_model.num_chars_file += len(texto_limpio)
+                    history_token_model.num_tokens_file += len(
+                        encoder.encode(texto_limpio)
+                    )
+                fragments.append(texto_limpio)
+                report.pages_extracted += 1
+                report.characters_extracted += len(texto_limpio)
+                if used_ocr:
+                    logger.info("OCR recovered page %s", page_no)
+
+            report.tokens_extracted = (
+                history_token_model.num_tokens_file if history_token_model else 0
+            )
+            self.last_extraction_report = report
+            logger.info(
+                "PDF extraction report extractor=%s pages_total=%s pages_extracted=%s "
+                "pages_empty=%s pages_ocr=%s pages_ocr_failed=%s pages_dropped=%s "
+                "characters_extracted=%s tokens_extracted=%s",
+                report.extractor,
+                report.pages_total,
+                report.pages_extracted,
+                report.pages_empty,
+                report.pages_ocr,
+                report.pages_ocr_failed,
+                report.pages_dropped,
+                report.characters_extracted,
+                report.tokens_extracted,
+            )
             return fragments
 
         fragments = await asyncio.to_thread(blocking_read)
@@ -184,7 +263,11 @@ class DirectoryManager:
             raise ValueError("El PDF está vacío o no se pudo extraer texto")
 
         logger.info(
-            f"PDF leído: {len(fragments)} fragmentos, Total caracteres: {sum(len(f) for f in fragments)}"
+            f"PDF leído: {len(fragments)} fragmentos, Total caracteres: {sum(len(f) for f in fragments)} "
+            f"(estimation vs generation: generation keeps pages_total="
+            f"{self.last_extraction_report.pages_total}, pages_extracted="
+            f"{self.last_extraction_report.pages_extracted}, pages_empty="
+            f"{self.last_extraction_report.pages_empty})"
         )
         return fragments
 
@@ -226,10 +309,10 @@ class DirectoryManager:
             "Nota: Haga clic derecho en el índice y seleccione 'Actualizar campo' al abrir en Word."
         )
 
-    async def create_docx_version(self, md_path: Optional[str]) -> None:
+    async def create_docx_version(self, md_path: Optional[str]) -> Optional[str]:
         if md_path is None:
             logger.error("No path provided for DOCX conversion")
-            return
+            return None
 
         docx_path = md_path.replace(".md", ".docx")
 
@@ -271,3 +354,64 @@ class DirectoryManager:
         await blocking_create_docx()
 
         logger.info(f"DOCX version created: {docx_path}")
+        return docx_path
+
+    async def create_pdf_version(self, md_path: Optional[str]) -> Optional[str]:
+        if md_path is None:
+            logger.error("No path provided for PDF conversion")
+            return None
+
+        pdf_path = md_path.replace(".md", ".pdf")
+
+        async def blocking_create_pdf() -> None:
+            async with aiofiles.open(md_path, "r", encoding="utf-8") as f:
+                md_content = await f.read()
+
+            from reportlab.lib.pagesizes import letter
+            from reportlab.lib.styles import getSampleStyleSheet
+            from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+
+            doc = SimpleDocTemplate(
+                pdf_path,
+                pagesize=letter,
+                rightMargin=72,
+                leftMargin=72,
+                topMargin=72,
+                bottomMargin=72,
+            )
+            styles = getSampleStyleSheet()
+            story = []
+
+            html = markdown.markdown(md_content)
+            soup = BeautifulSoup(html, "html.parser")
+
+            for element in soup:
+                if isinstance(element, Tag):
+                    text = element.get_text().strip()
+                    if not text:
+                        continue
+                    if element.name == "h1":
+                        story.append(Paragraph(text, styles["Heading1"]))
+                        story.append(Spacer(1, 12))
+                    elif element.name == "h2":
+                        story.append(Paragraph(text, styles["Heading2"]))
+                        story.append(Spacer(1, 10))
+                    elif element.name == "h3":
+                        story.append(Paragraph(text, styles["Heading3"]))
+                        story.append(Spacer(1, 8))
+                    elif element.name == "p":
+                        story.append(Paragraph(text, styles["Normal"]))
+                        story.append(Spacer(1, 6))
+                    elif element.name in ["ul", "ol"]:
+                        for item in element.find_all("li", recursive=False):
+                            bullet_text = f"• {item.get_text().strip()}"
+                            story.append(Paragraph(bullet_text, styles["Normal"]))
+                            story.append(Spacer(1, 4))
+
+            if story:
+                doc.build(story)
+
+        await blocking_create_pdf()
+
+        logger.info(f"PDF version created: {pdf_path}")
+        return pdf_path

@@ -33,6 +33,9 @@ def mock_db() -> Any:
 def token_service() -> MagicMock:
     service = MagicMock(spec=TokenService)
     service.create_access_token = MagicMock(return_value="test_token")
+    service.create_refresh_token = MagicMock(return_value=("refresh_token", "jti-1"))
+    service.access_max_age_seconds = 900
+    service.refresh_max_age_seconds = 604800
     return service
 
 
@@ -52,6 +55,12 @@ def auth_service(
 ) -> AuthService:
     auth_service = AuthService(mock_db, token_service)
     auth_service._user_service = user_service
+    auth_service._refresh_sessions = MagicMock()
+    auth_service._refresh_sessions.create = AsyncMock()
+    auth_service._refresh_sessions.get_by_family = AsyncMock()
+    auth_service._refresh_sessions.rotate = AsyncMock()
+    auth_service._refresh_sessions.revoke_family = AsyncMock()
+    auth_service._refresh_sessions.revoke_all_for_user = AsyncMock()
     return auth_service
 
 
@@ -97,29 +106,29 @@ async def test_register_success(
 
     user_service.get_user_by_email.return_value = None
     user_service.create_user.return_value = created_user
+    auth_service.directory_manager.createFolder = AsyncMock(
+        return_value=FolderResponse(
+            success=True, message="Successfully created the directory 'test_folder'"
+        )
+    )
 
     with patch(
         "core.brevio_api.utils.password_utils.hash_password",
         return_value=valid_hashed_password,
     ):
         with patch(
-            "core.brevio.managers.directory_manager.DirectoryManager"
-        ) as mock_dir_manager:
-            mock_dir_manager.return_value.createFolder.return_value = FolderResponse(
-                success=True, message="Successfully created the directory 'test_folder'"
-            )
+            "core.brevio_api.utils.email_utils.isEmail",
+            return_value=user_data["email"],
+        ):
             with patch(
-                "core.brevio_api.utils.email_utils.isEmail",
-                return_value=user_data["email"],
-            ):
-                with patch(
-                    "core.brevio_api.services.auth_service.EmailService"
-                ) as mock_email:
-                    mock_email.return_value.send_register_email = AsyncMock()
-                    result = await auth_service.register(user)
+                "core.brevio_api.services.auth_service.EmailService"
+            ) as mock_email:
+                mock_email.return_value.send_register_email = AsyncMock()
+                result = await auth_service.register(user)
 
     assert result.access_token == "test_token"
-    assert isinstance(result.folder, FolderResponse)
+    assert result.refresh_token == "refresh_token"
+    assert result.folder is not None
     assert result.folder.success is True
     assert "Successfully created" in result.folder.message
     user_service.get_user_by_email.assert_awaited_once_with(user_data["email"])
@@ -150,6 +159,7 @@ async def test_login_user_not_found(
 @pytest.mark.asyncio
 async def test_login_success(
     auth_service: AuthService,
+    token_service: MagicMock,
     user_data: Dict[str, Any],
     login_data: Dict[str, Any],
     user_service: MagicMock,
@@ -180,6 +190,11 @@ async def test_login_success(
             result = await auth_service.login(user_login)
 
     assert result.access_token == "test_token"
+    assert result.refresh_token == "refresh_token"
+    token_service.create_access_token.assert_called()
+    call = token_service.create_access_token.call_args
+    assert call.args[0] == {"id": str(mock_user_id)}
+    assert call.kwargs.get("expires_delta") is None
     mock_verify_password.assert_called_once_with(
         login_data["password"], valid_hashed_password
     )
@@ -311,6 +326,9 @@ async def test_change_password(
         user_data["email"], recovery_otp.password
     )
     mock_email.return_value.send_password_changed_email.assert_awaited_once()
+    auth_service._refresh_sessions.revoke_all_for_user.assert_awaited_once_with(
+        mock_user_id
+    )
 
 
 @pytest.mark.asyncio

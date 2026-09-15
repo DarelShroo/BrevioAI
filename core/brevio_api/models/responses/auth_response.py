@@ -11,7 +11,7 @@ from core.brevio_api.models.user.user_folder import UserFolder
 
 
 class LoginResponse(BaseResponseModel):
-    access_token: str
+    authenticated: bool = True
 
 
 class LoginDataResponse(BaseResponse):
@@ -20,7 +20,16 @@ class LoginDataResponse(BaseResponse):
 
 class RegisterResponse(BaseResponseModel):
     folder: FolderResponse
-    access_token: str
+    authenticated: bool = True
+
+
+class SessionResponse(BaseResponseModel):
+    authenticated: bool
+    user_id: Optional[str] = None
+
+
+class SessionDataResponse(BaseResponse):
+    data: SessionResponse
 
 
 class RegisterDataResponse(BaseResponse):
