@@ -1,13 +1,13 @@
 {
     "info": {
         "name": "BrevioAI API Ultimate Edition",
-        "description": "Exhaustive Postman Collection for BrevioAI backend API. Includes all possible enum values (Categories, Styles, Languages, Output Formats, Models), detailed parameters, authentication flows, edge cases, and mocked responses for 200, 400, 401, and 422.",
+        "description": "Exhaustive Postman collection for the current BrevioAI FastAPI backend (`core/brevio_api`).\n\n**Base URL:** `http://localhost:8000` (uvicorn). Frontend uses the same origin. OpenAPI: `/api/openapi.json`, Swagger: `/api/docs`.\n\n**Auth**\n- Public: `/auth/*`\n- Session cookies (httpOnly) `brevio_access` + `brevio_refresh`. Login/register/refresh set them; JSON does not return the JWT. Bearer is optional fallback.\n- `X-API-KEY` (`{{api_key}}`): catalog GETs and YouTube count utils only\n\n**Error envelope:** `{ \"status\": \"error\", \"message\": \"...\", \"signature\": {...}, \"code\"?: \"FOLDER_NOT_FOUND\" }`\n**Success envelope (most routes):** `{ \"status\": \"success\", \"data\": {...}, \"signature\": {...} }`\nLibrary folders, credentials, bulk entry ops, and SSE do **not** wrap in that envelope.\n\n**Removed vs previous collection:** `/billing/estimate-media` and `/billing/estimate-documents` (billing router deleted). Use `POST /brevio/estimate-documents`.\n\n**Enums (representative)**\n- Languages: enum **names** (`ENGLISH`, `SPANISH`, `FRENCH`, …) not ISO codes\n- Categories: `simple_summary`, `journalism`, `marketing`, `health`, `technology`, `education`, `architecture`, `finance`, `tourism`, `requirements`, `sciences`\n- Styles (by category): education=`guide|quick_ref|timeline`, technology=`changelog|proposal|diagram`, journalism=`chronicle|news_wire|analysis`\n- Formats: `html`, `markdown`, `json`, `text`\n- Summary levels: `very_concise`, `concise`, `moderate`, `detailed`, `very_detailed`\n- Models: `gpt-4`, `gpt-4o-mini`, `gemini-3.1-flash-lite`, `deepseek-flash`, `qwen3:8b`, `qwen3:14b`, `qwen3:14b-q6`, `qwen3:32b`, `deepseek-r1-local:iq3-xs`, `gpt-oss:20b`, `batiai/gemma4-31b:iq3`\n- Job status: `PROCESSING` | `COMPLETED` | `FAILED`\n\nLogin / register set httpOnly cookies. Create-folder / create-credential / summary jobs persist IDs.",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
     },
     "variable": [
         {
             "key": "base_url",
-            "value": "http://localhost:8000/api",
+            "value": "http://localhost:8000",
             "type": "string"
         },
         {
@@ -17,14 +17,54 @@
         },
         {
             "key": "token",
-            "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "identity",
+            "value": "johndoe",
+            "type": "string"
+        },
+        {
+            "key": "password",
+            "value": "SecurePassword123!",
+            "type": "string"
+        },
+        {
+            "key": "library_folder_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "entry_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "folder_entry_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "credential_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "task_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "last_event_id",
+            "value": "0",
             "type": "string"
         }
     ],
     "item": [
         {
             "name": "Authentication",
-            "description": "Endpoints for user registration, login, and password recovery.",
+            "description": "Public endpoints. Login/register save `{{token}}`. Identity is email **or** username (3–10 chars `[a-zA-Z0-9_.-]` if not email). Register password: ≥8 chars, 1 upper, 1 lower, 1 digit, 1 special.",
             "item": [
                 {
                     "name": "Login User",
@@ -36,10 +76,6 @@
                                 "value": "application/json"
                             }
                         ],
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n    \"username\": \"johndoe\",\n    \"password\": \"SecurePassword123!\"\n}"
-                        },
                         "url": {
                             "raw": "{{base_url}}/auth/login",
                             "host": [
@@ -50,11 +86,20 @@
                                 "login"
                             ]
                         },
-                        "description": "Authenticates a user and returns a JWT access token.\n\n**Possible Errors:**\n- `401 Unauthorized`: Invalid credentials.\n- `422 Unprocessable Entity`: Validation error (missing fields)."
+                        "description": "Authenticate with `identity` (username or email) and `password`. Sets httpOnly cookies `brevio_access` and `brevio_refresh`. JSON returns `{ authenticated: true }` and does **not** include the JWT.\n\n**Errors:** 401 invalid credentials · 422 validation.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"identity\": \"{{identity}}\",\n    \"password\": \"{{password}}\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
                     },
                     "response": [
                         {
-                            "name": "200 OK - Success",
+                            "name": "200 OK",
                             "status": "OK",
                             "code": 200,
                             "header": [
@@ -63,7 +108,7 @@
                                     "value": "application/json"
                                 }
                             ],
-                            "body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"access_token\": \"eyJhb...\",\n        \"token_type\": \"bearer\",\n        \"user\": {\n            \"id\": \"507f1f77bcf86cd799439011\",\n            \"username\": \"johndoe\",\n            \"email\": \"johndoe@example.com\"\n        }\n    }\n}"
+                            "body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"access_token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\"\n    },\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
                         },
                         {
                             "name": "401 Unauthorized",
@@ -75,7 +120,86 @@
                                     "value": "application/json"
                                 }
                             ],
-                            "body": "{\n    \"detail\": \"Invalid credentials\"\n}"
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Credenciales inválidas\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "422 Validation",
+                            "status": "Unprocessable Entity",
+                            "code": 422,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Se han encontrado errores de validación.\",\n    \"errors\": [\n        {\n            \"field\": \"password\",\n            \"error\": \"missing\",\n            \"message\": \"Field required\",\n            \"input\": null\n        }\n    ],\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        }
+                    ],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 200 || pm.response.code === 201) {\n",
+                                    "    const json = pm.response.json();\n",
+                                    "    pm.test(\"Authenticated cookie session\", () => {\n",
+                                    "        pm.expect(json.data.authenticated).to.eql(true);\n",
+                                    "        pm.expect(json.data.access_token).to.be.undefined;\n",
+                                    "    });\n",
+                                    "}\n"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Login User (email identity)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/auth/login",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "login"
+                            ]
+                        },
+                        "description": "Same login using an email as `identity`.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"identity\": \"johndoe@example.com\",\n    \"password\": \"{{password}}\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 200 || pm.response.code === 201) {\n",
+                                    "    const json = pm.response.json();\n",
+                                    "    pm.test(\"Authenticated cookie session\", () => {\n",
+                                    "        pm.expect(json.data.authenticated).to.eql(true);\n",
+                                    "        pm.expect(json.data.access_token).to.be.undefined;\n",
+                                    "    });\n",
+                                    "}\n"
+                                ]
+                            }
                         }
                     ]
                 },
@@ -89,10 +213,6 @@
                                 "value": "application/json"
                             }
                         ],
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n    \"username\": \"newuser99\",\n    \"email\": \"newuser@example.com\",\n    \"password\": \"StrongPassword!9\"\n}"
-                        },
                         "url": {
                             "raw": "{{base_url}}/auth/register",
                             "host": [
@@ -103,11 +223,20 @@
                                 "register"
                             ]
                         },
-                        "description": "Registers a new user in the system.\n\n**Possible Errors:**\n- `400 Bad Request`: User already exists.\n- `422 Unprocessable Entity`: Invalid email format or missing fields."
+                        "description": "Creates the user, a root folder, and returns `access_token` plus `folder` (`success`/`message`). Username 6–25 chars.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"username\": \"newuser99\",\n    \"email\": \"newuser@example.com\",\n    \"password\": \"StrongPassword!9\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
                     },
                     "response": [
                         {
-                            "name": "201 Created - Success",
+                            "name": "201 Created",
                             "status": "Created",
                             "code": 201,
                             "header": [
@@ -116,7 +245,48 @@
                                     "value": "application/json"
                                 }
                             ],
-                            "body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"user_id\": \"507f1f77bcf86cd799439011\",\n        \"message\": \"User registered successfully\"\n    }\n}"
+                            "body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"folder\": {\n            \"success\": true,\n            \"message\": \"folder created\"\n        },\n        \"access_token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\"\n    },\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "400 User exists",
+                            "status": "Bad Request",
+                            "code": 400,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"User already exists\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "422 Validation",
+                            "status": "Unprocessable Entity",
+                            "code": 422,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Se han encontrado errores de validación.\",\n    \"errors\": [\n        {\n            \"field\": \"password\",\n            \"error\": \"missing\",\n            \"message\": \"Field required\",\n            \"input\": null\n        }\n    ],\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        }
+                    ],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 200 || pm.response.code === 201) {\n",
+                                    "    const json = pm.response.json();\n",
+                                    "    pm.test(\"Authenticated cookie session\", () => {\n",
+                                    "        pm.expect(json.data.authenticated).to.eql(true);\n",
+                                    "        pm.expect(json.data.access_token).to.be.undefined;\n",
+                                    "    });\n",
+                                    "}\n"
+                                ]
+                            }
                         }
                     ]
                 },
@@ -130,10 +300,6 @@
                                 "value": "application/json"
                             }
                         ],
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n    \"email\": \"user@example.com\"\n}"
-                        },
                         "url": {
                             "raw": "{{base_url}}/auth/password-recovery-handshake",
                             "host": [
@@ -144,8 +310,55 @@
                                 "password-recovery-handshake"
                             ]
                         },
-                        "description": "Initiates the password recovery flow by sending an OTP to the user's email."
-                    }
+                        "description": "Sends OTP to the user's email. Body field is `identity` (must be a valid email).",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"identity\": \"johndoe@example.com\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "200 OK",
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"message\": \"Código de recuperación enviado.\"\n    },\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "404 Not Found",
+                            "status": "Not Found",
+                            "code": 404,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"User not found\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "422 Validation",
+                            "status": "Unprocessable Entity",
+                            "code": 422,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Se han encontrado errores de validación.\",\n    \"errors\": [\n        {\n            \"field\": \"password\",\n            \"error\": \"missing\",\n            \"message\": \"Field required\",\n            \"input\": null\n        }\n    ],\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        }
+                    ]
                 },
                 {
                     "name": "Password Recovery Verify",
@@ -157,10 +370,6 @@
                                 "value": "application/json"
                             }
                         ],
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n    \"email\": \"user@example.com\",\n    \"otp\": \"123456\",\n    \"new_password\": \"NewSecurePassword123!\"\n}"
-                        },
                         "url": {
                             "raw": "{{base_url}}/auth/password-recovery-verify",
                             "host": [
@@ -171,49 +380,20 @@
                                 "password-recovery-verify"
                             ]
                         },
-                        "description": "Verifies the OTP and updates the user's password."
-                    }
-                }
-            ]
-        },
-        {
-            "name": "Users",
-            "description": "Endpoints to manage user-specific data like folders and entries. Requires JWT Authorization.",
-            "item": [
-                {
-                    "name": "Get User Entries",
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Authorization",
-                                "value": "Bearer {{token}}",
-                                "description": "JWT Access Token"
-                            },
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ],
+                        "description": "Completes recovery. `otp` is an integer. `password` is the new password (same rules as register).",
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"entries_refs\": [\n        \"507f1f77bcf86cd799439011\",\n        \"607f1f77bcf86cd799439012\"\n    ]\n}"
-                        },
-                        "url": {
-                            "raw": "{{base_url}}/users/entries",
-                            "host": [
-                                "{{base_url}}"
-                            ],
-                            "path": [
-                                "users",
-                                "entries"
-                            ]
-                        },
-                        "description": "Retrieves user entries (histories, files, summaries) by their MongoDB ObjectIds.\n\n**Possible Errors:**\n- `400`: Invalid ObjectId format.\n- `401`: Unauthorized (missing/invalid token).\n- `403`: Forbidden (user tries to access entries belonging to someone else).\n- `404`: No entries found."
+                            "raw": "{\n    \"email\": \"johndoe@example.com\",\n    \"password\": \"NewSecurePassword123!\",\n    \"otp\": 123456\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
                     },
                     "response": [
                         {
-                            "name": "200 OK - Success",
+                            "name": "200 OK",
                             "status": "OK",
                             "code": 200,
                             "header": [
@@ -222,493 +402,2530 @@
                                     "value": "application/json"
                                 }
                             ],
-                            "body": "{\n    \"entries\": [\n        {\n            \"_id\": \"507f1f77bcf86cd799439011\",\n            \"name\": \"Summary 1\",\n            \"type\": \"history\"\n        }\n    ]\n}"
+                            "body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"message\": \"Contraseña cambiada exitosamente.\"\n    },\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "400 Invalid OTP",
+                            "status": "Bad Request",
+                            "code": 400,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Invalid OTP\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "404 Not Found",
+                            "status": "Not Found",
+                            "code": 404,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"User not found\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "422 Validation",
+                            "status": "Unprocessable Entity",
+                            "code": 422,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Se han encontrado errores de validación.\",\n    \"errors\": [\n        {\n            \"field\": \"password\",\n            \"error\": \"missing\",\n            \"message\": \"Field required\",\n            \"input\": null\n        }\n    ],\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
                         }
                     ]
                 }
             ]
         },
         {
-            "name": "Billing & Estimations",
-            "description": "Endpoints to calculate and predict API token costs and billing limits. Requires X-API-KEY.",
+            "name": "Users",
+            "description": "JWT required. Profile, library folders, and summary entries (history/store).",
             "item": [
                 {
-                    "name": "Estimate Media Cost",
-                    "request": {
-                        "method": "GET",
-                        "header": [
-                            {
-                                "key": "X-API-KEY",
-                                "value": "{{api_key}}",
-                                "description": "Static API Key"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{base_url}}/billing/estimate-media?minutes=45.5&model=gpt-4o-mini&language=ENGLISH",
-                            "host": [
-                                "{{base_url}}"
-                            ],
-                            "path": [
-                                "billing",
-                                "estimate-media"
-                            ],
-                            "query": [
-                                {
-                                    "key": "minutes",
-                                    "value": "45.5",
-                                    "description": "Duration of media in minutes (Float)"
-                                },
-                                {
-                                    "key": "model",
-                                    "value": "gpt-4o-mini",
-                                    "description": "AI Model (e.g. gpt-4o, gpt-4o-mini, gpt-4-turbo)"
-                                },
-                                {
-                                    "key": "language",
-                                    "value": "ENGLISH",
-                                    "description": "Input language (e.g. ENGLISH, SPANISH)"
-                                }
-                            ]
-                        },
-                        "description": "Calculates the estimated token cost for transcribing and summarizing an audio/video file of a given duration."
-                    }
-                },
-                {
-                    "name": "Estimate Documents Cost",
-                    "request": {
-                        "method": "GET",
-                        "header": [
-                            {
-                                "key": "X-API-KEY",
-                                "value": "{{api_key}}",
-                                "description": "Static API Key"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{base_url}}/billing/estimate-documents?file_tokens=15000&model=gpt-4o&language_input=SPANISH&language_output=ENGLISH&category=EDUCATION&style=guide&output_format=markdown&summary_level=detailed",
-                            "host": [
-                                "{{base_url}}"
-                            ],
-                            "path": [
-                                "billing",
-                                "estimate-documents"
-                            ],
-                            "query": [
-                                {
-                                    "key": "file_tokens",
-                                    "value": "15000",
-                                    "description": "Token count from frontend tokenizer"
-                                },
-                                {
-                                    "key": "model",
-                                    "value": "gpt-4o",
-                                    "description": "Model type"
-                                },
-                                {
-                                    "key": "language_input",
-                                    "value": "SPANISH",
-                                    "description": "Input text language"
-                                },
-                                {
-                                    "key": "language_output",
-                                    "value": "ENGLISH",
-                                    "description": "Target output language"
-                                },
-                                {
-                                    "key": "category",
-                                    "value": "EDUCATION",
-                                    "description": "Category (e.g. EDUCATION, TECHNOLOGY)"
-                                },
-                                {
-                                    "key": "style",
-                                    "value": "guide",
-                                    "description": "Output style (e.g. guide, report)"
-                                },
-                                {
-                                    "key": "output_format",
-                                    "value": "markdown",
-                                    "description": "Output format (markdown, html, json, text)"
-                                },
-                                {
-                                    "key": "summary_level",
-                                    "value": "detailed",
-                                    "description": "Summary length level (concise, detailed, etc.)"
-                                }
-                            ]
-                        },
-                        "description": "Calculates the exact token usage projection for a document summarization request based on advanced prompt combinations."
-                    }
-                }
-            ]
-        },
-        {
-            "name": "Brevio Core Options",
-            "description": "Main endpoints for obtaining options, counting media, and dispatching summary tasks.",
-            "item": [
-                {
-                    "name": "Catalog Options",
+                    "name": "Profile",
+                    "description": "Authenticated user profile (no password/OTP).",
                     "item": [
                         {
-                            "name": "Get Languages",
+                            "name": "Get Current User",
                             "request": {
                                 "method": "GET",
-                                "header": [
-                                    {
-                                        "key": "X-API-KEY",
-                                        "value": "{{api_key}}"
-                                    }
-                                ],
-                                "url": {
-                                    "raw": "{{base_url}}/brevio/languages",
-                                    "host": [
-                                        "{{base_url}}"
-                                    ],
-                                    "path": [
-                                        "brevio",
-                                        "languages"
-                                    ]
-                                },
-                                "description": "Returns all 100+ supported languages (e.g. ENGLISH, SPANISH, FRENCH, MANDARIN)."
-                            }
-                        },
-                        {
-                            "name": "Get Models",
-                            "request": {
-                                "method": "GET",
-                                "header": [
-                                    {
-                                        "key": "X-API-KEY",
-                                        "value": "{{api_key}}"
-                                    }
-                                ],
-                                "url": {
-                                    "raw": "{{base_url}}/brevio/models",
-                                    "host": [
-                                        "{{base_url}}"
-                                    ],
-                                    "path": [
-                                        "brevio",
-                                        "models"
-                                    ]
-                                },
-                                "description": "Returns all active LLM Models configured."
-                            }
-                        },
-                        {
-                            "name": "Get Categories & Styles",
-                            "request": {
-                                "method": "GET",
-                                "header": [
-                                    {
-                                        "key": "X-API-KEY",
-                                        "value": "{{api_key}}"
-                                    }
-                                ],
-                                "url": {
-                                    "raw": "{{base_url}}/brevio/categories-styles",
-                                    "host": [
-                                        "{{base_url}}"
-                                    ],
-                                    "path": [
-                                        "brevio",
-                                        "categories-styles"
-                                    ]
-                                },
-                                "description": "Returns a nested object mapping Categories (e.g. TECHNOLOGY, EDUCATION) to their supported Styles (e.g. changelog, guide, report)."
-                            }
-                        },
-                        {
-                            "name": "Get Output Formats",
-                            "request": {
-                                "method": "GET",
-                                "header": [
-                                    {
-                                        "key": "X-API-KEY",
-                                        "value": "{{api_key}}"
-                                    }
-                                ],
-                                "url": {
-                                    "raw": "{{base_url}}/brevio/output-formats",
-                                    "host": [
-                                        "{{base_url}}"
-                                    ],
-                                    "path": [
-                                        "brevio",
-                                        "output-formats"
-                                    ]
-                                },
-                                "description": "Returns supported output structures (html, markdown, json, text)."
-                            }
-                        },
-                        {
-                            "name": "Get Summary Levels",
-                            "request": {
-                                "method": "GET",
-                                "header": [
-                                    {
-                                        "key": "X-API-KEY",
-                                        "value": "{{api_key}}"
-                                    }
-                                ],
-                                "url": {
-                                    "raw": "{{base_url}}/brevio/summary-levels",
-                                    "host": [
-                                        "{{base_url}}"
-                                    ],
-                                    "path": [
-                                        "brevio",
-                                        "summary-levels"
-                                    ]
-                                },
-                                "description": "Returns levels: very_concise, concise, moderate, detailed, very_detailed."
-                            }
-                        }
-                    ]
-                },
-                {
-                    "name": "YouTube Utils",
-                    "item": [
-                        {
-                            "name": "Count YT Playlist Videos",
-                            "request": {
-                                "method": "POST",
-                                "header": [
-                                    {
-                                        "key": "X-API-KEY",
-                                        "value": "{{api_key}}"
-                                    },
-                                    {
-                                        "key": "Content-Type",
-                                        "value": "application/json"
-                                    }
-                                ],
-                                "body": {
-                                    "mode": "raw",
-                                    "raw": "{\n    \"url\": \"https://www.youtube.com/playlist?list=PLxyz\"\n}"
-                                },
-                                "url": {
-                                    "raw": "{{base_url}}/brevio/count-yt-videos",
-                                    "host": [
-                                        "{{base_url}}"
-                                    ],
-                                    "path": [
-                                        "brevio",
-                                        "count-yt-videos"
-                                    ]
-                                },
-                                "description": "Counts the number of videos present in a given YouTube Playlist URL."
-                            }
-                        },
-                        {
-                            "name": "Count YT Video Time",
-                            "request": {
-                                "method": "POST",
-                                "header": [
-                                    {
-                                        "key": "X-API-KEY",
-                                        "value": "{{api_key}}"
-                                    },
-                                    {
-                                        "key": "Content-Type",
-                                        "value": "application/json"
-                                    }
-                                ],
-                                "body": {
-                                    "mode": "raw",
-                                    "raw": "{\n    \"url\": \"https://www.youtube.com/watch?v=xyz\"\n}"
-                                },
-                                "url": {
-                                    "raw": "{{base_url}}/brevio/count-time-yt-video",
-                                    "host": [
-                                        "{{base_url}}"
-                                    ],
-                                    "path": [
-                                        "brevio",
-                                        "count-time-yt-video"
-                                    ]
-                                },
-                                "description": "Calculates the total duration in seconds of a YouTube video."
-                            }
-                        }
-                    ]
-                },
-                {
-                    "name": "Generation (Asynchronous Celery)",
-                    "item": [
-                        {
-                            "name": "Summary Media (MP3)",
-                            "request": {
-                                "method": "POST",
                                 "header": [
                                     {
                                         "key": "Authorization",
-                                        "value": "Bearer {{token}}"
+                                        "value": "Bearer {{token}}",
+                                        "description": "JWT access token from POST /auth/login"
                                     }
                                 ],
-                                "body": {
-                                    "mode": "formdata",
-                                    "formdata": [
-                                        {
-                                            "key": "files",
-                                            "type": "file",
-                                            "src": [],
-                                            "description": "Array of MP3 files"
-                                        },
-                                        {
-                                            "key": "language",
-                                            "value": "ENGLISH",
-                                            "type": "text"
-                                        },
-                                        {
-                                            "key": "model",
-                                            "value": "gpt-4o",
-                                            "type": "text"
-                                        },
-                                        {
-                                            "key": "category",
-                                            "value": "EDUCATION",
-                                            "type": "text"
-                                        },
-                                        {
-                                            "key": "style",
-                                            "value": "guide",
-                                            "type": "text"
-                                        },
-                                        {
-                                            "key": "format",
-                                            "value": "markdown",
-                                            "type": "text"
-                                        },
-                                        {
-                                            "key": "summary_level",
-                                            "value": "concise",
-                                            "type": "text"
-                                        }
-                                    ]
-                                },
                                 "url": {
-                                    "raw": "{{base_url}}/brevio/summary-media",
+                                    "raw": "{{base_url}}/users/me",
                                     "host": [
                                         "{{base_url}}"
                                     ],
                                     "path": [
-                                        "brevio",
-                                        "summary-media"
+                                        "users",
+                                        "me"
                                     ]
                                 },
-                                "description": "Submits MP3 files for transcription and summarization. Returns a 202 Accepted with a Celery `task_id`."
+                                "description": "Returns id, username, email, user_credit, folder_id."
                             },
                             "response": [
                                 {
-                                    "name": "202 Accepted",
-                                    "status": "Accepted",
-                                    "code": 202,
+                                    "name": "200 OK",
+                                    "status": "OK",
+                                    "code": 200,
                                     "header": [
                                         {
                                             "key": "Content-Type",
                                             "value": "application/json"
                                         }
                                     ],
-                                    "body": "{\n    \"task_id\": \"8a7s9d8a7sd-9a8s7d98a7s-98d7sa98d7\",\n    \"data\": {\n        \"message\": \"Processing started\"\n    }\n}"
+                                    "body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"id\": \"507f1f77bcf86cd799439011\",\n        \"username\": \"johndoe\",\n        \"email\": \"johndoe@example.com\",\n        \"user_credit\": 0.0,\n        \"folder_id\": \"507f1f77bcf86cd799439022\"\n    },\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                                },
+                                {
+                                    "name": "401 Unauthorized",
+                                    "status": "Unauthorized",
+                                    "code": 401,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"status\": \"error\",\n    \"message\": \"Token de autenticación no válido.\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                                },
+                                {
+                                    "name": "404 Not Found",
+                                    "status": "Not Found",
+                                    "code": 404,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"status\": \"error\",\n    \"message\": \"User not found\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
                                 }
                             ]
-                        },
+                        }
+                    ]
+                },
+                {
+                    "name": "Library Folders",
+                    "description": "User-created folders for organizing summaries. Deleting a folder does **not** delete summaries (they become unfiled).",
+                    "item": [
                         {
-                            "name": "Summary Documents (PDF, DOCX)",
+                            "name": "List Library Folders",
                             "request": {
-                                "method": "POST",
+                                "method": "GET",
                                 "header": [
                                     {
                                         "key": "Authorization",
-                                        "value": "Bearer {{token}}"
+                                        "value": "Bearer {{token}}",
+                                        "description": "JWT access token from POST /auth/login"
                                     }
                                 ],
-                                "body": {
-                                    "mode": "formdata",
-                                    "formdata": [
-                                        {
-                                            "key": "files",
-                                            "type": "file",
-                                            "src": [],
-                                            "description": "Array of PDF or DOCX files"
-                                        },
-                                        {
-                                            "key": "language",
-                                            "value": "SPANISH",
-                                            "type": "text"
-                                        },
-                                        {
-                                            "key": "model",
-                                            "value": "gpt-4o-mini",
-                                            "type": "text"
-                                        },
-                                        {
-                                            "key": "category",
-                                            "value": "TECHNOLOGY",
-                                            "type": "text"
-                                        },
-                                        {
-                                            "key": "style",
-                                            "value": "changelog",
-                                            "type": "text"
-                                        },
-                                        {
-                                            "key": "format",
-                                            "value": "html",
-                                            "type": "text"
-                                        },
-                                        {
-                                            "key": "summary_level",
-                                            "value": "detailed",
-                                            "type": "text"
-                                        }
-                                    ]
-                                },
                                 "url": {
-                                    "raw": "{{base_url}}/brevio/summary-documents",
+                                    "raw": "{{base_url}}/users/folders",
                                     "host": [
                                         "{{base_url}}"
                                     ],
                                     "path": [
-                                        "brevio",
-                                        "summary-documents"
+                                        "users",
+                                        "folders"
                                     ]
                                 },
-                                "description": "Submits document files for summarization. Returns a 202 Accepted with a Celery `task_id`."
-                            }
+                                "description": "Returns `{ folders, unfiled_count }`. Not wrapped in the standard data envelope."
+                            },
+                            "response": [
+                                {
+                                    "name": "200 OK",
+                                    "status": "OK",
+                                    "code": 200,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"folders\": [\n        {\n            \"id\": \"64f3c7e0aabbccddeeff00aa\",\n            \"name\": \"Universidad\",\n            \"created_at\": \"2026-09-14T10:00:00+00:00\",\n            \"updated_at\": \"2026-09-14T10:00:00+00:00\",\n            \"entry_count\": 2\n        }\n    ],\n    \"unfiled_count\": 4\n}"
+                                },
+                                {
+                                    "name": "401 Unauthorized",
+                                    "status": "Unauthorized",
+                                    "code": 401,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"status\": \"error\",\n    \"message\": \"Token de autenticación no válido.\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                                }
+                            ]
                         },
                         {
-                            "name": "Summary YouTube Playlist",
+                            "name": "Create Library Folder",
                             "request": {
                                 "method": "POST",
                                 "header": [
                                     {
                                         "key": "Authorization",
-                                        "value": "Bearer {{token}}"
+                                        "value": "Bearer {{token}}",
+                                        "description": "JWT access token from POST /auth/login"
                                     },
                                     {
                                         "key": "Content-Type",
                                         "value": "application/json"
                                     }
                                 ],
-                                "body": {
-                                    "mode": "raw",
-                                    "raw": "{\n    \"prompt_config\": {\n        \"model\": \"gpt-4o\",\n        \"category\": \"JOURNALISM\",\n        \"style\": \"analysis\",\n        \"format\": \"json\",\n        \"language\": \"ENGLISH\",\n        \"summary_level\": \"very_detailed\"\n    },\n    \"data\": [\n        {\n            \"url\": \"https://www.youtube.com/watch?v=xyz\"\n        }\n    ]\n}"
-                                },
                                 "url": {
-                                    "raw": "{{base_url}}/brevio/summary-yt-playlist",
+                                    "raw": "{{base_url}}/users/folders",
                                     "host": [
                                         "{{base_url}}"
                                     ],
                                     "path": [
-                                        "brevio",
-                                        "summary-yt-playlist"
+                                        "users",
+                                        "folders"
                                     ]
                                 },
-                                "description": "Submits YouTube links for summarization. Returns a 202 Accepted with a Celery `task_id`."
+                                "description": "Creates a folder. Blank/whitespace names → `400 FOLDER_NAME_INVALID`. Duplicate names → `400 FOLDER_NAME_DUPLICATE`.",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"name\": \"Universidad\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "response": [
+                                {
+                                    "name": "201 Created",
+                                    "status": "Created",
+                                    "code": 201,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"id\": \"64f3c7e0aabbccddeeff00aa\",\n    \"name\": \"Universidad\",\n    \"created_at\": \"2026-09-14T10:00:00+00:00\",\n    \"updated_at\": \"2026-09-14T10:00:00+00:00\",\n    \"entry_count\": 0\n}"
+                                },
+                                {
+                                    "name": "400 Invalid name",
+                                    "status": "Bad Request",
+                                    "code": 400,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"status\": \"error\",\n    \"message\": \"FOLDER_NAME_INVALID\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    },\n    \"code\": \"FOLDER_NAME_INVALID\"\n}"
+                                },
+                                {
+                                    "name": "400 Duplicate",
+                                    "status": "Bad Request",
+                                    "code": 400,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"status\": \"error\",\n    \"message\": \"FOLDER_NAME_DUPLICATE\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    },\n    \"code\": \"FOLDER_NAME_DUPLICATE\"\n}"
+                                }
+                            ],
+                            "event": [
+                                {
+                                    "listen": "test",
+                                    "script": {
+                                        "type": "text/javascript",
+                                        "exec": [
+                                            "if (pm.response.code === 201) {\n",
+                                            "    const json = pm.response.json();\n",
+                                            "    if (json && json.id) {\n",
+                                            "        pm.collectionVariables.set(\"library_folder_id\", json.id);\n",
+                                            "        pm.test(\"Saved library_folder_id\", () => pm.expect(json.id).to.be.a(\"string\"));\n",
+                                            "    }\n",
+                                            "}\n"
+                                        ]
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Rename Library Folder",
+                            "request": {
+                                "method": "PATCH",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}",
+                                        "description": "JWT access token from POST /auth/login"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/users/folders/{{library_folder_id}}",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "users",
+                                        "folders",
+                                        "{{library_folder_id}}"
+                                    ]
+                                },
+                                "description": "Renames an owned folder.",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"name\": \"Backend\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "response": [
+                                {
+                                    "name": "200 OK",
+                                    "status": "OK",
+                                    "code": 200,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"id\": \"64f3c7e0aabbccddeeff00aa\",\n    \"name\": \"Backend\",\n    \"created_at\": \"2026-09-14T10:00:00+00:00\",\n    \"updated_at\": \"2026-09-14T11:00:00+00:00\"\n}"
+                                },
+                                {
+                                    "name": "403 Forbidden",
+                                    "status": "Forbidden",
+                                    "code": 403,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"status\": \"error\",\n    \"message\": \"FOLDER_FORBIDDEN\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    },\n    \"code\": \"FOLDER_FORBIDDEN\"\n}"
+                                },
+                                {
+                                    "name": "404 Not Found",
+                                    "status": "Not Found",
+                                    "code": 404,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"status\": \"error\",\n    \"message\": \"FOLDER_NOT_FOUND\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    },\n    \"code\": \"FOLDER_NOT_FOUND\"\n}"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Delete Library Folder",
+                            "request": {
+                                "method": "DELETE",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}",
+                                        "description": "JWT access token from POST /auth/login"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/users/folders/{{library_folder_id}}",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "users",
+                                        "folders",
+                                        "{{library_folder_id}}"
+                                    ]
+                                },
+                                "description": "Deletes the folder object only. Summaries stay and become unfiled."
+                            },
+                            "response": [
+                                {
+                                    "name": "200 OK",
+                                    "status": "OK",
+                                    "code": 200,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"status\": \"success\",\n    \"id\": \"64f3c7e0aabbccddeeff00aa\"\n}"
+                                },
+                                {
+                                    "name": "403 Forbidden",
+                                    "status": "Forbidden",
+                                    "code": 403,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"status\": \"error\",\n    \"message\": \"FOLDER_FORBIDDEN\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    },\n    \"code\": \"FOLDER_FORBIDDEN\"\n}"
+                                },
+                                {
+                                    "name": "404 Not Found",
+                                    "status": "Not Found",
+                                    "code": 404,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"status\": \"error\",\n    \"message\": \"FOLDER_NOT_FOUND\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    },\n    \"code\": \"FOLDER_NOT_FOUND\"\n}"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Entries",
+                    "description": "Summary jobs / store items. `GET /users/entries?folder_id=unfiled` lists unfiled. Empty list is 200, not 404.",
+                    "item": [
+                        {
+                            "name": "List All Entries",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}",
+                                        "description": "JWT access token from POST /auth/login"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/users/entries",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "users",
+                                        "entries"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "folder_id",
+                                            "value": "unfiled",
+                                            "disabled": true,
+                                            "description": "Library folder ObjectId, or the literal `unfiled`"
+                                        }
+                                    ]
+                                },
+                                "description": "Lists every folder entry for the user. Optional `folder_id` filters by library folder; use `unfiled` for items without a folder."
+                            },
+                            "response": [
+                                {
+                                    "name": "200 OK",
+                                    "status": "OK",
+                                    "code": 200,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"entries\": [\n        {\n            \"id\": \"64f3c7e0aabbccddeeff0011\",\n            \"user_id\": \"507f1f77bcf86cd799439011\",\n            \"name\": \"asyncio.pdf\",\n            \"original_name\": \"asyncio.pdf\",\n            \"library_folder_id\": \"64f3c7e0aabbccddeeff00aa\",\n            \"created_at\": \"2026-09-14T16:00:00+00:00\",\n            \"updated_at\": \"2026-09-14T16:05:00+00:00\",\n            \"language\": \"SPANISH\",\n            \"model\": \"gpt-4o-mini\",\n            \"category\": \"education\",\n            \"style\": \"guide\",\n            \"format\": \"markdown\",\n            \"summary_level\": \"moderate\",\n            \"source_type\": \"documents\",\n            \"results\": [\n                {\n                    \"id\": \"64f3c7e0aabbccddeeff0022\",\n                    \"index\": 0,\n                    \"name\": \"asyncio.pdf\",\n                    \"original_name\": \"asyncio.pdf\",\n                    \"download_location\": \"data/folder/entry/0\",\n                    \"status\": \"COMPLETED\",\n                    \"phase\": \"COMPLETED\",\n                    \"success\": true\n                }\n            ]\n        }\n    ]\n}"
+                                },
+                                {
+                                    "name": "200 Empty",
+                                    "status": "OK",
+                                    "code": 200,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"entries\": []\n}"
+                                },
+                                {
+                                    "name": "401 Unauthorized",
+                                    "status": "Unauthorized",
+                                    "code": 401,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"status\": \"error\",\n    \"message\": \"Token de autenticación no válido.\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                                }
+                            ],
+                            "event": [
+                                {
+                                    "listen": "test",
+                                    "script": {
+                                        "type": "text/javascript",
+                                        "exec": [
+                                            "if (pm.response.code === 200) {\n",
+                                            "    const json = pm.response.json();\n",
+                                            "    const entries = json.entries || [];\n",
+                                            "    if (entries.length) {\n",
+                                            "        const id = entries[0].id || entries[0]._id;\n",
+                                            "        if (id) pm.collectionVariables.set(\"entry_id\", String(id));\n",
+                                            "        if (id) pm.collectionVariables.set(\"folder_entry_id\", String(id));\n",
+                                            "    }\n",
+                                            "}\n"
+                                        ]
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "List Entries in Folder",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}",
+                                        "description": "JWT access token from POST /auth/login"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/users/entries?folder_id={{library_folder_id}}",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "users",
+                                        "entries"
+                                    ],
+                                    "query": [
+                                        {
+                                            "key": "folder_id",
+                                            "value": "{{library_folder_id}}",
+                                            "description": "Library folder ObjectId"
+                                        }
+                                    ]
+                                },
+                                "description": "Same list endpoint filtered to one library folder."
+                            },
+                            "response": [],
+                            "event": [
+                                {
+                                    "listen": "test",
+                                    "script": {
+                                        "type": "text/javascript",
+                                        "exec": [
+                                            "if (pm.response.code === 200) {\n",
+                                            "    const json = pm.response.json();\n",
+                                            "    const entries = json.entries || [];\n",
+                                            "    if (entries.length) {\n",
+                                            "        const id = entries[0].id || entries[0]._id;\n",
+                                            "        if (id) pm.collectionVariables.set(\"entry_id\", String(id));\n",
+                                            "        if (id) pm.collectionVariables.set(\"folder_entry_id\", String(id));\n",
+                                            "    }\n",
+                                            "}\n"
+                                        ]
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Get Entries by IDs (poll)",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}",
+                                        "description": "JWT access token from POST /auth/login"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/users/entries",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "users",
+                                        "entries"
+                                    ]
+                                },
+                                "description": "Fetches specific entries by ObjectId. Used by the frontend job poller. 404 if none match. 400 invalid ObjectId. 403 if another user's entries.",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"entries_refs\": [\n        \"{{folder_entry_id}}\"\n    ]\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "response": [
+                                {
+                                    "name": "200 OK",
+                                    "status": "OK",
+                                    "code": 200,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"entries\": [\n        {\n            \"id\": \"64f3c7e0aabbccddeeff0011\",\n            \"user_id\": \"507f1f77bcf86cd799439011\",\n            \"name\": \"asyncio.pdf\",\n            \"original_name\": \"asyncio.pdf\",\n            \"library_folder_id\": \"64f3c7e0aabbccddeeff00aa\",\n            \"created_at\": \"2026-09-14T16:00:00+00:00\",\n            \"updated_at\": \"2026-09-14T16:05:00+00:00\",\n            \"language\": \"SPANISH\",\n            \"model\": \"gpt-4o-mini\",\n            \"category\": \"education\",\n            \"style\": \"guide\",\n            \"format\": \"markdown\",\n            \"summary_level\": \"moderate\",\n            \"source_type\": \"documents\",\n            \"results\": [\n                {\n                    \"id\": \"64f3c7e0aabbccddeeff0022\",\n                    \"index\": 0,\n                    \"name\": \"asyncio.pdf\",\n                    \"original_name\": \"asyncio.pdf\",\n                    \"download_location\": \"data/folder/entry/0\",\n                    \"status\": \"COMPLETED\",\n                    \"phase\": \"COMPLETED\",\n                    \"success\": true\n                }\n            ]\n        }\n    ]\n}"
+                                },
+                                {
+                                    "name": "400 Bad Request",
+                                    "status": "Bad Request",
+                                    "code": 400,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"status\": \"error\",\n    \"message\": \"Invalid ObjectId format\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                                },
+                                {
+                                    "name": "403 Forbidden",
+                                    "status": "Forbidden",
+                                    "code": 403,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"status\": \"error\",\n    \"message\": \"Forbidden\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                                },
+                                {
+                                    "name": "404 Not Found",
+                                    "status": "Not Found",
+                                    "code": 404,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"status\": \"error\",\n    \"message\": \"No entries found\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                                },
+                                {
+                                    "name": "422 Validation",
+                                    "status": "Unprocessable Entity",
+                                    "code": 422,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"status\": \"error\",\n    \"message\": \"Se han encontrado errores de validación.\",\n    \"errors\": [\n        {\n            \"field\": \"password\",\n            \"error\": \"missing\",\n            \"message\": \"Field required\",\n            \"input\": null\n        }\n    ],\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                                }
+                            ],
+                            "event": [
+                                {
+                                    "listen": "test",
+                                    "script": {
+                                        "type": "text/javascript",
+                                        "exec": [
+                                            "if (pm.response.code === 200) {\n",
+                                            "    const json = pm.response.json();\n",
+                                            "    const entries = json.entries || [];\n",
+                                            "    if (entries.length) {\n",
+                                            "        const id = entries[0].id || entries[0]._id;\n",
+                                            "        if (id) pm.collectionVariables.set(\"entry_id\", String(id));\n",
+                                            "        if (id) pm.collectionVariables.set(\"folder_entry_id\", String(id));\n",
+                                            "    }\n",
+                                            "}\n"
+                                        ]
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Move Entries",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}",
+                                        "description": "JWT access token from POST /auth/login"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/users/entries/move",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "users",
+                                        "entries",
+                                        "move"
+                                    ]
+                                },
+                                "description": "Moves one or more summaries. `library_folder_id: null` unfiles them. Returns `{ succeeded, failed: [{ id, code }] }`.",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"entry_ids\": [\n        \"{{entry_id}}\"\n    ],\n    \"library_folder_id\": \"{{library_folder_id}}\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "response": [
+                                {
+                                    "name": "200 OK",
+                                    "status": "OK",
+                                    "code": 200,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"succeeded\": [\n        \"64f3c7e0aabbccddeeff0011\"\n    ],\n    \"failed\": []\n}"
+                                },
+                                {
+                                    "name": "200 Partial",
+                                    "status": "OK",
+                                    "code": 200,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"succeeded\": [],\n    \"failed\": [\n        {\n            \"id\": \"64f3c7e0aabbccddeeff0011\",\n            \"code\": \"ENTRY_NOT_FOUND\"\n        }\n    ]\n}"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Move Entries to Unfiled",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}",
+                                        "description": "JWT access token from POST /auth/login"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/users/entries/move",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "users",
+                                        "entries",
+                                        "move"
+                                    ]
+                                },
+                                "description": "Same move endpoint with `library_folder_id: null`.",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"entry_ids\": [\n        \"{{entry_id}}\"\n    ],\n    \"library_folder_id\": null\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Bulk Delete Entries",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}",
+                                        "description": "JWT access token from POST /auth/login"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/users/entries/delete",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "users",
+                                        "entries",
+                                        "delete"
+                                    ]
+                                },
+                                "description": "Deletes one or more owned summaries. Best-effort filesystem cleanup under `data/{folder_id}/{entry_id}`.",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"entry_ids\": [\n        \"{{entry_id}}\"\n    ]\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "response": [
+                                {
+                                    "name": "200 OK",
+                                    "status": "OK",
+                                    "code": 200,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"succeeded\": [\n        \"64f3c7e0aabbccddeeff0011\"\n    ],\n    \"failed\": []\n}"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Patch Entry (rename / move)",
+                            "request": {
+                                "method": "PATCH",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}",
+                                        "description": "JWT access token from POST /auth/login"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/users/entries/{{entry_id}}",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "users",
+                                        "entries",
+                                        "{{entry_id}}"
+                                    ]
+                                },
+                                "description": "Rename and/or move a single summary. Omit a field to leave it unchanged. `library_folder_id: null` unfiles.",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"name\": \"Asyncio - Apuntes\",\n    \"library_folder_id\": \"{{library_folder_id}}\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "response": [
+                                {
+                                    "name": "200 OK",
+                                    "status": "OK",
+                                    "code": 200,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"id\": \"64f3c7e0aabbccddeeff0011\",\n    \"user_id\": \"507f1f77bcf86cd799439011\",\n    \"name\": \"asyncio.pdf\",\n    \"original_name\": \"asyncio.pdf\",\n    \"library_folder_id\": \"64f3c7e0aabbccddeeff00aa\",\n    \"created_at\": \"2026-09-14T16:00:00+00:00\",\n    \"updated_at\": \"2026-09-14T16:05:00+00:00\",\n    \"language\": \"SPANISH\",\n    \"model\": \"gpt-4o-mini\",\n    \"category\": \"education\",\n    \"style\": \"guide\",\n    \"format\": \"markdown\",\n    \"summary_level\": \"moderate\",\n    \"source_type\": \"documents\",\n    \"results\": [\n        {\n            \"id\": \"64f3c7e0aabbccddeeff0022\",\n            \"index\": 0,\n            \"name\": \"asyncio.pdf\",\n            \"original_name\": \"asyncio.pdf\",\n            \"download_location\": \"data/folder/entry/0\",\n            \"status\": \"COMPLETED\",\n            \"phase\": \"COMPLETED\",\n            \"success\": true\n        }\n    ]\n}"
+                                },
+                                {
+                                    "name": "403 Forbidden",
+                                    "status": "Forbidden",
+                                    "code": 403,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"status\": \"error\",\n    \"message\": \"ENTRY_FORBIDDEN\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    },\n    \"code\": \"ENTRY_FORBIDDEN\"\n}"
+                                },
+                                {
+                                    "name": "404 Not Found",
+                                    "status": "Not Found",
+                                    "code": 404,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"status\": \"error\",\n    \"message\": \"ENTRY_NOT_FOUND\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    },\n    \"code\": \"ENTRY_NOT_FOUND\"\n}"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Delete Entry",
+                            "request": {
+                                "method": "DELETE",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{token}}",
+                                        "description": "JWT access token from POST /auth/login"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/users/entries/{{entry_id}}",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "users",
+                                        "entries",
+                                        "{{entry_id}}"
+                                    ]
+                                },
+                                "description": "Deletes one owned folder entry and its on-disk directory (best-effort)."
+                            },
+                            "response": [
+                                {
+                                    "name": "200 OK",
+                                    "status": "OK",
+                                    "code": 200,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"status\": \"success\",\n    \"message\": \"Entry deleted\",\n    \"id\": \"64f3c7e0aabbccddeeff0011\"\n}"
+                                },
+                                {
+                                    "name": "403 Forbidden",
+                                    "status": "Forbidden",
+                                    "code": 403,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"status\": \"error\",\n    \"message\": \"User does not own this folder entry\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                                },
+                                {
+                                    "name": "404 Not Found",
+                                    "status": "Not Found",
+                                    "code": 404,
+                                    "header": [
+                                        {
+                                            "key": "Content-Type",
+                                            "value": "application/json"
+                                        }
+                                    ],
+                                    "body": "{\n    \"status\": \"error\",\n    \"message\": \"FolderEntry not found\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "User Credentials",
+            "description": "JWT required. Encrypted provider API keys. Responses never include the plaintext key. Local provider `ollama` cannot store user keys. Known paid providers: `openai`, `deepseek`, `google`.",
+            "item": [
+                {
+                    "name": "List All Credentials",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}",
+                                "description": "JWT access token from POST /auth/login"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/user-credentials",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "user-credentials"
+                            ]
+                        },
+                        "description": "Active credentials for every provider."
+                    },
+                    "response": [
+                        {
+                            "name": "200 OK",
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "[\n    {\n        \"id\": \"c0a80123-4567-89ab-cdef-0123456789ab\",\n        \"user_id\": \"507f1f77bcf86cd799439011\",\n        \"provider\": \"openai\",\n        \"name\": \"Work OpenAI\",\n        \"is_default\": true,\n        \"status\": \"active\",\n        \"created_at\": \"2026-09-14T10:00:00+00:00\",\n        \"updated_at\": \"2026-09-14T10:00:00+00:00\"\n    }\n]"
+                        },
+                        {
+                            "name": "200 Empty",
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "[]"
+                        },
+                        {
+                            "name": "401 Unauthorized",
+                            "status": "Unauthorized",
+                            "code": 401,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Token de autenticación no válido.\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "List Credentials by Provider",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}",
+                                "description": "JWT access token from POST /auth/login"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/user-credentials/openai",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "user-credentials",
+                                "openai"
+                            ]
+                        },
+                        "description": "Active credentials for one provider (`openai`, `deepseek`, `google`, …)."
+                    },
+                    "response": [
+                        {
+                            "name": "200 OK",
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "[\n    {\n        \"id\": \"c0a80123-4567-89ab-cdef-0123456789ab\",\n        \"user_id\": \"507f1f77bcf86cd799439011\",\n        \"provider\": \"openai\",\n        \"name\": \"Work OpenAI\",\n        \"is_default\": true,\n        \"status\": \"active\",\n        \"created_at\": \"2026-09-14T10:00:00+00:00\",\n        \"updated_at\": \"2026-09-14T10:00:00+00:00\"\n    }\n]"
+                        }
+                    ]
+                },
+                {
+                    "name": "Create Credential",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}",
+                                "description": "JWT access token from POST /auth/login"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/user-credentials",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "user-credentials"
+                            ]
+                        },
+                        "description": "Validates the key against the provider, encrypts it, and stores it. `name` 1–80 chars (required). `is_default` optional.\n\n**400:** empty key, unknown provider, local provider, invalid key, duplicate name.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"provider\": \"openai\",\n    \"api_key\": \"sk-live-example\",\n    \"name\": \"Work OpenAI\",\n    \"is_default\": true\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "201 Created",
+                            "status": "Created",
+                            "code": 201,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"id\": \"c0a80123-4567-89ab-cdef-0123456789ab\",\n    \"user_id\": \"507f1f77bcf86cd799439011\",\n    \"provider\": \"openai\",\n    \"name\": \"Work OpenAI\",\n    \"is_default\": true,\n    \"status\": \"active\",\n    \"created_at\": \"2026-09-14T10:00:00+00:00\",\n    \"updated_at\": \"2026-09-14T10:00:00+00:00\"\n}"
+                        },
+                        {
+                            "name": "400 Invalid key",
+                            "status": "Bad Request",
+                            "code": 400,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"La clave API no es válida para este proveedor.\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "400 Local provider",
+                            "status": "Bad Request",
+                            "code": 400,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Este proveedor no admite claves API de usuario.\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "400 Unknown provider",
+                            "status": "Bad Request",
+                            "code": 400,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Unknown provider\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "422 Validation",
+                            "status": "Unprocessable Entity",
+                            "code": 422,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Se han encontrado errores de validación.\",\n    \"errors\": [\n        {\n            \"field\": \"password\",\n            \"error\": \"missing\",\n            \"message\": \"Field required\",\n            \"input\": null\n        }\n    ],\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        }
+                    ],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 201) {\n",
+                                    "    const json = pm.response.json();\n",
+                                    "    const id = json && (json.id || json._id);\n",
+                                    "    if (id) {\n",
+                                    "        pm.collectionVariables.set(\"credential_id\", id);\n",
+                                    "        pm.test(\"Saved credential_id\", () => pm.expect(id).to.be.a(\"string\"));\n",
+                                    "    }\n",
+                                    "}\n"
+                                ]
                             }
                         }
                     ]
+                },
+                {
+                    "name": "Set Default Credential",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}",
+                                "description": "JWT access token from POST /auth/login"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/user-credentials/{{credential_id}}/default",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "user-credentials",
+                                "{{credential_id}}",
+                                "default"
+                            ]
+                        },
+                        "description": "Marks this credential as the default for its provider (clears default on siblings)."
+                    },
+                    "response": [
+                        {
+                            "name": "200 OK",
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"id\": \"c0a80123-4567-89ab-cdef-0123456789ab\",\n    \"user_id\": \"507f1f77bcf86cd799439011\",\n    \"provider\": \"openai\",\n    \"name\": \"Work OpenAI\",\n    \"is_default\": true,\n    \"status\": \"active\",\n    \"created_at\": \"2026-09-14T10:00:00+00:00\",\n    \"updated_at\": \"2026-09-14T10:00:00+00:00\"\n}"
+                        },
+                        {
+                            "name": "404 Not Found",
+                            "status": "Not Found",
+                            "code": 404,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Credential not found\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Rename Credential",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}",
+                                "description": "JWT access token from POST /auth/login"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/user-credentials/{{credential_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "user-credentials",
+                                "{{credential_id}}"
+                            ]
+                        },
+                        "description": "Renames without exposing or changing the API key. Empty name → 400.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"Personal OpenAI\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "200 OK",
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"id\": \"c0a80123-4567-89ab-cdef-0123456789ab\",\n    \"user_id\": \"507f1f77bcf86cd799439011\",\n    \"provider\": \"openai\",\n    \"name\": \"Personal OpenAI\",\n    \"is_default\": false,\n    \"status\": \"active\",\n    \"created_at\": \"2026-09-14T10:00:00+00:00\",\n    \"updated_at\": \"2026-09-14T10:00:00+00:00\"\n}"
+                        },
+                        {
+                            "name": "400 Nothing to update",
+                            "status": "Bad Request",
+                            "code": 400,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Nothing to update\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "404 Not Found",
+                            "status": "Not Found",
+                            "code": 404,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Credential not found\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Revoke Credential",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}",
+                                "description": "JWT access token from POST /auth/login"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/user-credentials/{{credential_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "user-credentials",
+                                "{{credential_id}}"
+                            ]
+                        },
+                        "description": "Soft-delete: status becomes `revoked`. 204 empty body."
+                    },
+                    "response": [
+                        {
+                            "name": "204 No Content",
+                            "status": "No Content",
+                            "code": 204,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": ""
+                        },
+                        {
+                            "name": "400 Invalid ID",
+                            "status": "Bad Request",
+                            "code": 400,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Invalid credential ID\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "404 Not Found",
+                            "status": "Not Found",
+                            "code": 404,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Credential not found\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Events (SSE)",
+            "description": "JWT required. Server-Sent Events for summary job completion/failure. Heartbeat comments every ~15s (`EVENTS_SSE_HEARTBEAT_SECONDS`). Replay missed events with `Last-Event-ID`.",
+            "item": [
+                {
+                    "name": "Stream Summary Job Events",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}",
+                                "description": "JWT access token from POST /auth/login"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "text/event-stream"
+                            },
+                            {
+                                "key": "Last-Event-ID",
+                                "value": "{{last_event_id}}",
+                                "description": "Replay events after this id (`0` = from start of buffer)"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/events/stream",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "events",
+                                "stream"
+                            ]
+                        },
+                        "description": "Subscribe to user-scoped job events.\n\n**Headers:** `Authorization: Bearer {{token}}`, `Accept: text/event-stream`, optional `Last-Event-ID`.\n\nFrames:\n- comment `: connected`\n- keepalive `: keepalive`\n- `event: summary.completed` or `event: summary.failed`\n\nPayload fields: `type`, `job_id`, `document_id`, `status` (`COMPLETED`|`FAILED`), `timestamp`, `event_id`, `document_name`, optional `error: { code, message }`.\n\nPostman may hold the connection; stop the request to disconnect. Query `user_id` is ignored (auth only)."
+                    },
+                    "response": [
+                        {
+                            "name": "200 text/event-stream",
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "text/event-stream"
+                                }
+                            ],
+                            "body": ": connected\n\nid: 1\nevent: summary.completed\ndata: {\"type\": \"summary.completed\", \"job_id\": \"job-1\", \"document_id\": \"doc-1\", \"status\": \"COMPLETED\", \"timestamp\": \"2026-09-15T10:00:00+00:00\", \"event_id\": \"1\", \"document_name\": \"Doc.pdf\", \"error\": null}\n\n: keepalive\n\nid: 2\nevent: summary.failed\ndata: {\"type\": \"summary.failed\", \"job_id\": \"job-fail\", \"document_id\": \"doc-fail\", \"status\": \"FAILED\", \"timestamp\": \"2026-09-15T10:01:00+00:00\", \"event_id\": \"2\", \"document_name\": \"Bad.pdf\", \"error\": {\"code\": \"MAP_FAILED\", \"message\": \"MAP failed\"}}\n\n"
+                        },
+                        {
+                            "name": "401 Unauthorized",
+                            "status": "Unauthorized",
+                            "code": 401,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Token de autenticación no válido.\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Brevio Catalog",
+            "description": "Requires `X-API-KEY`. Invalid key → **403** (`Acceso prohibido: API Key inválida`), not 401.",
+            "item": [
+                {
+                    "name": "Get Languages",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "X-API-KEY",
+                                "value": "{{api_key}}",
+                                "description": "Static platform API key (catalog + YouTube utils)"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/brevio/languages",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "brevio",
+                                "languages"
+                            ]
+                        },
+                        "description": "Enum **names** (`ENGLISH`, `SPANISH`, …), one name per ISO value."
+                    },
+                    "response": [
+                        {
+                            "name": "200 OK",
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"languages\": [\n            \"ENGLISH\",\n            \"SPANISH\",\n            \"FRENCH\",\n            \"GERMAN\"\n        ]\n    },\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "403 Forbidden",
+                            "status": "Forbidden",
+                            "code": 403,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Acceso prohibido: API Key inválida\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Get Models",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "X-API-KEY",
+                                "value": "{{api_key}}",
+                                "description": "Static platform API key (catalog + YouTube utils)"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/brevio/models",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "brevio",
+                                "models"
+                            ]
+                        },
+                        "description": "`data.models` (ids), `data.catalog` (id, provider, access, requires_api_key, display_name), `data.providers`. Local models (`access: local`) do not need a user API key."
+                    },
+                    "response": [
+                        {
+                            "name": "200 OK",
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"models\": [\n            \"qwen3:8b\",\n            \"gpt-4o-mini\",\n            \"gpt-4\",\n            \"gemini-3.1-flash-lite\",\n            \"deepseek-flash\"\n        ],\n        \"catalog\": [\n            {\n                \"id\": \"qwen3:8b\",\n                \"provider\": \"ollama\",\n                \"access\": \"local\",\n                \"requires_api_key\": false,\n                \"display_name\": \"qwen3:8b\"\n            },\n            {\n                \"id\": \"gpt-4o-mini\",\n                \"provider\": \"openai\",\n                \"access\": \"pay_per_use\",\n                \"requires_api_key\": true,\n                \"display_name\": \"gpt-4o-mini\"\n            },\n            {\n                \"id\": \"gemini-3.1-flash-lite\",\n                \"provider\": \"google\",\n                \"access\": \"pay_per_use\",\n                \"requires_api_key\": true,\n                \"display_name\": \"gemini-3.1-flash-lite\"\n            }\n        ],\n        \"providers\": [\n            {\n                \"id\": \"ollama\",\n                \"access\": \"local\",\n                \"requires_api_key\": false\n            },\n            {\n                \"id\": \"openai\",\n                \"access\": \"pay_per_use\",\n                \"requires_api_key\": true\n            },\n            {\n                \"id\": \"google\",\n                \"access\": \"pay_per_use\",\n                \"requires_api_key\": true\n            }\n        ]\n    },\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Get Categories & Styles",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "X-API-KEY",
+                                "value": "{{api_key}}",
+                                "description": "Static platform API key (catalog + YouTube utils)"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/brevio/categories-styles",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "brevio",
+                                "categories-styles"
+                            ]
+                        },
+                        "description": "Nested map: category → `[{ style, source_types }]`. Categories are lowercase (`education`, `technology`, …)."
+                    },
+                    "response": [
+                        {
+                            "name": "200 OK",
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"advanced_content_combinations\": {\n            \"education\": [\n                {\n                    \"style\": \"guide\",\n                    \"source_types\": [\n                        \"pdf\",\n                        \"docx\",\n                        \"text\"\n                    ]\n                },\n                {\n                    \"style\": \"quick_ref\",\n                    \"source_types\": [\n                        \"pdf\",\n                        \"docx\",\n                        \"text\"\n                    ]\n                },\n                {\n                    \"style\": \"timeline\",\n                    \"source_types\": [\n                        \"pdf\",\n                        \"docx\",\n                        \"text\"\n                    ]\n                }\n            ],\n            \"technology\": [\n                {\n                    \"style\": \"changelog\",\n                    \"source_types\": [\n                        \"pdf\",\n                        \"docx\",\n                        \"text\"\n                    ]\n                },\n                {\n                    \"style\": \"proposal\",\n                    \"source_types\": [\n                        \"pdf\",\n                        \"docx\",\n                        \"text\"\n                    ]\n                },\n                {\n                    \"style\": \"diagram\",\n                    \"source_types\": [\n                        \"pdf\",\n                        \"docx\",\n                        \"text\"\n                    ]\n                }\n            ],\n            \"journalism\": [\n                {\n                    \"style\": \"chronicle\",\n                    \"source_types\": [\n                        \"pdf\",\n                        \"text\"\n                    ]\n                },\n                {\n                    \"style\": \"news_wire\",\n                    \"source_types\": [\n                        \"pdf\",\n                        \"text\"\n                    ]\n                },\n                {\n                    \"style\": \"analysis\",\n                    \"source_types\": [\n                        \"pdf\",\n                        \"text\"\n                    ]\n                }\n            ]\n        }\n    },\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Get Output Formats",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "X-API-KEY",
+                                "value": "{{api_key}}",
+                                "description": "Static platform API key (catalog + YouTube utils)"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/brevio/output-formats",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "brevio",
+                                "output-formats"
+                            ]
+                        },
+                        "description": "`data.output_format_types` — enum members serialised (`html`, `markdown`, `json`, `text`)."
+                    },
+                    "response": [
+                        {
+                            "name": "200 OK",
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"output_format_types\": [\n            \"html\",\n            \"markdown\",\n            \"json\",\n            \"text\"\n        ]\n    },\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Get Summary Levels",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "X-API-KEY",
+                                "value": "{{api_key}}",
+                                "description": "Static platform API key (catalog + YouTube utils)"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/brevio/summary-levels",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "brevio",
+                                "summary-levels"
+                            ]
+                        },
+                        "description": "`data.summary_levels`: very_concise, concise, moderate, detailed, very_detailed."
+                    },
+                    "response": [
+                        {
+                            "name": "200 OK",
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"summary_levels\": [\n            \"very_concise\",\n            \"concise\",\n            \"moderate\",\n            \"detailed\",\n            \"very_detailed\"\n        ]\n    },\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "YouTube Utils",
+            "description": "Requires `X-API-KEY`. URL must match YouTube (`youtube.com` / `youtu.be`).",
+            "item": [
+                {
+                    "name": "Count YT Playlist Videos",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "X-API-KEY",
+                                "value": "{{api_key}}",
+                                "description": "Static platform API key (catalog + YouTube utils)"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/brevio/count-yt-videos",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "brevio",
+                                "count-yt-videos"
+                            ]
+                        },
+                        "description": "Returns `data.count` (integer).",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"url\": \"https://www.youtube.com/playlist?list=PLxyz\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "200 OK",
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"count\": 12\n    },\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "422 Invalid URL",
+                            "status": "Unprocessable Entity",
+                            "code": 422,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Se han encontrado errores de validación.\",\n    \"errors\": [\n        {\n            \"field\": \"password\",\n            \"error\": \"missing\",\n            \"message\": \"Field required\",\n            \"input\": null\n        }\n    ],\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "500 Bad service response",
+                            "status": "Internal Server Error",
+                            "code": 500,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Invalid response format from brevio service\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Count YT Video Time",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "X-API-KEY",
+                                "value": "{{api_key}}",
+                                "description": "Static platform API key (catalog + YouTube utils)"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/brevio/count-time-yt-video",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "brevio",
+                                "count-time-yt-video"
+                            ]
+                        },
+                        "description": "Returns `data.time` duration in seconds.",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"url\": \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "200 OK",
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"time\": 360\n    },\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "400 Bad Request",
+                            "status": "Bad Request",
+                            "code": 400,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Unable to resolve video duration\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "422 Invalid URL",
+                            "status": "Unprocessable Entity",
+                            "code": 422,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Se han encontrado errores de validación.\",\n    \"errors\": [\n        {\n            \"field\": \"password\",\n            \"error\": \"missing\",\n            \"message\": \"Field required\",\n            \"input\": null\n        }\n    ],\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Estimation",
+            "description": "JWT required. Local token/cost estimate for PDF/DOCX — **does not** call the LLM. Replaces the deleted `/billing/*` routes.",
+            "item": [
+                {
+                    "name": "Estimate Documents",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}",
+                                "description": "JWT access token from POST /auth/login"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/brevio/estimate-documents",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "brevio",
+                                "estimate-documents"
+                            ]
+                        },
+                        "description": "multipart/form-data: `files` (.pdf / .docx) plus prompt fields (`language`, `model`, `category`, `style`, `format`, `summary_level`). Optional repeated `source_types` (`pdf`, `docx`, `text`, `video`, `audio`, `media`, `image`).\n\nDoes **not** accept `library_folder_id`. Invalid extension → 415. Style/source mismatch → 422.",
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "files",
+                                    "type": "file",
+                                    "src": [],
+                                    "description": "One or more files"
+                                },
+                                {
+                                    "key": "language",
+                                    "value": "SPANISH",
+                                    "type": "text",
+                                    "description": "LanguageType name"
+                                },
+                                {
+                                    "key": "model",
+                                    "value": "gpt-4o-mini",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "category",
+                                    "value": "education",
+                                    "type": "text",
+                                    "description": "Lowercase category key"
+                                },
+                                {
+                                    "key": "style",
+                                    "value": "guide",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "format",
+                                    "value": "markdown",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "summary_level",
+                                    "value": "moderate",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "library_folder_id",
+                                    "value": "{{library_folder_id}}",
+                                    "type": "text",
+                                    "description": "Optional destination folder ObjectId"
+                                },
+                                {
+                                    "key": "folder_name",
+                                    "value": "",
+                                    "type": "text",
+                                    "disabled": true,
+                                    "description": "Optional: create/resolve folder by name if no id"
+                                },
+                                {
+                                    "key": "name",
+                                    "value": "",
+                                    "type": "text",
+                                    "disabled": true,
+                                    "description": "Optional display name for the store entry"
+                                },
+                                {
+                                    "key": "source_types",
+                                    "value": "pdf",
+                                    "type": "text",
+                                    "disabled": true,
+                                    "description": "Optional; repeat the key for multiple values"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "200 OK",
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"can_process\": true,\n        \"reason\": \"OK\",\n        \"estimation\": {\n            \"input_tokens\": {\n                \"prompt_template\": 800,\n                \"documents_content\": 4000,\n                \"structural\": 120,\n                \"total\": 4920\n            },\n            \"output_tokens\": {\n                \"minimum\": 400,\n                \"expected\": 1200,\n                \"max_ceiling\": 4096\n            },\n            \"total_tokens_worst_case\": 9016\n        },\n        \"documents\": [\n            {\n                \"filename\": \"guide.pdf\",\n                \"tokens\": 4000,\n                \"extraction\": {\n                    \"status\": \"ok\",\n                    \"pages_total\": 12,\n                    \"pages_with_text\": 12,\n                    \"pages_without_text\": 0\n                }\n            }\n        ],\n        \"tokenization\": {\n            \"method\": \"exact\",\n            \"confidence\": \"high\",\n            \"estimated_error_margin\": 0.0\n        },\n        \"model\": {\n            \"name\": \"gpt-4o-mini\",\n            \"provider\": \"openai\",\n            \"access\": \"pay_per_use\",\n            \"requires_api_key\": true,\n            \"context_limit\": 128000,\n            \"max_output_tokens\": 4096,\n            \"supports_chunking\": true\n        },\n        \"pricing\": {\n            \"model\": \"gpt-4o-mini\",\n            \"provider_cost_currency\": \"USD\",\n            \"platform_currency\": \"credits\",\n            \"expected_cost\": 0.003,\n            \"max_cost\": 0.004,\n            \"pricing_version\": \"1\"\n        },\n        \"credits\": {\n            \"expected\": 1,\n            \"maximum\": 1\n        },\n        \"chunking\": {\n            \"required\": false,\n            \"calls\": 1\n        },\n        \"estimation_id\": \"abc123\",\n        \"estimated_at\": \"2026-09-09T00:00:00Z\",\n        \"warnings\": []\n    },\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "415 Invalid extension",
+                            "status": "Unsupported Media Type",
+                            "code": 415,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Invalid file extension\",\n    \"errors\": [\n        {\n            \"field\": \"file\",\n            \"error\": \"Invalid file extension\",\n            \"message\": \"The file 'audio.mp3' has an invalid extension.\",\n            \"allowed_extensions\": [\n                \".docx\",\n                \".pdf\"\n            ]\n        }\n    ],\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "422 Validation",
+                            "status": "Unprocessable Entity",
+                            "code": 422,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Se han encontrado errores de validación.\",\n    \"errors\": [\n        {\n            \"field\": \"password\",\n            \"error\": \"missing\",\n            \"message\": \"Field required\",\n            \"input\": null\n        }\n    ],\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Generation (async Celery)",
+            "description": "JWT required. Returns 202 with `task_id` + `folder_entry_id` (YouTube playlist currently returns the processing message without those ids). Paid models need a stored user credential or platform credits (`USER_CREDENTIAL_REQUIRED` / `INSUFFICIENT_CREDITS`). Poll `POST /users/entries` or listen on `/events/stream`.",
+            "item": [
+                {
+                    "name": "Summary Media (MP3)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}",
+                                "description": "JWT access token from POST /auth/login"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/brevio/summary-media",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "brevio",
+                                "summary-media"
+                            ]
+                        },
+                        "description": "Only `.mp3`. Optional `library_folder_id`, `folder_name`, `name`.",
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "files",
+                                    "type": "file",
+                                    "src": [],
+                                    "description": "One or more files"
+                                },
+                                {
+                                    "key": "language",
+                                    "value": "SPANISH",
+                                    "type": "text",
+                                    "description": "LanguageType name"
+                                },
+                                {
+                                    "key": "model",
+                                    "value": "gpt-4o-mini",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "category",
+                                    "value": "education",
+                                    "type": "text",
+                                    "description": "Lowercase category key"
+                                },
+                                {
+                                    "key": "style",
+                                    "value": "guide",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "format",
+                                    "value": "markdown",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "summary_level",
+                                    "value": "moderate",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "library_folder_id",
+                                    "value": "{{library_folder_id}}",
+                                    "type": "text",
+                                    "description": "Optional destination folder ObjectId"
+                                },
+                                {
+                                    "key": "folder_name",
+                                    "value": "",
+                                    "type": "text",
+                                    "disabled": true,
+                                    "description": "Optional: create/resolve folder by name if no id"
+                                },
+                                {
+                                    "key": "name",
+                                    "value": "",
+                                    "type": "text",
+                                    "disabled": true,
+                                    "description": "Optional display name for the store entry"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "202 Accepted",
+                            "status": "Accepted",
+                            "code": 202,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"message\": \"La generación de resúmenes se está procesando en segundo plano.\"\n    },\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    },\n    \"task_id\": \"8a7s9d8a7sd-9a8s7d98a7s-98d7sa98d7\",\n    \"folder_entry_id\": \"64f3c7e0aabbccddeeff0011\"\n}"
+                        },
+                        {
+                            "name": "401 User credential required",
+                            "status": "Unauthorized",
+                            "code": 401,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Esta solicitud requiere una credencial de API en tu perfil o créditos de pago por uso.\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    },\n    \"code\": \"USER_CREDENTIAL_REQUIRED\"\n}"
+                        },
+                        {
+                            "name": "402 Insufficient credits",
+                            "status": "Payment Required",
+                            "code": 402,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Esta solicitud de pago por uso requiere créditos en tu cuenta.\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    },\n    \"code\": \"INSUFFICIENT_CREDITS\"\n}"
+                        },
+                        {
+                            "name": "422 No files",
+                            "status": "Unprocessable Entity",
+                            "code": 422,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"At least one media file is required\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        }
+                    ],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 202) {\n",
+                                    "    const json = pm.response.json();\n",
+                                    "    if (json.task_id) pm.collectionVariables.set(\"task_id\", json.task_id);\n",
+                                    "    if (json.folder_entry_id) pm.collectionVariables.set(\"folder_entry_id\", json.folder_entry_id);\n",
+                                    "    pm.test(\"Accepted job\", () => {\n",
+                                    "        pm.expect(json.status).to.eql(\"success\");\n",
+                                    "        pm.expect(json.folder_entry_id || json.task_id).to.be.ok;\n",
+                                    "    });\n",
+                                    "}\n"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Summary Documents (PDF, DOCX)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}",
+                                "description": "JWT access token from POST /auth/login"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/brevio/summary-documents",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "brevio",
+                                "summary-documents"
+                            ]
+                        },
+                        "description": "`.pdf` / `.docx`. Same form fields as media. Saves `{{folder_entry_id}}` for polling/download.",
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "files",
+                                    "type": "file",
+                                    "src": [],
+                                    "description": "One or more files"
+                                },
+                                {
+                                    "key": "language",
+                                    "value": "SPANISH",
+                                    "type": "text",
+                                    "description": "LanguageType name"
+                                },
+                                {
+                                    "key": "model",
+                                    "value": "gpt-4o-mini",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "category",
+                                    "value": "education",
+                                    "type": "text",
+                                    "description": "Lowercase category key"
+                                },
+                                {
+                                    "key": "style",
+                                    "value": "guide",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "format",
+                                    "value": "markdown",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "summary_level",
+                                    "value": "moderate",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "library_folder_id",
+                                    "value": "{{library_folder_id}}",
+                                    "type": "text",
+                                    "description": "Optional destination folder ObjectId"
+                                },
+                                {
+                                    "key": "folder_name",
+                                    "value": "",
+                                    "type": "text",
+                                    "disabled": true,
+                                    "description": "Optional: create/resolve folder by name if no id"
+                                },
+                                {
+                                    "key": "name",
+                                    "value": "",
+                                    "type": "text",
+                                    "disabled": true,
+                                    "description": "Optional display name for the store entry"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "202 Accepted",
+                            "status": "Accepted",
+                            "code": 202,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"message\": \"La generación de resúmenes se está procesando en segundo plano.\"\n    },\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    },\n    \"task_id\": \"8a7s9d8a7sd-9a8s7d98a7s-98d7sa98d7\",\n    \"folder_entry_id\": \"64f3c7e0aabbccddeeff0011\"\n}"
+                        },
+                        {
+                            "name": "401 User credential required",
+                            "status": "Unauthorized",
+                            "code": 401,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Esta solicitud requiere una credencial de API en tu perfil o créditos de pago por uso.\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    },\n    \"code\": \"USER_CREDENTIAL_REQUIRED\"\n}"
+                        },
+                        {
+                            "name": "415 Invalid extension",
+                            "status": "Unsupported Media Type",
+                            "code": 415,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Invalid file extension\",\n    \"errors\": [\n        {\n            \"field\": \"file\",\n            \"error\": \"Invalid file extension\",\n            \"message\": \"The file 'notes.txt' has an invalid extension.\",\n            \"allowed_extensions\": [\n                \".docx\",\n                \".pdf\"\n            ]\n        }\n    ],\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        }
+                    ],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 202) {\n",
+                                    "    const json = pm.response.json();\n",
+                                    "    if (json.task_id) pm.collectionVariables.set(\"task_id\", json.task_id);\n",
+                                    "    if (json.folder_entry_id) pm.collectionVariables.set(\"folder_entry_id\", json.folder_entry_id);\n",
+                                    "    pm.test(\"Accepted job\", () => {\n",
+                                    "        pm.expect(json.status).to.eql(\"success\");\n",
+                                    "        pm.expect(json.folder_entry_id || json.task_id).to.be.ok;\n",
+                                    "    });\n",
+                                    "}\n"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Summary YouTube Playlist",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}",
+                                "description": "JWT access token from POST /auth/login"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/brevio/summary-yt-playlist",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "brevio",
+                                "summary-yt-playlist"
+                            ]
+                        },
+                        "description": "JSON `BrevioGenerate`. Each `data[]` item needs `url` or `path`. Optional `library_folder_id` / `folder_name`. Language in `prompt_config` is the enum **name** (`ENGLISH`).",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"prompt_config\": {\n        \"model\": \"gpt-4o-mini\",\n        \"category\": \"journalism\",\n        \"style\": \"analysis\",\n        \"format\": \"markdown\",\n        \"language\": \"ENGLISH\",\n        \"summary_level\": \"detailed\"\n    },\n    \"data\": [\n        {\n            \"url\": \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\"\n        }\n    ],\n    \"library_folder_id\": \"{{library_folder_id}}\",\n    \"folder_name\": null\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "202 Accepted",
+                            "status": "Accepted",
+                            "code": 202,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"message\": \"La generación de resúmenes se está procesando en segundo plano.\"\n    },\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "422 Validation",
+                            "status": "Unprocessable Entity",
+                            "code": 422,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Se han encontrado errores de validación.\",\n    \"errors\": [\n        {\n            \"field\": \"password\",\n            \"error\": \"missing\",\n            \"message\": \"Field required\",\n            \"input\": null\n        }\n    ],\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "401 User credential required",
+                            "status": "Unauthorized",
+                            "code": 401,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Esta solicitud requiere una credencial de API en tu perfil o créditos de pago por uso.\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    },\n    \"code\": \"USER_CREDENTIAL_REQUIRED\"\n}"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Download",
+            "description": "JWT required. Generates `docx`/`pdf`/`txt` on demand from `summary.md`.",
+            "item": [
+                {
+                    "name": "Download Summary",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}",
+                                "description": "JWT access token from POST /auth/login"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/brevio/download/{{folder_entry_id}}?format=md&result_index=0",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "brevio",
+                                "download",
+                                "{{folder_entry_id}}"
+                            ],
+                            "query": [
+                                {
+                                    "key": "format",
+                                    "value": "md",
+                                    "description": "md | docx | pdf | txt"
+                                },
+                                {
+                                    "key": "result_index",
+                                    "value": "0",
+                                    "description": "Index inside entry.results"
+                                }
+                            ]
+                        },
+                        "description": "`format`: `md` (default), `docx`, `pdf`, `txt`. `result_index` selects which result inside the entry (default 0)."
+                    },
+                    "response": [
+                        {
+                            "name": "200 OK (markdown)",
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "text/markdown"
+                                }
+                            ],
+                            "body": "# Summary\n\n…"
+                        },
+                        {
+                            "name": "401 Unauthorized",
+                            "status": "Unauthorized",
+                            "code": 401,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Token de autenticación no válido.\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "403 Forbidden",
+                            "status": "Forbidden",
+                            "code": 403,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Forbidden\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        },
+                        {
+                            "name": "404 Not Found",
+                            "status": "Not Found",
+                            "code": 404,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n    \"status\": \"error\",\n    \"message\": \"Not Found\",\n    \"signature\": {\n        \"brand\": \"Brevio\",\n        \"version\": \"v1.0\",\n        \"contact\": \"support@brevio.com\"\n    }\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Download Summary as DOCX",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}",
+                                "description": "JWT access token from POST /auth/login"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/brevio/download/{{folder_entry_id}}?format=docx&result_index=0",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "brevio",
+                                "download",
+                                "{{folder_entry_id}}"
+                            ],
+                            "query": [
+                                {
+                                    "key": "format",
+                                    "value": "docx"
+                                },
+                                {
+                                    "key": "result_index",
+                                    "value": "0"
+                                }
+                            ]
+                        },
+                        "description": "On-demand DOCX conversion."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Download Summary as PDF",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}",
+                                "description": "JWT access token from POST /auth/login"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/brevio/download/{{folder_entry_id}}?format=pdf&result_index=0",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "brevio",
+                                "download",
+                                "{{folder_entry_id}}"
+                            ],
+                            "query": [
+                                {
+                                    "key": "format",
+                                    "value": "pdf"
+                                },
+                                {
+                                    "key": "result_index",
+                                    "value": "0"
+                                }
+                            ]
+                        },
+                        "description": "On-demand PDF conversion."
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Meta",
+            "description": "FastAPI OpenAPI. Not prefixed like the REST routers; docs live under `/api`.",
+            "item": [
+                {
+                    "name": "OpenAPI JSON",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/openapi.json",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "openapi.json"
+                            ]
+                        },
+                        "description": "Live schema. Use this to detect drift after backend changes."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Swagger UI",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/docs",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "docs"
+                            ]
+                        },
+                        "description": "Interactive docs (HTML)."
+                    },
+                    "response": []
                 }
             ]
         }
