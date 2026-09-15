@@ -70,3 +70,27 @@ data/
 
 #MYPY
 .mypy_cache/
+
+# Caché y residuos de tests
+.pytest_cache/
+.tmp/
+.vitest/
+.tox/
+.nox/
+.hypothesis/
+.ruff_cache/
+.pytest_basetemp/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+coverage/
+*.partial
+*.partial.bak
+
+# Resultados de benchmarks (el código vive en benchmarks/)
+/benchmark/
+
+# Logs de ejecución
+core/brevio_api/logs/*.json
+core/brevio_api/logs/*.log
