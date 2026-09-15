@@ -1,4 +1,36 @@
 services:
+  backend:
+    build:
+      context: ./core
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./core:/app/core
+      - ./data:/app/data
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    command: uvicorn core.brevio_api.__main__:app --host 0.0.0.0 --port 8000 --reload
+    env_file:
+      - .env
+    environment:
+      PROVIDER_QUOTA_ENABLED: ${PROVIDER_QUOTA_ENABLED:-true}
+      PROVIDER_QUOTA_CONFIG_PATH: ${PROVIDER_QUOTA_CONFIG_PATH:-/app/core/brevio/config/provider_quotas.example.yaml}
+      PROVIDER_QUOTA_REDIS_URL: ${PROVIDER_QUOTA_REDIS_URL:-redis://redis:6379/2}
+      BREVIO_KEEP_PARTIALS: ${BREVIO_KEEP_PARTIALS:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      - database
+      - redis
+    networks:
+      - app_network
+
   frontend:
     build:
       context: ./frontend
@@ -9,3 +41,62 @@ services:
     ports:
       - "${FRONTEND_DEV_PORT:-3000}:3000"
     command: npm run dev -- --host 0.0.0.0 --port ${FRONTEND_DEV_PORT:-3000}
+    networks:
+      - app_network
+
+  database:
+    build:
+      context: ./database
+      dockerfile: Dockerfile
+    volumes:
+      - db_data:/data/db
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    networks:
+      - app_network
+    env_file:
+      - .env
+
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    networks:
+      - app_network
+
+  celery:
+    build:
+      context: ./core
+      dockerfile: Dockerfile.dev
+    command: celery -A core.brevio_api.celery worker --loglevel=debug --time-limit=7200 --soft-time-limit=3600
+    volumes:
+      - ./core:/app/core
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      PROVIDER_QUOTA_ENABLED: ${PROVIDER_QUOTA_ENABLED:-true}
+      PROVIDER_QUOTA_CONFIG_PATH: ${PROVIDER_QUOTA_CONFIG_PATH:-/app/core/brevio/config/provider_quotas.example.yaml}
+      PROVIDER_QUOTA_REDIS_URL: ${PROVIDER_QUOTA_REDIS_URL:-redis://redis:6379/2}
+      BREVIO_KEEP_PARTIALS: ${BREVIO_KEEP_PARTIALS:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - database
+      - redis
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - app_network
+
+volumes:
+  db_data:
+
+networks:
+  app_network:
+    driver: bridge
