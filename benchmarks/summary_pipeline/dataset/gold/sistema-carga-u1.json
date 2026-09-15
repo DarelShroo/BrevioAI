@@ -1,0 +1,34 @@
+{
+  "document_id": "sistema-carga-u1",
+  "expected_language": "spanish",
+  "domain": "technical",
+  "important_topics": [
+    "circuito eléctrico",
+    "ley de Ohm",
+    "resistencias",
+    "intensidad",
+    "voltaje"
+  ],
+  "critical_entities": ["Ohm"],
+  "critical_numbers": [
+    {"text": "12 V", "meaning": "ejemplo de batería"}
+  ],
+  "key_claims": [
+    {
+      "id": "g1",
+      "text": "Un circuito eléctrico elemental une una fuente, un conductor y una carga",
+      "importance": 3
+    },
+    {
+      "id": "g2",
+      "text": "La ley de Ohm relaciona tensión, intensidad y resistencia",
+      "importance": 3
+    },
+    {
+      "id": "g3",
+      "text": "Las resistencias pueden asociarse en serie o en paralelo",
+      "importance": 2
+    }
+  ],
+  "terminology": ["amperio", "ohmio", "masa"]
+}

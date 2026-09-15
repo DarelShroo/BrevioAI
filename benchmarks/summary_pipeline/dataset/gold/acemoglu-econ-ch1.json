@@ -1,0 +1,46 @@
+{
+  "document_id": "acemoglu-econ-ch1",
+  "expected_language": "spanish",
+  "domain": "economics",
+  "important_topics": [
+    "optimización",
+    "equilibrio",
+    "empirismo",
+    "coste de oportunidad",
+    "análisis de coste-beneficio"
+  ],
+  "critical_entities": [
+    "Facebook",
+    "Starbucks",
+    "Daron Acemoglu"
+  ],
+  "critical_numbers": [],
+  "key_claims": [
+    {
+      "id": "g1",
+      "text": "La economía estudia las decisiones de agentes que enfrentan escasez de recursos",
+      "importance": 3
+    },
+    {
+      "id": "g2",
+      "text": "El primer principio de la economía es la optimización",
+      "importance": 3
+    },
+    {
+      "id": "g3",
+      "text": "El segundo principio es el equilibrio",
+      "importance": 3
+    },
+    {
+      "id": "g4",
+      "text": "El tercer principio es el empirismo o economía basada en la evidencia",
+      "importance": 3
+    },
+    {
+      "id": "g5",
+      "text": "El coste de oportunidad es el valor de la mejor alternativa sacrificada",
+      "importance": 2
+    }
+  ],
+  "terminology": ["agente económico", "coste-beneficio", "equilibrio"]
+}

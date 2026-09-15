@@ -1,0 +1,37 @@
+{
+  "document_id": "asyncio-hattingh",
+  "expected_language": "english",
+  "domain": "technical",
+  "important_topics": [
+    "asyncio",
+    "event loop",
+    "coroutines",
+    "async/await",
+    "tasks"
+  ],
+  "critical_entities": ["Caleb Hattingh", "Sanic", "asyncpg"],
+  "critical_numbers": [],
+  "key_claims": [
+    {
+      "id": "g1",
+      "text": "asyncio provides a safer alternative to threading for concurrent network programming",
+      "importance": 3
+    },
+    {
+      "id": "g2",
+      "text": "async/await is the language syntax for coroutines and tasks",
+      "importance": 3
+    },
+    {
+      "id": "g3",
+      "text": "The event loop schedules coroutines and I/O callbacks",
+      "importance": 2
+    },
+    {
+      "id": "g4",
+      "text": "asyncio can support thousands of simultaneous socket connections",
+      "importance": 2
+    }
+  ],
+  "terminology": ["CancelledError", "create_task"]
+}

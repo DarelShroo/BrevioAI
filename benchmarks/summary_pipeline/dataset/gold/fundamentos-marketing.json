@@ -1,0 +1,37 @@
+{
+  "document_id": "fundamentos-marketing",
+  "expected_language": "spanish",
+  "domain": "marketing",
+  "important_topics": [
+    "estrategia de marketing",
+    "microentorno",
+    "macroentorno",
+    "segmentación",
+    "posicionamiento"
+  ],
+  "critical_entities": ["Pozuelo de Alarcón"],
+  "critical_numbers": [],
+  "key_claims": [
+    {
+      "id": "g1",
+      "text": "El marketing implica diseñar e implementar una estrategia orientada al mercado",
+      "importance": 3
+    },
+    {
+      "id": "g2",
+      "text": "El microentorno incluye clientes, proveedores, intermediarios, competidores y grupos de interés",
+      "importance": 3
+    },
+    {
+      "id": "g3",
+      "text": "El macroentorno cubre factores demográficos, económicos, sociales, legales, políticos, tecnológicos y medioambientales",
+      "importance": 2
+    },
+    {
+      "id": "g4",
+      "text": "La segmentación identifica grupos de clientes con necesidades compartidas",
+      "importance": 2
+    }
+  ],
+  "terminology": ["ROI", "neuromarketing", "tribus digitales"]
+}

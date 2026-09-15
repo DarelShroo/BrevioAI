@@ -1,0 +1,23 @@
+{
+  "document_id": "synthetic-econ",
+  "expected_language": "spanish",
+  "domain": "economics",
+  "important_topics": ["optimización", "equilibrio", "escasez"],
+  "critical_entities": ["Facebook"],
+  "critical_numbers": [
+    {"text": "166.33", "meaning": "tipo de cambio del ejemplo"}
+  ],
+  "key_claims": [
+    {
+      "id": "g1",
+      "text": "La economía estudia cómo los agentes eligen bajo escasez",
+      "importance": 3
+    },
+    {
+      "id": "g2",
+      "text": "Facebook no cobra dinero a sus usuarios",
+      "importance": 2
+    }
+  ],
+  "terminology": ["coste de oportunidad"]
+}

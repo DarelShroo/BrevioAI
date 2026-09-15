@@ -1,0 +1,33 @@
+{
+  "document_id": "iniciacion-javascript",
+  "expected_language": "spanish",
+  "domain": "tutorial",
+  "important_topics": [
+    "Javascript",
+    "HTML",
+    "script",
+    "navegador"
+  ],
+  "critical_entities": ["Aula Mentor", "ImportePtas"],
+  "critical_numbers": [
+    {"text": "166.33", "meaning": "conversor pesetas"}
+  ],
+  "key_claims": [
+    {
+      "id": "g1",
+      "text": "Javascript es un lenguaje interpretado que se ejecuta en el navegador",
+      "importance": 3
+    },
+    {
+      "id": "g2",
+      "text": "El código se inserta entre las etiquetas SCRIPT de una página HTML",
+      "importance": 3
+    },
+    {
+      "id": "g3",
+      "text": "El conversor usa ImportePtas y el divisor 166.33",
+      "importance": 2
+    }
+  ],
+  "terminology": ["prompt()", "micodigo.js"]
+}

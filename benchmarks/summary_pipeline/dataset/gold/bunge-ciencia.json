@@ -1,0 +1,37 @@
+{
+  "document_id": "bunge-ciencia",
+  "expected_language": "spanish",
+  "domain": "academic",
+  "important_topics": [
+    "ciencia fáctica",
+    "ciencia formal",
+    "método científico",
+    "hipótesis",
+    "verificabilidad"
+  ],
+  "critical_entities": ["Mario Bunge"],
+  "critical_numbers": [],
+  "key_claims": [
+    {
+      "id": "g1",
+      "text": "La ciencia es conocimiento racional, sistemático, exacto, verificable y falible",
+      "importance": 3
+    },
+    {
+      "id": "g2",
+      "text": "La lógica y la matemática son formales y no procuran conocimiento objetivo de hechos",
+      "importance": 3
+    },
+    {
+      "id": "g3",
+      "text": "Las ciencias fácticas se ocupan de hechos y ponen a prueba hipótesis",
+      "importance": 3
+    },
+    {
+      "id": "g4",
+      "text": "El método científico incluye planteo del problema, modelo teórico, deducción y prueba",
+      "importance": 2
+    }
+  ],
+  "terminology": ["epistemología", "verificacionismo"]
+}

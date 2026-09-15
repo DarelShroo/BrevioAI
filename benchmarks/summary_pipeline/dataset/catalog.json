@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "identity": "document_id + sha256, never a local path alone",
+  "comparison_matrix": "document × model × native_language × level × category × style",
+  "translation_jobs": "separate suite via --suite single --language <target>",
+  "documents": [
+    {
+      "id": "acemoglu-econ-ch1",
+      "filename_pattern": "798_INDICE*",
+      "language": "spanish",
+      "domain": "economics",
+      "size_class": "MEDIUM",
+      "gold": "gold/acemoglu-econ-ch1.json"
+    },
+    {
+      "id": "fundamentos-marketing",
+      "filename_pattern": "*Fundamentos de marketing*",
+      "language": "spanish",
+      "domain": "marketing",
+      "size_class": "MEDIUM",
+      "gold": "gold/fundamentos-marketing.json"
+    },
+    {
+      "id": "iniciacion-javascript",
+      "filename_pattern": "*javascript*",
+      "language": "spanish",
+      "domain": "tutorial",
+      "size_class": "SMALL",
+      "gold": "gold/iniciacion-javascript.json"
+    },
+    {
+      "id": "bunge-ciencia",
+      "filename_pattern": "*bunge*",
+      "language": "spanish",
+      "domain": "academic",
+      "size_class": "MEDIUM",
+      "gold": "gold/bunge-ciencia.json"
+    },
+    {
+      "id": "sistema-carga-u1",
+      "filename_pattern": "*sistema_carga*",
+      "language": "spanish",
+      "domain": "technical",
+      "size_class": "SMALL",
+      "gold": "gold/sistema-carga-u1.json"
+    },
+    {
+      "id": "asyncio-hattingh",
+      "filename_pattern": "*asyncio*",
+      "language": "english",
+      "domain": "technical",
+      "size_class": "VERY_LARGE",
+      "gold": "gold/asyncio-hattingh.json",
+      "notes": "Regression fixture: chatbot REDUCE L2 output must never PASS"
+    },
+    {
+      "id": "synthetic-econ",
+      "filename_pattern": "synthetic-econ*",
+      "language": "spanish",
+      "domain": "economics",
+      "size_class": "SMALL",
+      "gold": "gold/synthetic-econ.json",
+      "notes": "Deterministic sabotage fixture"
+    }
+  ]
+}
