@@ -4,6 +4,14 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { Archive, LayoutDashboard, LogOut, Settings } from '@lucide/vue'
 import AppLogo from '@/components/common/AppLogo.vue'
+import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
+
+withDefaults(
+  defineProps<{
+    showLocale?: boolean
+  }>(),
+  { showLocale: false },
+)
 
 const emit = defineEmits<{
   logout: []
@@ -47,6 +55,10 @@ const active = computed(() => String(route.name || ''))
     </div>
 
     <div class="footer">
+      <div v-if="showLocale" class="locale-block">
+        <p class="locale-label">{{ t('locale.label') }}</p>
+        <LanguageSwitcher variant="ghost" class="sidebar-locale" />
+      </div>
       <button type="button" class="logout" data-testid="nav-logout" @click="emit('logout')">
         <LogOut :size="18" :stroke-width="2" aria-hidden="true" />
         <span>{{ t('nav.logout') }}</span>
@@ -57,9 +69,11 @@ const active = computed(() => String(route.name || ''))
 
 <style scoped>
 .sidebar {
+  box-sizing: border-box;
   height: 100%;
   min-height: 100vh;
   width: 16rem;
+  max-width: 100%;
   background: #072d2d;
   color: #e2e8f0;
   display: flex;
@@ -124,6 +138,55 @@ const active = computed(() => String(route.name || ''))
 
 .footer {
   margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.locale-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.25rem 0.15rem 0.5rem;
+  border-bottom: 1px solid rgb(148 163 184 / 0.18);
+}
+
+.locale-label {
+  margin: 0;
+  padding-inline: 0.75rem;
+  color: #94a3b8;
+  font-family: var(--bv-font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sidebar-locale {
+  width: 100%;
+}
+
+.sidebar-locale :deep(.locale-select),
+.sidebar-locale :deep(.p-select) {
+  width: 100%;
+  min-width: 0;
+  color: #e2e8f0;
+}
+
+.sidebar-locale :deep(.p-select) {
+  background: rgb(19 78 74 / 0.35);
+  border: 1px solid rgb(148 163 184 / 0.2);
+  border-radius: 0.5rem;
+}
+
+.sidebar-locale :deep(.p-select:not(.p-disabled).p-focus) {
+  background: rgb(19 78 74 / 0.5);
+  box-shadow: none;
+}
+
+.sidebar-locale :deep(.p-select-label),
+.sidebar-locale :deep(.p-select-dropdown) {
+  color: #e2e8f0;
 }
 
 .logout {

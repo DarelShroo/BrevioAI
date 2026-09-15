@@ -11,6 +11,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import { useRealtimeNotifications } from '@/composables/useRealtimeNotifications'
 import constellationUrl from '@/assets/images/auth-constellation.svg?url'
 import documentsUrl from '@/assets/images/auth-documents.svg?url'
+import logoUrl from '@/assets/images/brevio_logo.png'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -20,10 +21,11 @@ const drawerOpen = ref(false)
 useRealtimeNotifications()
 
 const title = computed(() => {
-  if (route.name === 'summary') return t('pages.createSummary')
-  if (route.name === 'store') return t('pages.store')
-  if (route.name === 'profile') return t('pages.profile')
-  return t('pages.brevio')
+  // Short nav labels — topbar space is tight on mobile.
+  if (route.name === 'summary') return t('nav.summary')
+  if (route.name === 'store') return t('nav.store')
+  if (route.name === 'profile') return t('nav.profile')
+  return t('app.name')
 })
 
 const isWide = computed(() => route.name === 'store')
@@ -54,13 +56,21 @@ async function logout() {
           >
             <Menu :size="20" :stroke-width="2" />
           </button>
-          <div>
-            <p class="brand-mobile mobile-only">{{ t('app.name') }}</p>
+          <div class="topbar-brand">
+            <img
+              :src="logoUrl"
+              :alt="t('app.name')"
+              class="topbar-logo"
+              width="28"
+              height="28"
+            />
             <p class="topbar-title">{{ title }}</p>
           </div>
         </div>
         <div class="topbar-right">
-          <LanguageSwitcher variant="ghost" />
+          <div class="topbar-locale">
+            <LanguageSwitcher variant="ghost" />
+          </div>
           <UserMenu @logout="logout" />
         </div>
       </header>
@@ -70,8 +80,13 @@ async function logout() {
       </main>
     </div>
 
-    <Drawer v-model:visible="drawerOpen" position="left" class="mobile-drawer">
-      <AppSidebar @logout="logout" @navigate="drawerOpen = false" />
+    <Drawer
+      v-model:visible="drawerOpen"
+      position="left"
+      class="mobile-drawer"
+      :showCloseIcon="false"
+    >
+      <AppSidebar show-locale @logout="logout" @navigate="drawerOpen = false" />
     </Drawer>
   </div>
 </template>
@@ -129,8 +144,10 @@ async function logout() {
   position: sticky;
   top: 0;
   z-index: 10;
-  min-height: 4.25rem;
-  padding: 0.85rem 1.75rem 0.85rem 2rem;
+  height: 4rem;
+  min-height: 4rem;
+  max-height: 4rem;
+  padding: 0 1.75rem 0 2rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -138,6 +155,7 @@ async function logout() {
   border-bottom: 1px solid rgb(226 232 240 / 0.8);
   background: rgb(255 255 255 / 0.6);
   backdrop-filter: blur(8px);
+  box-sizing: border-box;
 }
 
 .topbar-left,
@@ -149,26 +167,38 @@ async function logout() {
 }
 
 .topbar-right {
+  flex-shrink: 0;
   gap: 0.9rem;
-  padding: 0.15rem 0.15rem 0.15rem 0.5rem;
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.topbar-logo {
+  display: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 0.4rem;
 }
 
 .topbar-title {
   margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--bv-font-sans);
-  font-size: 1.25rem;
-  font-weight: 700;
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.2;
   color: #0f172a;
   letter-spacing: -0.02em;
-}
-
-.brand-mobile {
-  margin: 0;
-  color: #0f766e;
-  font-family: var(--bv-font-serif);
-  font-optical-sizing: auto;
-  font-weight: 700;
-  font-size: 0.75rem;
 }
 
 .icon-btn {
@@ -199,20 +229,6 @@ async function logout() {
   display: none;
 }
 
-:deep(.mobile-drawer.p-drawer) {
-  background: #072d2d;
-  width: min(16rem, 86vw);
-}
-
-:deep(.mobile-drawer .p-drawer-header) {
-  display: none;
-}
-
-:deep(.mobile-drawer .p-drawer-content) {
-  padding: 0;
-  background: #072d2d;
-}
-
 @media (max-width: 900px) {
   .desktop-nav {
     display: none;
@@ -222,8 +238,25 @@ async function logout() {
     display: inline-flex;
   }
 
+  .topbar-logo {
+    display: block;
+  }
+
+  /* Mobile: logo + location; language moves to drawer. */
+  .topbar-locale {
+    display: none !important;
+  }
+
   .topbar {
-    padding: 0.75rem 1rem;
+    padding: 0 1rem;
+  }
+
+  .topbar-brand {
+    gap: 0.55rem;
+  }
+
+  .topbar-title {
+    font-size: 1rem;
   }
 
   .content {
@@ -233,5 +266,38 @@ async function logout() {
   .docs {
     display: none;
   }
+}
+</style>
+
+<!-- Teleported Drawer leaves AppLayout DOM; unscoped rules required for panel chrome. -->
+<style>
+.p-drawer.mobile-drawer {
+  width: min(16rem, 86vw) !important;
+  max-width: min(16rem, 86vw) !important;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #072d2d;
+  border: 0;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.35);
+}
+
+.p-drawer.mobile-drawer .p-drawer-header {
+  display: none;
+}
+
+.p-drawer.mobile-drawer .p-drawer-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  padding: 0 !important;
+  overflow: auto;
+  background: #072d2d;
+}
+
+.p-drawer.mobile-drawer .sidebar {
+  width: 100%;
+  min-height: 100%;
+  border-inline-end: 0;
 }
 </style>
