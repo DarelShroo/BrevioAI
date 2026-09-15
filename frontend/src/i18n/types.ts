@@ -1,0 +1,13 @@
+export type UiLocale =
+  | 'ar'
+  | 'de'
+  | 'en'
+  | 'es'
+  | 'fr'
+  | 'hi'
+  | 'it'
+  | 'ja'
+  | 'ko'
+  | 'pt'
+  | 'ru'
+  | 'zh'

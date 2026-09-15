@@ -9,6 +9,11 @@ export default mergeConfig(
       environment: 'jsdom',
       exclude: [...configDefaults.exclude, 'e2e/**'],
       root: fileURLToPath(new URL('./', import.meta.url)),
+      globals: true,
+      setupFiles: ['./src/test/setup.ts'],
+      coverage: {
+        reportsDirectory: './src/__tests__/coverage',
+      },
     },
   }),
 )

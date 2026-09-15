@@ -1,0 +1,51 @@
+:root {
+  /* Brand from Brevio logo: navy outlines + teal bird/B */
+  --bv-primary: #1fb8a8;
+  --bv-primary-strong: #149688;
+  --bv-primary-soft: #d8f6f2;
+  --bv-secondary: #0b1f2a;
+  --bv-secondary-soft: #163041;
+  --bv-accent: #1fb8a8;
+  --bv-accent-strong: #149688;
+  --bv-accent-soft: #d8f6f2;
+
+  --bv-bg: #f8fafc;
+  --bv-bg-elevated: #ffffff;
+  --bv-bg-muted: #e6eef0;
+  --bv-surface: #ffffff;
+  --bv-ink: #0b1f2a;
+  --bv-ink-soft: #355064;
+  --bv-ink-muted: #6b8290;
+  --bv-border: #cfdce2;
+  --bv-border-strong: #a8bec8;
+
+  --bv-success: #0f8a6a;
+  --bv-warning: #b86a00;
+  --bv-danger: #c0362c;
+  --bv-info: #1f7aad;
+
+  --bv-sidebar: #072d2d;
+  --bv-sidebar-ink: #e2e8f0;
+  --bv-sidebar-muted: #94a3b8;
+
+  --bv-radius: 16px;
+  --bv-radius-sm: 12px;
+  --bv-radius-lg: 22px;
+  --bv-shadow: 0 12px 32px rgba(11, 31, 42, 0.08);
+  --bv-shadow-sm: 0 4px 14px rgba(11, 31, 42, 0.06);
+
+  --bv-font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --bv-font-serif: 'Newsreader', Georgia, serif;
+  --bv-font: var(--bv-font-sans);
+  --bv-display: var(--bv-font-serif);
+  --p-font-family: var(--bv-font-sans);
+
+  --bv-space-1: 0.25rem;
+  --bv-space-2: 0.5rem;
+  --bv-space-3: 0.75rem;
+  --bv-space-4: 1rem;
+  --bv-space-5: 1.5rem;
+  --bv-space-6: 2rem;
+  --bv-space-7: 3rem;
+  --bv-max: 1180px;
+}
