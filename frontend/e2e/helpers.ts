@@ -250,6 +250,41 @@ export async function mockApi(
       return
     }
 
+    if (path === '/brevio/transcription-providers') {
+      await json(route, 200, {
+        status: 'success',
+        data: {
+          environment: 'development',
+          providers: [
+            {
+              id: 'local_whisper',
+              implemented: true,
+              user_access: true,
+              requires_api_key: false,
+              access: 'local',
+              display_name: 'local_whisper',
+            },
+          ],
+          models: [
+            {
+              id: 'local_whisper',
+              provider: 'local_whisper',
+              status: 'stable',
+              recommended: true,
+              parameters: ['language'],
+              display_name: 'local_whisper',
+              requires_api_key: false,
+              user_access: true,
+            },
+          ],
+          selectable: ['local_whisper'],
+          default: 'local_whisper',
+          default_model: 'local_whisper',
+        },
+      })
+      return
+    }
+
     if (path === '/brevio/estimate-documents' && method === 'POST') {
       const postData = request.postDataBuffer()
       const bodyText = postData ? postData.toString('latin1') : ''
@@ -290,6 +325,7 @@ export async function mockApi(
           model: {
             name: 'gpt-4o-mini',
             provider: 'openai',
+            access: 'pay_per_use',
             context_limit: 128000,
             max_output_tokens: 4096,
             supports_chunking: true,
@@ -568,4 +604,8 @@ export async function loginViaUi(page: Page) {
   await page.getByTestId('login-submit').click()
   await page.waitForURL('**/summary')
   await expect(page.getByTestId('summary-view')).toBeVisible()
+  // Catalog defaults (language/model/…) fill asynchronously after /brevio/* loads.
+  await expect(page.getByTestId('summary-params')).toContainText(/English|Spanish/i, {
+    timeout: 15_000,
+  })
 }
