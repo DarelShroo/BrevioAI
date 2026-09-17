@@ -102,7 +102,7 @@ class LibraryFolderService:
             )
         if str(folder.user_id) != str(user_id):
             raise CodedHTTPException(
-                status.HTTP_403_FORBIDDEN, ApiErrorCode.FOLDER_FORBIDDEN
+                status.HTTP_404_NOT_FOUND, ApiErrorCode.FOLDER_NOT_FOUND
             )
         return folder
 

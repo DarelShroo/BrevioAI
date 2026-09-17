@@ -1,12 +1,15 @@
 from typing import List, Optional
+import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel, Field, field_validator
 
 from core.brevio.services.provider_registry import (
+    InvalidProviderCredential,
     ProviderRegistry,
     get_provider_base_url,
+    normalize_api_key,
 )
 from core.brevio_api.dependencies.db_dependency import get_db
 from core.brevio_api.dependencies.user_dependency import get_current_user
@@ -24,6 +27,8 @@ from core.shared.utils.model_catalog import (
     is_local_provider,
     provider_requires_api_key,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/user-credentials", tags=["credentials"])
 
@@ -113,13 +118,17 @@ async def list_credentials(
     status_code=status.HTTP_201_CREATED,
 )
 async def create_credential(
+    http_request: Request,
     request: CredentialCreateRequest,
     _current_user: str = Depends(get_current_user),
     repo: UserCredentialRepository = Depends(get_credential_repository),
     registry: ProviderRegistry = Depends(get_provider_registry),
 ):
+    from core.brevio_api.services.anti_abuse import enforce_account_mutation_rate_limit
+
+    enforce_account_mutation_rate_limit(http_request, str(_current_user))
     provider = request.provider.strip().lower()
-    api_key = request.api_key.strip()
+    api_key = normalize_api_key(request.api_key)
     if not api_key:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -137,10 +146,27 @@ async def create_credential(
         )
 
     adapter = registry.get_adapter(provider)
-    is_valid = await adapter.validate_credential(
-        api_key, get_provider_base_url(provider)
-    )
+    try:
+        is_valid = await adapter.validate_credential(
+            api_key, get_provider_base_url(provider)
+        )
+    except InvalidProviderCredential as exc:
+        logger.info(
+            "event=credential_rejected provider=%s reason=%s key_prefix=%s",
+            provider,
+            exc.message[:160],
+            api_key[:12],
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=exc.message,
+        ) from exc
     if not is_valid:
+        logger.info(
+            "event=credential_invalid provider=%s key_prefix=%s",
+            provider,
+            api_key[:12],
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="La clave API no es válida para este proveedor.",
@@ -167,10 +193,14 @@ async def create_credential(
     response_model_by_alias=False,
 )
 async def set_default_credential(
+    http_request: Request,
     credential_id: str,
     _current_user: str = Depends(get_current_user),
     repo: UserCredentialRepository = Depends(get_credential_repository),
 ):
+    from core.brevio_api.services.anti_abuse import enforce_account_mutation_rate_limit
+
+    enforce_account_mutation_rate_limit(http_request, str(_current_user))
     credential_id = credential_id.strip()
     if not credential_id:
         raise HTTPException(status_code=400, detail="Invalid credential ID")
@@ -200,11 +230,15 @@ async def set_default_credential(
     response_model_by_alias=False,
 )
 async def update_credential(
+    http_request: Request,
     credential_id: str,
     request: CredentialUpdateRequest,
     _current_user: str = Depends(get_current_user),
     repo: UserCredentialRepository = Depends(get_credential_repository),
 ):
+    from core.brevio_api.services.anti_abuse import enforce_account_mutation_rate_limit
+
+    enforce_account_mutation_rate_limit(http_request, str(_current_user))
     credential_id = credential_id.strip()
     if not credential_id:
         raise HTTPException(status_code=400, detail="Invalid credential ID")
@@ -227,10 +261,14 @@ async def update_credential(
 
 @router.delete("/{credential_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_credential(
+    http_request: Request,
     credential_id: str,
     _current_user: str = Depends(get_current_user),
     repo: UserCredentialRepository = Depends(get_credential_repository),
 ):
+    from core.brevio_api.services.anti_abuse import enforce_account_mutation_rate_limit
+
+    enforce_account_mutation_rate_limit(http_request, str(_current_user))
     credential_id = credential_id.strip()
     if not credential_id:
         raise HTTPException(status_code=400, detail="Invalid credential ID")

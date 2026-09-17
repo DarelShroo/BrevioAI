@@ -56,16 +56,83 @@ class UserRouter:
             _current_user: str = Depends(get_current_user),
             user_service: UserService = Depends(user_service_dependency),
         ) -> UserProfileDataResponse:
+            from core.brevio_api.services.billing.credit_service import CreditService
+            from core.brevio_api.services.billing.product_limit_service import (
+                ProductLimitService,
+            )
+
             user = await user_service.get_user_by_id(_current_user)
             folder_id = str(user.folder.id) if user.folder and user.folder.id else None
+            balance = float(user.user_credit or 0)
+            entitlements = None
+            raw_plan = getattr(user, "plan_id", None)
+            plan_id = (
+                str(raw_plan)
+                if isinstance(raw_plan, str) and raw_plan
+                else "free"
+            )
+            plan_name = "Free"
+            raw_ver = getattr(user, "plan_version", None)
+            plan_version = (
+                str(raw_ver) if isinstance(raw_ver, str) and raw_ver else "1"
+            )
+            try:
+                db = user_service.user_repo.collection.database
+                credits = CreditService.from_db(db, user_repo=user_service.user_repo)
+                products = ProductLimitService.from_db(db)
+                if not getattr(user, "plan_id", None):
+                    from core.brevio_api.services.billing.plan_registry import (
+                        default_plan,
+                    )
+
+                    plan = default_plan()
+                    await user_service.user_repo.collection.update_one(
+                        {"_id": user.id},
+                        {
+                            "$set": {
+                                "plan_id": plan.plan_id,
+                                "plan_version": plan.version,
+                            }
+                        },
+                    )
+                    user.plan_id = plan.plan_id
+                    user.plan_version = plan.version
+                from core.brevio_api.services.billing.plan_registry import get_plan
+
+                try:
+                    user_plan = get_plan(str(getattr(user, "plan_id", None) or "free"))
+                except KeyError:
+                    from core.brevio_api.services.billing.plan_registry import (
+                        default_plan,
+                    )
+
+                    user_plan = default_plan()
+                await credits.ensure_period_credits(
+                    str(user.id), user_plan, user=user
+                )
+                balance = float(await credits.get_balance(str(user.id)))
+                entitlements = await products.entitlements(
+                    user, credit_balance=int(balance)
+                )
+                plan_id = entitlements["plan_id"]
+                plan_name = entitlements["plan_name"]
+                plan_version = entitlements["plan_version"]
+            except Exception:
+                logger.exception(
+                    "event=credit_balance_profile_fallback user_id=%s", user.id
+                )
             return UserProfileDataResponse(
                 status="success",
                 data=UserProfileResponse(
                     id=str(user.id),
                     username=user.username,
                     email=user.email,
-                    user_credit=user.user_credit,
+                    user_credit=balance,
                     folder_id=folder_id,
+                    plan_id=plan_id,
+                    plan_name=plan_name,
+                    plan_version=plan_version,
+                    entitlements=entitlements,
                 ),
             )
 

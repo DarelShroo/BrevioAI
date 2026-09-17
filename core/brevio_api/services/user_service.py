@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 from bson import ObjectId
 from fastapi import HTTPException, status
 from pydantic import EmailStr, ValidationError
-from pymongo.errors import PyMongoError
+from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from core.brevio_api.events.publisher import publish_summary_job_event
 from core.brevio_api.models.errors.api_codes import ApiErrorCode, CodedHTTPException
@@ -96,6 +96,20 @@ class UserService:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error retrieving user by username",
+            )
+
+    async def get_user_by_stripe_customer_id(self, customer_id: str) -> User | None:
+        try:
+            logger.debug(f"Fetching user with stripe_customer_id: {customer_id}")
+            user = await self.user_repo.get_user_by_field("stripe_customer_id", customer_id)
+            return user
+        except Exception as e:
+            logger.error(
+                f"Error retrieving user by stripe_customer_id {customer_id}: {str(e)}", exc_info=True
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Error retrieving user by stripe_customer_id",
             )
 
     async def create_user(self, user: User) -> User:
@@ -247,6 +261,17 @@ class UserService:
         format: str | None = None,
         summary_level: str | None = None,
         source_type: str | None = None,
+        status: str | None = None,
+        queued_at: datetime | None = None,
+        idempotency_key: str | None = None,
+        file_manifest: list | None = None,
+        job_payload: dict | None = None,
+        transcription_provider: str | None = None,
+        transcription_model: str | None = None,
+        reasoning_effort: str | None = None,
+        results: list | None = None,
+        plan_snapshot: dict | None = None,
+        job_id: str | ObjectId | None = None,
     ) -> str:
         try:
             logger.debug(f"Creating FolderEntry for user ID: {user_id}")
@@ -266,12 +291,23 @@ class UserService:
             folder_oid = None
             if library_folder_id:
                 folder_oid = ObjectId(str(library_folder_id))
-            entry = FolderEntry(
+            if idempotency_key:
+                existing = await self._folder_entry_repo.find_by_idempotency_key(
+                    user_id, idempotency_key
+                )
+                if existing is not None:
+                    logger.info(
+                        "event=idempotency_key_reused job_id=%s user_id=%s",
+                        existing.id,
+                        user_id,
+                    )
+                    return str(existing.id)
+            entry_kwargs = dict(
                 user_id=user.id,
                 name=name or "",
                 original_name=original_name,
                 library_folder_id=folder_oid,
-                results=[],
+                results=results or [],
                 created_at=now,
                 updated_at=now,
                 language=language,
@@ -281,9 +317,48 @@ class UserService:
                 format=format,
                 summary_level=summary_level,
                 source_type=source_type,
+                status=status,
+                queued_at=queued_at,
+                idempotency_key=idempotency_key,
+                file_manifest=file_manifest or [],
+                job_payload=job_payload,
+                transcription_provider=transcription_provider,
+                transcription_model=transcription_model,
+                reasoning_effort=reasoning_effort,
+                plan_snapshot=plan_snapshot,
             )
+            if job_id is not None:
+                entry_kwargs["id"] = ObjectId(str(job_id))
+            entry = FolderEntry(**entry_kwargs)
 
-            created_entry = await self._folder_entry_repo.create_folder_entry(entry)
+            try:
+                created_entry = await self._folder_entry_repo.create_folder_entry(entry)
+            except DuplicateKeyError:
+                if idempotency_key:
+                    existing = await self._folder_entry_repo.find_by_idempotency_key(
+                        user_id, idempotency_key
+                    )
+                    if existing is not None:
+                        logger.info(
+                            "event=idempotency_key_reused job_id=%s user_id=%s",
+                            existing.id,
+                            user_id,
+                        )
+                        return str(existing.id)
+                raise
+            except HTTPException:
+                if idempotency_key:
+                    existing = await self._folder_entry_repo.find_by_idempotency_key(
+                        user_id, idempotency_key
+                    )
+                    if existing is not None:
+                        logger.info(
+                            "event=idempotency_key_reused job_id=%s user_id=%s",
+                            existing.id,
+                            user_id,
+                        )
+                        return str(existing.id)
+                raise
 
             resolved_name = resolve_entry_display_name(
                 entry_id=str(created_entry.id),
@@ -317,7 +392,12 @@ class UserService:
                     detail="Failed to update user with new folder entry",
                 )
 
-            logger.info(f"FolderEntry {entry_ref} created and linked to user {user_id}")
+            logger.info(
+                "event=job_created job_id=%s user_id=%s status=%s",
+                entry_ref,
+                user_id,
+                status,
+            )
             return str(entry_ref)
 
         except HTTPException:
@@ -354,7 +434,7 @@ class UserService:
             ) from exc
         if str(entry.user_id) != str(user_id):
             raise CodedHTTPException(
-                status.HTTP_403_FORBIDDEN, ApiErrorCode.ENTRY_FORBIDDEN
+                status.HTTP_404_NOT_FOUND, ApiErrorCode.ENTRY_NOT_FOUND
             )
         return entry
 
@@ -425,12 +505,9 @@ class UserService:
             except CodedHTTPException as exc:
                 failed.append({"id": raw_id, "code": exc.code})
             except HTTPException as exc:
-                code = (
-                    ApiErrorCode.ENTRY_FORBIDDEN.value
-                    if exc.status_code == status.HTTP_403_FORBIDDEN
-                    else ApiErrorCode.ENTRY_NOT_FOUND.value
+                failed.append(
+                    {"id": raw_id, "code": ApiErrorCode.ENTRY_NOT_FOUND.value}
                 )
-                failed.append({"id": raw_id, "code": code})
         return {"succeeded": succeeded, "failed": failed}
 
     async def update_folder_entry_metadata(
@@ -566,13 +643,6 @@ class UserService:
                     status_code=400, detail="Invalid FolderEntry ID format"
                 )
 
-            from core.brevio_api.repositories.folder_entry_repository import (
-                data_result_to_mongo,
-            )
-
-            result_dict = data_result_to_mongo(result)
-            logger.debug(f"Serialized DataResult: {result_dict}")
-
             user = await self.user_repo.get_user_by_field("_id", user_id_obj)
             if not user:
                 logger.warning(f"No user found with ID: {user_id}")
@@ -590,6 +660,23 @@ class UserService:
                     detail=f"FolderEntry with ID {folder_entry_id} not found",
                 )
 
+            if result.index is not None:
+                upserted = await self._folder_entry_repo.upsert_data_result_by_index(
+                    folder_entry_id, result
+                )
+                logger.info(
+                    "event=data_result_upserted job_id=%s index=%s result_id=%s",
+                    folder_entry_id,
+                    result.index,
+                    upserted.id,
+                )
+                return upserted
+
+            from core.brevio_api.repositories.folder_entry_repository import (
+                data_result_to_mongo,
+            )
+
+            result_dict = data_result_to_mongo(result)
             update_data = {
                 "$push": {"results": {"$each": [result_dict]}},
                 "$set": {"updated_at": datetime.now(ZoneInfo("UTC"))},
@@ -623,6 +710,102 @@ class UserService:
             raise HTTPException(
                 status_code=500,
                 detail=f"Unexpected error creating DataResult: {str(e)}",
+            )
+
+    async def fail_processing_results(
+        self,
+        folder_entry_id: str,
+        error: BaseException,
+        *,
+        phase: str = "FAILED",
+    ) -> None:
+        """Mark leftover open rows FAILED via the shared status machine.
+
+        Hook point for FASE 3: after terminal FAILED, credit reservation release
+        can be attached here without changing the lifecycle contract.
+        """
+        try:
+            folder_entry = await self._folder_entry_repo.get_folder_entry_by_id(
+                folder_entry_id
+            )
+        except Exception as e:
+            logger.error(
+                "Cannot fail open PROCESSING results for folder %s: %s",
+                folder_entry_id,
+                e,
+                exc_info=True,
+            )
+            return
+
+        # Job-level transition (idempotent no-op if already terminal).
+        try:
+            await self._folder_entry_repo.transition_job_status(
+                folder_entry_id,
+                new_status=JobStatus.FAILED.value,
+                from_statuses=[
+                    JobStatus.QUEUED.value,
+                    JobStatus.PROCESSING.value,
+                ],
+                error_message=str(error),
+            )
+        except Exception as job_err:
+            logger.warning(
+                "event=job_fail_status_error job_id=%s error=%s",
+                folder_entry_id,
+                type(job_err).__name__,
+            )
+
+        folder_entry = await self._folder_entry_repo.get_folder_entry_by_id(
+            folder_entry_id
+        )
+        for item in folder_entry.results or []:
+            if item.status in (
+                JobStatus.COMPLETED.value,
+                JobStatus.FAILED.value,
+            ):
+                continue
+            if item.status and not can_transition_status(
+                item.status, JobStatus.FAILED.value
+            ):
+                continue
+            try:
+                await self.update_data_result_status(
+                    user_id=str(folder_entry.user_id),
+                    folder_entry_id=folder_entry_id,
+                    result=item,
+                    status=JobStatus.FAILED.value,
+                    phase=item.phase or phase,
+                    success=False,
+                    error_type=type(error).__name__,
+                    error_code=phase,
+                    error_message=str(error),
+                    download_location=item.download_location,
+                    name=item.name,
+                    index=item.index,
+                )
+            except Exception as persist_err:
+                logger.error(
+                    "Failed to mark open DataResult %s as FAILED: %s",
+                    item.id,
+                    persist_err,
+                    exc_info=True,
+                )
+        logger.info(
+            "event=job_failed job_id=%s reason=%s",
+            folder_entry_id,
+            type(error).__name__,
+        )
+        # FASE 4: commercial settlement from real usage (idempotent; may be 0).
+        try:
+            from core.brevio_api.services.billing.credit_service import CreditService
+
+            db = self.user_repo.collection.database
+            credits = CreditService.from_db(db, user_repo=self.user_repo)
+            await credits.settle_from_usage(folder_entry_id)
+        except Exception:
+            logger.exception(
+                "event=job_settlement_error job_id=%s success=False",
+                folder_entry_id,
             )
 
     async def update_data_result_status(
@@ -741,66 +924,6 @@ class UserService:
                 status_code=500,
                 detail=f"Failed to persist DataResult status: {e}",
             )
-
-    async def fail_processing_results(
-        self,
-        folder_entry_id: str,
-        error: BaseException,
-        *,
-        phase: str = "FAILED",
-    ) -> None:
-        """Mark leftover PROCESSING rows FAILED if the job died without a terminal write."""
-        try:
-            folder_entry = await self._folder_entry_repo.get_folder_entry_by_id(
-                folder_entry_id
-            )
-        except Exception as e:
-            logger.error(
-                "Cannot fail open PROCESSING results for folder %s: %s",
-                folder_entry_id,
-                e,
-                exc_info=True,
-            )
-            return
-        for item in folder_entry.results or []:
-            if item.status != JobStatus.PROCESSING.value:
-                continue
-            try:
-                fallback_fields = {
-                    "status": JobStatus.FAILED.value,
-                    "phase": item.phase or phase,
-                    "success": False,
-                    "error_type": type(error).__name__,
-                    "error_code": phase,
-                    "error_message": str(error),
-                }
-                if item.index is not None:
-                    fallback_fields["index"] = item.index
-                if item.download_location:
-                    fallback_fields["download_location"] = item.download_location
-                if item.name:
-                    fallback_fields["name"] = item.name
-                await self._folder_entry_repo.update_data_result(
-                    folder_entry_id,
-                    item.id,
-                    fallback_fields,
-                )
-                self._publish_terminal_event(
-                    user_id=str(folder_entry.user_id),
-                    job_id=str(folder_entry_id),
-                    document_id=str(item.id),
-                    status=JobStatus.FAILED.value,
-                    document_name=item.name or folder_entry.name or "",
-                    error_code=phase,
-                    error_message=str(error),
-                )
-            except Exception as persist_err:
-                logger.error(
-                    "Failed to mark PROCESSING DataResult %s as FAILED: %s",
-                    item.id,
-                    persist_err,
-                    exc_info=True,
-                )
 
     @staticmethod
     def _publish_terminal_event(

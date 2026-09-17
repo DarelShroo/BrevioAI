@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from bson import ObjectId
 from pydantic import Field, field_validator, model_validator
@@ -32,6 +32,27 @@ class FolderEntry(BaseModel):
     format: Optional[str] = None
     summary_level: Optional[str] = None
     source_type: Optional[str] = None
+    # Job lifecycle (FolderEntry.id is the stable job_id).
+    status: Optional[str] = None
+    stage: Optional[str] = None
+    progress: int = 0
+    queued_at: Optional[datetime] = None
+    claimed_at: Optional[datetime] = None
+    enqueued_at: Optional[datetime] = None
+    heartbeat_at: Optional[datetime] = None
+    idempotency_key: Optional[str] = None
+    file_manifest: List[Dict[str, Any]] = Field(default_factory=list)
+    job_payload: Optional[Dict[str, Any]] = None
+    transcription_provider: Optional[str] = None
+    transcription_model: Optional[str] = None
+    reasoning_effort: Optional[str] = None
+    enqueue_attempts: int = 0
+    # FASE 5: immutable commercial plan at admission.
+    plan_snapshot: Optional[Dict[str, Any]] = None
+    # FASE 6: operational admission metadata (not a second status machine).
+    admission_status: Optional[str] = None  # WAITING | SCHEDULED | RUNNING
+    admission_reason: Optional[str] = None
+    scheduled_at: Optional[datetime] = None
 
     @field_validator("library_folder_id", mode="before")
     @classmethod
