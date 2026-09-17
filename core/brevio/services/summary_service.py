@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import (
     Any,
     AsyncGenerator,
+    Awaitable,
     Callable,
     Coroutine,
     List,
@@ -1013,12 +1014,18 @@ class SummaryService:
         file_configs: List[FileConfig],
         folder_id: Optional[str] = None,
         user_id: Optional[str] = None,
+        progress_callbacks: Optional[List[Optional[Callable[[int, str], Awaitable[None]]]]] = None,
     ) -> List[SummaryResponse]:
         self.history_token_model = HistoryTokenModel(
             folder_id=folder_id,
             user_id=user_id,
             started_at=datetime.now().astimezone().isoformat(timespec="seconds"),
         )
+        self.progress_callbacks = progress_callbacks
+        if not self.client:
+            self.client = await self.api_service._initialize_client(
+                prompt_config.model, user_id=user_id
+            )
         logger.info(f"Starting summary generation for {len(file_configs)} documents")
         self._pipeline_t0 = time.time()
         caps = get_model_capabilities(prompt_config.model)
@@ -1029,6 +1036,7 @@ class SummaryService:
 
         self.provider_executor.bind_job(None, ProviderCallMetrics())
         self._job_budget = None
+        await self._bind_usage_billing(folder_id=folder_id, user_id=user_id)
         try:
             connected = await self.api_service.check_api_connectivity(
                 prompt_config.model, user_id
@@ -1076,11 +1084,12 @@ class SummaryService:
             self.client = await self.api_service._initialize_client(model, user_id)
 
             results = []
-            for file_config in file_configs:
+            for i, file_config in enumerate(file_configs):
                 logger.debug(
                     f"Processing document sequentially: {file_config.document_path}"
                 )
                 try:
+                    progress_cb = self.progress_callbacks[i] if self.progress_callbacks and i < len(self.progress_callbacks) else None
                     result = await self._process_single_document(
                         prompt,
                         file_config,
@@ -1088,6 +1097,7 @@ class SummaryService:
                         prompt_config,
                         folder_id=folder_id,
                         user_id=user_id,
+                        progress_callback=progress_cb,
                     )
                     results.append(result)
                     logger.info(
@@ -1168,6 +1178,40 @@ class SummaryService:
         except Exception:
             pass
         return provider, scope
+
+    async def _bind_usage_billing(
+        self, *, folder_id: Optional[str], user_id: Optional[str]
+    ) -> None:
+        """Wire FASE 4 UsageRecord sink for this job (best-effort)."""
+        if not folder_id or not user_id:
+            self.provider_executor.bind_billing_context(
+                job_id=None, user_id=None, usage_sink=None
+            )
+            return
+        try:
+            from core.brevio_api.core.database import AsyncDB
+            from core.brevio_api.services.billing.usage_service import UsageBillingService
+
+            db = AsyncDB().database()
+            sink = UsageBillingService.from_db(db)
+            scope = self.api_service.last_quota_scope_id or "unknown"
+            self.provider_executor.bind_billing_context(
+                job_id=str(folder_id),
+                user_id=str(user_id),
+                credential_scope=str(scope),
+                usage_sink=sink,
+            )
+        except Exception:
+            logger.exception(
+                "event=usage_billing_bind_failed job_id=%s user_id=%s",
+                folder_id,
+                user_id,
+            )
+            self.provider_executor.bind_billing_context(
+                job_id=str(folder_id),
+                user_id=str(user_id),
+                usage_sink=None,
+            )
 
     async def _complete_chat(
         self,
@@ -3941,6 +3985,7 @@ class SummaryService:
         prompt_config: PromptConfig,
         folder_id: Optional[str] = None,
         user_id: Optional[str] = None,
+        progress_callback: Optional[Callable[[int, str], Awaitable[None]]] = None,
     ) -> SummaryResponse:
         effective_folder_id = folder_id or self.history_token_model.folder_id
         effective_user_id = user_id or self.history_token_model.user_id
@@ -4221,6 +4266,9 @@ class SummaryService:
                     f"overlap={overlap}"
                 )
 
+                if progress_callback:
+                    await progress_callback(10, PipelinePhase.INITIALIZING.value)
+
                 artifacts = SummaryArtifactManager(file_config.summary_path)
                 document_outline = extract_document_outline(full_text)
                 if document_outline:
@@ -4232,11 +4280,20 @@ class SummaryService:
                     logger.info(
                         "No reliable document outline; REDUCE will not receive a coverage checklist"
                     )
+                
+                total_chunks = len(chunks)
+                completed_chunks = 0
 
                 async def append_map_fragment(fragment: str) -> None:
                     """MAP progress: append one chunk summary; do not rejoin the full MAP output."""
+                    nonlocal completed_chunks
+                    completed_chunks += 1
                     try:
                         await artifacts.append_partial(fragment, separator="\n\n")
+                        if progress_callback and total_chunks > 0:
+                            # Map phase goes from 10% to 80%
+                            prog = 10 + int((completed_chunks / total_chunks) * 70)
+                            await progress_callback(prog, PipelinePhase.MAP_RUNNING.value)
                     except Exception as exc:
                         logger.error(
                             "Failed to append MAP fragment to %s: %s",
@@ -4274,6 +4331,8 @@ class SummaryService:
                     if decision.route == "direct":
                         # True single-pass: one LLM call on the full document.
                         state.set_phase(PipelinePhase.DIRECT_RUNNING)
+                        if progress_callback:
+                            await progress_callback(50, PipelinePhase.DIRECT_RUNNING.value)
                         logger.info(
                             "DIRECT route: single-pass summary for %s tokens "
                             "(skip MAP/REDUCE/FORMAT)",
@@ -4295,6 +4354,8 @@ class SummaryService:
                         )
                         # Persist immediately, then drop the in-memory copy before commit.
                         await artifacts.replace_partial(final_summary)
+                        if progress_callback:
+                            await progress_callback(90, PipelinePhase.DIRECT_COMPLETED.value)
                         map_success_word_count = len(final_summary.split())
                         map_salvage_text = ""
                         map_salvage_tokens = 0
@@ -4399,6 +4460,8 @@ class SummaryService:
                             )
 
                         state.set_phase(PipelinePhase.REDUCE_RUNNING)
+                        if progress_callback:
+                            await progress_callback(85, PipelinePhase.REDUCE_RUNNING.value)
                         reduce_prompt = (
                             await self.advanced_prompt_generator.get_reduce_prompt(
                                 target_language, category, style, summary_level
@@ -4518,6 +4581,8 @@ class SummaryService:
                         summary_on_disk = True
 
                     state.set_phase(PipelinePhase.FINALIZING)
+                    if progress_callback:
+                        await progress_callback(95, PipelinePhase.FINALIZING.value)
                     await self._enforce_artifact_quality_gate(
                         artifacts,
                         encoder=encoder,
@@ -4530,6 +4595,22 @@ class SummaryService:
                         summary_level=summary_level,
                     )
                     final_tokens = self.history_token_model.final_artifact_tokens
+
+                    # --- Diagram Processing ---
+                    try:
+                        from core.brevio.services.diagram_processor import DiagramProcessor
+                        import os
+                        partial_content = await artifacts.read_partial_text()
+                        if partial_content:
+                            processor = DiagramProcessor()
+                            output_dir = os.path.dirname(file_config.summary_path)
+                            new_content, processed_diagrams = await processor.process(partial_content, output_dir)
+                            if any(d.success for d in processed_diagrams):
+                                await artifacts.replace_partial(new_content)
+                                logger.info(f"Updated summary with {sum(1 for d in processed_diagrams if d.success)} diagram image references.")
+                    except Exception as diag_err:
+                        logger.error(f"Failed during diagram processing: {diag_err}", exc_info=True)
+                    # --------------------------
 
                     await artifacts.commit_final()
                     state.succeed()
@@ -4760,6 +4841,7 @@ class SummaryService:
         file_config: FileConfig,
         folder_id: str | None = None,
         user_id: str | None = None,
+        progress_callback: Optional[Callable[[int, str], Awaitable[None]]] = None,
     ) -> SummaryResponse:
         self.history_token_model.folder_id = folder_id
         self.history_token_model.user_id = user_id
@@ -4776,6 +4858,7 @@ class SummaryService:
                     [file_config],
                     folder_id=folder_id,
                     user_id=user_id,
+                    progress_callbacks=[progress_callback] if progress_callback else None,
                 )
                 if not results:
                     logger.error("No results returned from summary generation")

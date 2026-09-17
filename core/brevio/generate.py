@@ -50,16 +50,32 @@ def _empty_cuda_cache() -> None:
 
 
 class _ResultWriter:
-    """Adapts UserService (or a test mock) for PROCESSING → COMPLETED/FAILED writes."""
+    """Adapts UserService (or a test mock) for PROGRESS and terminal writes."""
 
     def __init__(self, create_fn: Optional[Callable]) -> None:
         self._create = create_fn
         self._svc = (
             getattr(create_fn, "__self__", None) if create_fn is not None else None
         )
+        self._reporter = None
 
     def _can_update(self) -> bool:
         return self._svc is not None and hasattr(self._svc, "update_data_result_status")
+
+    def _get_reporter(self, user_id: str, folder_id: str) -> Optional[Any]:
+        if self._reporter:
+            return self._reporter
+        if not self._can_update():
+            return None
+        repo = getattr(self._svc, "_folder_entry_repo", None)
+        if not repo:
+            return None
+        try:
+            from core.brevio_api.services.progress.reporter import ProgressReporter
+            self._reporter = ProgressReporter(repo, user_id, folder_id)
+            return self._reporter
+        except ImportError:
+            return None
 
     async def start(self, user_id: str, folder_id: str, result: DataResult) -> None:
         if self._create is None or not user_id or not folder_id:
@@ -67,6 +83,15 @@ class _ResultWriter:
         if not self._can_update():
             return
         await self._create(user_id, folder_id, result)
+        reporter = self._get_reporter(user_id, folder_id)
+        if reporter:
+            await reporter.update_item_progress(
+                document_id=str(result.id),
+                result=result,
+                progress=0,
+                stage=result.phase or "QUEUED",
+                force_persist=True
+            )
 
     async def finish(
         self,
@@ -86,6 +111,28 @@ class _ResultWriter:
         if self._create is None or not user_id or not folder_id:
             return
         status = job_status_for(success=success).value
+        
+        reporter = self._get_reporter(user_id, folder_id)
+        if reporter and result.id:
+            if download_location:
+                result.download_location = download_location
+            if name:
+                result.name = name
+            if index is not None:
+                result.index = index
+            if error_type:
+                result.error_type = error_type
+            if error_code:
+                result.error_code = error_code
+            if error_message:
+                result.error_message = error_message
+
+            if success:
+                await reporter.complete_item(str(result.id), result)
+            else:
+                await reporter.fail_item(str(result.id), result, error_message or "FAILED")
+            return
+
         if self._can_update():
             await self._svc.update_data_result_status(
                 user_id,
@@ -126,9 +173,21 @@ class _ResultWriter:
         result: DataResult,
         *,
         phase: str,
+        progress: int = 50,
     ) -> None:
         if self._create is None or not user_id or not folder_id:
             return
+        
+        reporter = self._get_reporter(user_id, folder_id)
+        if reporter and result.id:
+            await reporter.update_item_progress(
+                document_id=str(result.id),
+                result=result,
+                progress=progress,
+                stage=phase
+            )
+            return
+
         if not self._can_update():
             result.phase = phase
             result.status = JobStatus.PROCESSING.value
@@ -238,6 +297,7 @@ class Generate:
                     current_folder_entry_id,
                     data_result,
                     phase=JobPhase.TRANSCRIBING.value,
+                    progress=20,
                 )
                 await self._transcription_service.generate_transcription(
                     audio_path,
@@ -258,6 +318,7 @@ class Generate:
                     current_folder_entry_id,
                     data_result,
                     phase=JobPhase.TRANSCRIBED.value,
+                    progress=50,
                 )
 
                 summary_result = (
@@ -502,12 +563,23 @@ class Generate:
                 summary_path=summary_path, document_path=document_path
             )
 
+            async def _on_progress(progress: int, stage: str) -> None:
+                if writer and data_result:
+                    await writer.progress(
+                        _user_id,
+                        current_folder_entry_id,
+                        data_result,
+                        phase=stage,
+                        progress=progress,
+                    )
+
             try:
                 summary_result = await self._summary_service.generate_summary_document(
                     _data.prompt_config,
                     _file_config,
                     folder_id=current_folder_entry_id,
                     user_id=_user_id,
+                    progress_callback=_on_progress,
                 )
             except Exception as pipeline_error:
                 await self._persist_failure_quietly(

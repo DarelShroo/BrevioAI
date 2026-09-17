@@ -6,6 +6,8 @@ from typing import Any, Coroutine, Dict, List, Optional
 import yt_dlp
 from pydantic import HttpUrl, ValidationError
 
+from core.shared.utils.youtube_url import normalize_youtube_url
+
 
 class YTService:
     def __init__(self) -> None:
@@ -23,9 +25,10 @@ class YTService:
         self, url: HttpUrl, dest_folder: str, mp3_id: Optional[str] = None
     ) -> str:
         try:
-            self.logger.info(f"Iniciando descarga de {url} a {dest_folder}")
-            await asyncio.to_thread(self._sync_download, str(url), dest_folder, mp3_id)
-            self.logger.info(f"Descarga exitosa de {url}")
+            safe_url = normalize_youtube_url(url)
+            self.logger.info(f"Iniciando descarga de {safe_url} a {dest_folder}")
+            await asyncio.to_thread(self._sync_download, safe_url, dest_folder, mp3_id)
+            self.logger.info(f"Descarga exitosa de {safe_url}")
             return "Descarga exitosa"
         except Exception as e:
             self.logger.error(f"Error en descarga de {url}: {str(e)}")
@@ -34,6 +37,7 @@ class YTService:
     def _sync_download(
         self, url: str, dest_folder: str, mp3_id: Optional[str] = None
     ) -> None:
+        safe_url = normalize_youtube_url(url)
         os.makedirs(dest_folder, exist_ok=True)
         outtmpl = (
             f"{dest_folder}/{mp3_id}.%(ext)s"
@@ -46,9 +50,11 @@ class YTService:
             "outtmpl": outtmpl,
             "quiet": True,
             "ignoreerrors": True,
+            # Never fall back to a generic extractor (SSRF / arbitrary URL fetch).
+            "force_generic_extractor": False,
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+            ydl.download([safe_url])
 
     async def process_video(
         self,
@@ -87,10 +93,9 @@ class YTService:
                 continue
 
             try:
-                if not url.startswith("https://www.youtube.com/"):
-                    raise ValidationError(f"Invalid URL format: {url}")
-                validated_url = HttpUrl(url)
-            except ValidationError as e:
+                safe_url = normalize_youtube_url(url)
+                validated_url = HttpUrl(safe_url)
+            except (ValidationError, ValueError) as e:
                 self.logger.warning(
                     f"Skipping video with invalid URL format: {url} - {e}"
                 )
@@ -114,16 +119,17 @@ class YTService:
 
     async def count_media_in_yt_playlist(self, url: HttpUrl) -> int:
         try:
-            self.logger.info(f"Contando medios en la lista de reproducción: {url}")
+            safe_url = normalize_youtube_url(url)
+            self.logger.info(f"Contando medios en la lista de reproducción: {safe_url}")
             ydl_opts = {
                 "quiet": True,
                 "extract_flat": "in_playlist",
-                "force_generic_extractor": True,
+                "force_generic_extractor": False,
                 "ignoreerrors": True,
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = await asyncio.to_thread(
-                    ydl.extract_info, str(url), download=False
+                    ydl.extract_info, safe_url, download=False
                 )
                 return len(info.get("entries", [])) if info and "entries" in info else 1
         except Exception as e:
@@ -132,14 +138,16 @@ class YTService:
 
     async def get_video_duration(self, url: HttpUrl) -> Optional[float]:
         try:
+            safe_url = normalize_youtube_url(url)
             ydl_opts = {
                 "quiet": True,
                 "skip_download": True,
                 "ignoreerrors": True,
+                "force_generic_extractor": False,
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = await asyncio.to_thread(
-                    ydl.extract_info, str(url), download=False
+                    ydl.extract_info, safe_url, download=False
                 )
                 duration = info.get("duration") if info else None
                 if duration is None:
@@ -176,15 +184,22 @@ class YTService:
         return "list=" in str(url)
 
     async def get_video_urls_from_playlist(self, url: HttpUrl) -> List[str]:
+        safe_url = normalize_youtube_url(url)
         ydl_opts = {
             "quiet": True,
             "extract_flat": "in_playlist",
             "ignoreerrors": True,
+            "force_generic_extractor": False,
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = await asyncio.to_thread(ydl.extract_info, str(url), download=False)
-            return [
-                entry["url"]
-                for entry in (info.get("entries", []) if info else [])
-                if "url" in entry
-            ]
+            info = await asyncio.to_thread(ydl.extract_info, safe_url, download=False)
+            urls: List[str] = []
+            for entry in info.get("entries", []) if info else []:
+                raw = entry.get("url") or entry.get("webpage_url")
+                if not raw:
+                    continue
+                try:
+                    urls.append(normalize_youtube_url(str(raw)))
+                except ValueError:
+                    self.logger.warning("Skipping non-YouTube playlist entry: %s", raw)
+            return urls

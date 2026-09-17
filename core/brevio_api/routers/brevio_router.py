@@ -8,8 +8,10 @@ from fastapi import (
     Depends,
     File,
     Form,
+    Header,
     HTTPException,
     Query,
+    Request,
     UploadFile,
     status,
 )
@@ -87,6 +89,7 @@ from core.brevio_api.services.library_folder_service import LibraryFolderService
 from core.brevio_api.tasks import generate_summary_task, process_summary_task
 from core.brevio_api.utils.extension_validator import validate_file_extension
 from core.brevio_api.utils.language_utils import language_from_form
+from core.brevio_api.utils.upload_security import read_uploads_limited
 from core.shared.enums.model import ModelType
 from core.shared.models.brevio.brevio_generate import BrevioGenerate
 from core.shared.utils.generation_params import (
@@ -292,18 +295,22 @@ class BrevioRoutes:
         @self.router.post(
             "/count-yt-videos",
             response_model=CountMediaDataResponse,
-            description="Count the number of videos in a YouTube playlist",
+            description="Count the number of videos in a YouTube playlist (authenticated users)",
             status_code=status.HTTP_200_OK,
             responses={
-                401: {"description": "Invalid API key"},
+                401: {"description": "Unauthorized"},
                 422: {"description": "Invalid URL format"},
             },
         )
         async def count_media_in_yt_playlist(
+            http_request: Request,
             request: UrlYT,
-            verify_api_key: str = Depends(verify_api_key),
+            _current_user: ObjectId = Depends(get_current_user),
             brevio_service: BrevioService = Depends(get_brevio_service),
         ) -> CountMediaDataResponse:
+            from core.brevio_api.services.anti_abuse import enforce_youtube_rate_limit
+
+            enforce_youtube_rate_limit(http_request, str(_current_user))
             result = await brevio_service.count_media_in_yt_playlist(
                 HttpUrl(request.url)
             )
@@ -320,18 +327,22 @@ class BrevioRoutes:
         @self.router.post(
             "/count-time-yt-video",
             response_model=CountMediaTimeDataResponse,
-            description="Get the total duration of a YouTube video in seconds",
+            description="Get the total duration of a YouTube video in seconds (authenticated users)",
             status_code=status.HTTP_200_OK,
             responses={
-                401: {"description": "Invalid API key"},
+                401: {"description": "Unauthorized"},
                 422: {"description": "Invalid URL format"},
             },
         )
         async def get_total_duration(
+            http_request: Request,
             request: UrlYT,
-            verify_api_key: str = Depends(verify_api_key),
+            _current_user: ObjectId = Depends(get_current_user),
             brevio_service: BrevioService = Depends(get_brevio_service),
         ) -> CountMediaTimeDataResponse:
+            from core.brevio_api.services.anti_abuse import enforce_youtube_rate_limit
+
+            enforce_youtube_rate_limit(http_request, str(_current_user))
             try:
                 duration_data = await brevio_service.get_total_duration(request.url)
                 if not isinstance(duration_data, int):
@@ -367,6 +378,7 @@ class BrevioRoutes:
             },
         )
         async def generate_summary_media(
+            request: Request,
             files: List[UploadFile] = File(...),
             language: LanguageType = Depends(language_from_form),
             model: ModelType = Form(...),
@@ -380,6 +392,7 @@ class BrevioRoutes:
             transcription_provider: Optional[str] = Form(None),
             transcription_model: Optional[str] = Form(None),
             reasoning_effort: Optional[str] = Form(None),
+            idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
             _current_user: ObjectId = Depends(get_current_user),
             brevio_service: BrevioService = Depends(get_brevio_service),
             credential_resolver: CredentialResolver = Depends(get_credential_resolver),
@@ -387,6 +400,15 @@ class BrevioRoutes:
                 library_folder_service_dependency
             ),
         ) -> JSONResponse:
+            from core.brevio_api.services.anti_abuse import (
+                enforce_job_create_rate_limit,
+                enforce_media_rate_limit,
+                enforce_upload_rate_limit,
+            )
+
+            enforce_media_rate_limit(request, str(_current_user))
+            enforce_upload_rate_limit(request, str(_current_user))
+            enforce_job_create_rate_limit(request, str(_current_user))
             valid_media_extensions = media_extension_values()
             if not files:
                 raise HTTPException(
@@ -416,10 +438,7 @@ class BrevioRoutes:
             selected_provider = decision.transcription_provider
             selected_transcription_model = decision.transcription_model
 
-            # Convert files to data for Celery task
-            file_data_list = [
-                (file.filename or "unknown", await file.read()) for file in files
-            ]
+            file_data_list = await read_uploads_limited(files)
 
             folder_id, display_name, original_name = await self._job_identity(
                 file_data_list,
@@ -431,44 +450,54 @@ class BrevioRoutes:
                 entry_name=name,
             )
 
-            folder_entry_id = await brevio_service.create_summary_job(
+            from core.brevio.models.prompt_config_model import PromptConfig as PC
+
+            prompt = PC(
+                model=model,
+                category=category,
+                style=style,
+                format=format,
+                language=language,
+                summary_level=summary_level,
+                reasoning_effort=reasoning_effort,
+            )
+            job_id, created = await brevio_service.admit_summary_job_with_files(
                 str(_current_user),
+                file_data_list,
+                prompt_config=prompt,
+                source_type="media",
                 name=display_name,
                 original_name=original_name,
                 library_folder_id=folder_id,
-                language=language.name,
-                model=model.value,
-                category=category,
-                style=style,
-                format=format.value,
-                summary_level=summary_level.value,
-                source_type="media",
-            )
-
-            # Start Celery task
-            task = process_summary_task.delay(
-                files=file_data_list,
-                language=language.value,
-                model=model.value,
-                category=category,
-                style=style,
-                format=format.value,
-                summary_level=summary_level.value,
-                _current_user=str(_current_user),
-                is_media=True,
-                folder_entry_id=folder_entry_id,
+                idempotency_key=(idempotency_key or "").strip() or None,
                 transcription_provider=selected_provider,
                 transcription_model=selected_transcription_model,
-                reasoning_effort=reasoning_effort,
-            )  # type: ignore
+            )
 
-            # Return response
+            task_id = None
+            if created:
+                # FASE 6: fair scheduler registers + dispatches; no direct Celery delay.
+                try:
+                    await brevio_service.dispatch_waiting_jobs()
+                except Exception:
+                    import logging
+
+                    logging.getLogger(__name__).warning(
+                        "event=dispatch_after_admit_failed job_id=%s",
+                        job_id,
+                        exc_info=True,
+                    )
+            else:
+                # Idempotent replay: do not re-enqueue a known job.
+                task_id = None
+
             response = ProcessingMessageResponse(data=ProcessingMessageData())
             return JSONResponse(
                 content={
                     **response.model_dump(exclude_none=True),
-                    "task_id": task.id,
-                    "folder_entry_id": folder_entry_id,
+                    "task_id": task_id,
+                    "folder_entry_id": job_id,
+                    "job_id": job_id,
                 },
                 status_code=status.HTTP_202_ACCEPTED,
             )
@@ -488,6 +517,7 @@ class BrevioRoutes:
             },
         )
         async def generate_summary_documents(
+            request: Request,
             files: List[UploadFile] = File(...),
             language: LanguageType = Depends(language_from_form),
             model: ModelType = Form(...),
@@ -499,6 +529,7 @@ class BrevioRoutes:
             folder_name: Optional[str] = Form(None),
             name: Optional[str] = Form(None),
             reasoning_effort: Optional[str] = Form(None),
+            idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
             _current_user: ObjectId = Depends(get_current_user),
             brevio_service: BrevioService = Depends(get_brevio_service),
             credential_resolver: CredentialResolver = Depends(get_credential_resolver),
@@ -506,6 +537,13 @@ class BrevioRoutes:
                 library_folder_service_dependency
             ),
         ) -> JSONResponse:
+            from core.brevio_api.services.anti_abuse import (
+                enforce_job_create_rate_limit,
+                enforce_upload_rate_limit,
+            )
+
+            enforce_upload_rate_limit(request, str(_current_user))
+            enforce_job_create_rate_limit(request, str(_current_user))
             self._validate_document_files(files)
             self._validate_generation_params(
                 model,
@@ -520,10 +558,7 @@ class BrevioRoutes:
                 brevio_service=brevio_service,
             )
 
-            # Convert files to data for Celery task
-            file_data_list = [
-                (file.filename or "unknown", await file.read()) for file in files
-            ]
+            file_data_list = await read_uploads_limited(files)
 
             folder_id, display_name, original_name = await self._job_identity(
                 file_data_list,
@@ -535,42 +570,49 @@ class BrevioRoutes:
                 entry_name=name,
             )
 
-            folder_entry_id = await brevio_service.create_summary_job(
+            from core.brevio.models.prompt_config_model import PromptConfig as PC
+
+            prompt = PC(
+                model=model,
+                category=category,
+                style=style,
+                format=format,
+                language=language,
+                summary_level=summary_level,
+                reasoning_effort=reasoning_effort,
+            )
+            job_id, created = await brevio_service.admit_summary_job_with_files(
                 str(_current_user),
+                file_data_list,
+                prompt_config=prompt,
+                source_type="documents",
                 name=display_name,
                 original_name=original_name,
                 library_folder_id=folder_id,
-                language=language.name,
-                model=model.value,
-                category=category,
-                style=style,
-                format=format.value,
-                summary_level=summary_level.value,
-                source_type="documents",
+                idempotency_key=(idempotency_key or "").strip() or None,
             )
 
-            # Start Celery task
-            task = process_summary_task.delay(
-                files=file_data_list,
-                language=language.value,
-                model=model.value,
-                category=category,
-                style=style,
-                format=format.value,
-                summary_level=summary_level.value,
-                _current_user=str(_current_user),
-                is_media=False,
-                folder_entry_id=folder_entry_id,
-                reasoning_effort=reasoning_effort,
-            )  # type: ignore
+            task_id = None
+            if created:
+                # admit_summary_job_with_files already registered + dispatched.
+                try:
+                    await brevio_service.dispatch_waiting_jobs()
+                except Exception:
+                    import logging
 
-            # Return response
+                    logging.getLogger(__name__).warning(
+                        "event=dispatch_after_admit_failed job_id=%s",
+                        job_id,
+                        exc_info=True,
+                    )
+
             response = ProcessingMessageResponse(data=ProcessingMessageData())
             return JSONResponse(
                 content={
                     **response.model_dump(exclude_none=True),
-                    "task_id": task.id,
-                    "folder_entry_id": folder_entry_id,
+                    "task_id": task_id,
+                    "folder_entry_id": job_id,
+                    "job_id": job_id,
                 },
                 status_code=status.HTTP_202_ACCEPTED,
             )
@@ -587,6 +629,7 @@ class BrevioRoutes:
             },
         )
         async def estimate_documents(
+            http_request: Request,
             files: List[UploadFile] = File(...),
             request: DocumentProcessingRequest = Depends(
                 DocumentProcessingRequest.from_form
@@ -594,11 +637,16 @@ class BrevioRoutes:
             _current_user: ObjectId = Depends(get_current_user),
             estimation_service: EstimationService = Depends(get_estimation_service),
         ) -> EstimateDocumentsResponse:
+            from core.brevio_api.services.anti_abuse import (
+                enforce_estimation_rate_limit,
+                enforce_upload_rate_limit,
+            )
+
+            enforce_estimation_rate_limit(http_request, str(_current_user))
+            enforce_upload_rate_limit(http_request, str(_current_user))
             self._validate_document_files(files)
 
-            files_data = [
-                (file.filename or "unknown", await file.read()) for file in files
-            ]
+            files_data = await read_uploads_limited(files)
             outcome = await estimation_service.estimate(request, files_data)
             model_capabilities = get_model_capabilities(request.model)
             model_catalog = catalog_entry_for_model(request.model)
@@ -684,11 +732,17 @@ class BrevioRoutes:
 
         @self.router.post("/summary-yt-playlist")
         async def generate_summary_yt_playlist(
+            request: Request,
             brevio_generate: BrevioGenerate,
+            idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
             _current_user: ObjectId = Depends(get_current_user),
             credential_resolver: CredentialResolver = Depends(get_credential_resolver),
             brevio_service: BrevioService = Depends(get_brevio_service),
         ) -> JSONResponse:
+            from datetime import datetime, timezone
+
+            from core.shared.enums.job_status import JobStatus
+
             self._validate_generation_params(
                 brevio_generate.prompt_config.model,
                 reasoning_effort=brevio_generate.prompt_config.reasoning_effort,
@@ -705,11 +759,121 @@ class BrevioRoutes:
             payload = brevio_generate.model_dump(mode="json")
             payload["transcription_provider"] = decision.transcription_provider
             payload["transcription_model"] = decision.transcription_model
-            generate_summary_task.delay(payload, str(_current_user))  # type: ignore
+
+            key = (idempotency_key or "").strip() or None
+            if key:
+                existing = await brevio_service.find_job_by_idempotency(
+                    str(_current_user), key
+                )
+                if existing:
+                    response = ProcessingMessageResponse(data=ProcessingMessageData())
+                    return JSONResponse(
+                        content={
+                            **response.model_dump(exclude_none=True),
+                            "task_id": None,
+                            "folder_entry_id": existing,
+                            "job_id": existing,
+                        },
+                        status_code=status.HTTP_202_ACCEPTED,
+                    )
+
+            from core.brevio_api.models.errors.api_codes import ApiErrorCode
+            from core.brevio_api.models.errors.provider_errors import ProviderError
+            from core.brevio_api.services.anti_abuse import enforce_youtube_rate_limit
+            from core.brevio_api.services.billing.product_limit_service import (
+                AdmissionRequest,
+                ProductLimitError,
+                measure_documents,
+            )
+
+            enforce_youtube_rate_limit(request, str(_current_user))
+
+            # FASE 7: commercial admit BEFORE FolderEntry insert (no spam FAILED docs).
+            job_id = str(ObjectId())
+            products = await brevio_service._get_product_limit_service()
+            user = await brevio_service.ensure_user_plan(str(_current_user))
+            plan = products.resolve_user_plan(user)
+            has_byok = await brevio_service._user_has_byok(
+                str(_current_user), brevio_generate.prompt_config.model
+            )
+            try:
+                admission = await products.admit(
+                    AdmissionRequest(
+                        user_id=str(_current_user),
+                        job_id=job_id,
+                        source_type="youtube",
+                        model=brevio_generate.prompt_config.model,
+                        has_byok=has_byok,
+                        documents=measure_documents([], source_type="youtube"),
+                    ),
+                    plan=plan,
+                )
+            except ProductLimitError:
+                raise
+
+            meta = brevio_service._prompt_metadata(
+                brevio_generate.prompt_config, "youtube"
+            )
+            try:
+                created_id = await brevio_service.create_summary_job(
+                    str(_current_user),
+                    status=JobStatus.QUEUED.value,
+                    queued_at=datetime.now(timezone.utc),
+                    idempotency_key=key,
+                    job_payload=payload,
+                    transcription_provider=decision.transcription_provider,
+                    transcription_model=decision.transcription_model,
+                    reasoning_effort=brevio_generate.prompt_config.reasoning_effort,
+                    plan_snapshot=admission.snapshot.model_dump(mode="json"),
+                    job_id=job_id,
+                    **meta,
+                )
+            except Exception:
+                await products.release_admission(job_id)
+                raise
+            if created_id != job_id:
+                # Idempotency raced — release provisional admit for unused id.
+                await products.release_admission(job_id)
+                job_id = created_id
+
+            user_service = await brevio_service._get_user_service()
+            try:
+                await brevio_service.reserve_credits_for_admitted_job(
+                    user_id=str(_current_user),
+                    job_id=job_id,
+                    prompt_config=brevio_generate.prompt_config,
+                    source_type="youtube",
+                    files_data=None,
+                )
+            except ProviderError as credit_err:
+                await products.release_admission(job_id)
+                await user_service.fail_processing_results(job_id, credit_err)
+                from core.brevio_api.models.errors.api_codes import CodedHTTPException
+
+                raise CodedHTTPException(
+                    status_code=402,
+                    code=ApiErrorCode.CREDIT_LIMIT,
+                    detail=str(credit_err.message),
+                ) from credit_err
+            await products.commit_admission(job_id)
+            try:
+                await brevio_service.schedule_or_dispatch(job_id)
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "event=schedule_youtube_failed job_id=%s", job_id, exc_info=True
+                )
+                raise
 
             response = ProcessingMessageResponse(data=ProcessingMessageData())
             return JSONResponse(
-                content=response.model_dump(exclude_none=True),
+                content={
+                    **response.model_dump(exclude_none=True),
+                    "task_id": None,
+                    "folder_entry_id": job_id,
+                    "job_id": job_id,
+                },
                 status_code=status.HTTP_202_ACCEPTED,
             )
 
