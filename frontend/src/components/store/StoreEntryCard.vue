@@ -2,6 +2,7 @@
 import { Calendar, Download, Eye, FileCheck, FileText, Folder, Trash2 } from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import ProgressBar from '@/components/common/ProgressBar.vue'
 import type { FolderEntry } from '@/types/user'
 import {
   entryPrimaryName,
@@ -46,7 +47,8 @@ const { t } = useI18n()
             <FileText :size="18" :stroke-width="2" aria-hidden="true" />
           </span>
         </div>
-        <StatusBadge :status="entryStatus(entry)" />
+        <StatusBadge v-if="entryStatus(entry) !== 'PROCESSING' || !entry.progress" :status="entryStatus(entry)" />
+        <ProgressBar v-else :progress="entry.progress || 0" :stage="entry.stage" :status="entry.status" :show-labels="false" style="width: 100px;" />
       </div>
 
       <h3 class="title font-serif">{{ entryPrimaryName(entry) }}</h3>

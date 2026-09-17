@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
@@ -11,6 +12,7 @@ import Column from 'primevue/column'
 import Tag from 'primevue/tag'
 import StateBlock from '@/components/common/StateBlock.vue'
 import * as credentialsService from '@/services/credentials.service'
+import * as plansService from '@/services/plans.service'
 import { useAuthStore } from '@/stores/auth.store'
 import { useCatalogStore } from '@/stores/catalog.store'
 import { useAppToast } from '@/composables/useToast'
@@ -21,16 +23,25 @@ import { providerLabel } from '@/utils/labels'
 const FALLBACK_PAID_PROVIDERS = ['openai', 'deepseek', 'google', 'xai', 'anthropic']
 
 const { t, te } = useI18n()
+const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 const catalog = useCatalogStore()
 const toast = useAppToast()
 
 const loading = ref(false)
+const syncingBilling = ref(false)
 const error = ref<string | null>(null)
 const credentials = ref<UserCredential[]>([])
 const providerFilter = ref('openai')
 const updatingDefaultId = ref<string | null>(null)
 const renamingId = ref<string | null>(null)
+const managingBilling = ref(false)
+
+const isPremium = computed(() => {
+  const planId = auth.profile?.plan_id || auth.profile?.entitlements?.plan_id
+  return planId && planId !== 'free'
+})
 
 const paidProviders = computed(() => {
   const fromCatalog = catalog.paidProviders.map((item) => item.id)
@@ -83,6 +94,45 @@ async function loadProfile() {
     error.value = parseApiError(err)
   } finally {
     loading.value = false
+  }
+}
+
+async function syncAfterCheckout() {
+  const sessionId = typeof route.query.session_id === 'string' ? route.query.session_id : ''
+  if (!sessionId) return
+  syncingBilling.value = true
+  try {
+    // Webhooks can lag; pull Stripe Checkout session / subscription into local plan+credits.
+    await plansService.syncBillingState(sessionId).catch(() => undefined)
+    for (let i = 0; i < 6; i += 1) {
+      await auth.fetchProfile().catch(() => undefined)
+      const planId = auth.profile?.plan_id || auth.profile?.entitlements?.plan_id
+      const credits = Number(auth.profile?.user_credit ?? 0)
+      if (planId && planId !== 'free' && credits > 0) break
+      await new Promise((r) => setTimeout(r, 800))
+      await plansService.syncBillingState(sessionId).catch(() => undefined)
+    }
+    toast.success(t('profile.billingSynced'))
+    await router.replace({ name: 'profile', query: {} })
+  } finally {
+    syncingBilling.value = false
+  }
+}
+
+onMounted(async () => {
+  await loadProfile()
+  await syncAfterCheckout()
+})
+
+async function manageBilling() {
+  managingBilling.value = true
+  try {
+    const { url } = await plansService.createPortalSession(window.location.href)
+    window.location.href = url
+  } catch (err) {
+    toast.error(parseApiError(err))
+  } finally {
+    managingBilling.value = false
   }
 }
 
@@ -183,15 +233,16 @@ async function removeCredential(item: UserCredential) {
 watch(providerFilter, () => {
   void loadCredentials()
 })
-
-onMounted(loadProfile)
 </script>
 
 <template>
   <div class="stack profile-view" data-testid="profile-view">
     <section class="card-surface panel">
-      <StateBlock :loading="loading && !auth.profile" :error="error">
+      <StateBlock :loading="(loading || syncingBilling) && !auth.profile" :error="error">
         <div v-if="auth.profile" class="stack">
+          <p v-if="syncingBilling" class="muted" data-testid="billing-syncing">
+            {{ t('profile.billingSyncing') }}
+          </p>
           <h2>{{ auth.profile.username }}</h2>
           <div class="field-grid">
             <div>
@@ -203,13 +254,53 @@ onMounted(loadProfile)
               <p>{{ auth.profile.id }}</p>
             </div>
             <div>
+              <span class="muted">{{ t('profile.plan') }}</span>
+              <p>{{ auth.profile.plan_name || auth.profile.plan_id || '—' }}</p>
+            </div>
+            <div>
               <span class="muted">{{ t('profile.credits') }}</span>
               <p>{{ auth.profile.user_credit }}</p>
+            </div>
+            <div v-if="auth.profile.entitlements">
+              <span class="muted">{{ t('profile.documentsRemaining') }}</span>
+              <p>
+                {{ auth.profile.entitlements.remaining.documents }}
+                /
+                {{ auth.profile.entitlements.limits.documents_per_period }}
+              </p>
+            </div>
+            <div v-if="auth.profile.entitlements">
+              <span class="muted">{{ t('profile.pagesRemaining') }}</span>
+              <p>
+                {{ auth.profile.entitlements.remaining.pages }}
+                /
+                {{ auth.profile.entitlements.limits.pages_per_period }}
+              </p>
+            </div>
+            <div v-if="auth.profile.entitlements">
+              <span class="muted">{{ t('profile.creditsRemaining') }}</span>
+              <p>
+                {{ auth.profile.entitlements.remaining.credits }}
+                /
+                {{ auth.profile.entitlements.limits.credits_per_period }}
+              </p>
             </div>
             <div>
               <span class="muted">{{ t('profile.folder') }}</span>
               <p>{{ auth.profile.folder_id || '—' }}</p>
             </div>
+          </div>
+          <div class="row" style="gap: 1rem">
+            <RouterLink :to="{ name: 'plans' }" data-testid="profile-plans-link">
+              <Button :label="t('pages.plans')" severity="secondary" />
+            </RouterLink>
+            <Button
+              v-if="isPremium"
+              label="Manage Billing"
+              icon="pi pi-credit-card"
+              :loading="managingBilling"
+              @click="manageBilling"
+            />
           </div>
           <RouterLink :to="{ name: 'password-recovery' }">{{ t('profile.changePassword') }}</RouterLink>
         </div>

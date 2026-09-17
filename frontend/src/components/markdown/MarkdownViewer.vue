@@ -10,17 +10,20 @@ const props = withDefaults(
     source: string
     loading?: boolean
     error?: string | null
+    /** When false, TOC starts collapsed (toggle still available). */
+    tocDefaultOpen?: boolean
   }>(),
   {
     loading: false,
     error: null,
+    tocDefaultOpen: true,
   },
 )
 
 const { t } = useI18n()
 const bodyEl = ref<HTMLElement | null>(null)
 const progress = ref(0)
-const tocOpen = ref(true)
+const tocOpen = ref(props.tocDefaultOpen)
 const activeId = ref('')
 const copyTimers = new WeakMap<HTMLButtonElement, ReturnType<typeof setTimeout>>()
 let boundScrollEl: HTMLElement | null = null
@@ -28,6 +31,13 @@ let boundScrollEl: HTMLElement | null = null
 const rendered = computed(() => renderMarkdown(props.source || ''))
 const toc = computed<TocItem[]>(() => rendered.value.toc)
 const showToc = computed(() => toc.value.length >= 1)
+
+watch(
+  () => props.tocDefaultOpen,
+  (open) => {
+    tocOpen.value = open
+  },
+)
 
 function cssEscape(value: string): string {
   if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
@@ -225,7 +235,15 @@ onBeforeUnmount(() => {
       {{ t('markdown.empty') }}
     </div>
 
-    <div v-else class="md-layout" :class="{ 'md-layout--with-toc': showToc }">
+    <div
+      v-else
+      class="md-layout"
+      :class="{
+        'md-layout--with-toc': showToc,
+        'md-layout--toc-open': showToc && tocOpen,
+        'md-layout--toc-closed': showToc && !tocOpen,
+      }"
+    >
       <aside v-if="showToc" class="md-toc" data-testid="markdown-toc">
         <button
           type="button"
@@ -235,9 +253,10 @@ onBeforeUnmount(() => {
           @click="tocOpen = !tocOpen"
         >
           <List :size="16" :stroke-width="2" aria-hidden="true" />
-          <span>{{ t('markdown.contents') }}</span>
+          <span>{{ tocOpen ? t('markdown.hideContents') : t('markdown.showContents') }}</span>
         </button>
         <nav
+          v-show="tocOpen"
           class="md-toc__nav"
           :class="{ 'is-open': tocOpen }"
           :aria-label="t('markdown.contents')"

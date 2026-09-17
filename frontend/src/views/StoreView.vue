@@ -12,6 +12,7 @@ import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import StateBlock from '@/components/common/StateBlock.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import ProgressBar from '@/components/common/ProgressBar.vue'
 import StoreEntryCard from '@/components/store/StoreEntryCard.vue'
 import StoreFolderBar from '@/components/store/StoreFolderBar.vue'
 import StoreMetrics from '@/components/store/StoreMetrics.vue'
@@ -705,7 +706,8 @@ onUnmounted(stopRealtime)
           </Column>
           <Column :header="t('store.status')">
             <template #body="{ data }">
-              <StatusBadge :status="entryStatus(data)" />
+              <StatusBadge v-if="entryStatus(data) !== 'PROCESSING' || !data.progress" :status="entryStatus(data)" />
+              <ProgressBar v-else :progress="data.progress || 0" :stage="data.stage" :status="data.status" :show-labels="false" style="width: 100px;" />
             </template>
           </Column>
           <Column :header="t('store.results')">
@@ -785,7 +787,8 @@ onUnmounted(stopRealtime)
           <div class="detail-title">
             <h3 class="font-serif">{{ entryPrimaryName(selected) }}</h3>
             <p class="muted tiny">{{ t('job.id') }}: {{ entryId(selected) }}</p>
-            <StatusBadge :status="entryStatus(selected)" />
+            <StatusBadge v-if="entryStatus(selected) !== 'PROCESSING' || !selected.progress" :status="entryStatus(selected)" />
+            <ProgressBar v-else :progress="selected.progress || 0" :stage="selected.stage" :status="selected.status" :show-labels="true" />
           </div>
 
           <div class="meta-grid">
@@ -835,7 +838,8 @@ onUnmounted(stopRealtime)
             <span class="active-doc__label">{{ t('store.summaryReader') }}</span>
             <strong class="active-doc__name" :title="activeResultName">{{ activeResultName }}</strong>
             <div class="active-doc__meta">
-              <StatusBadge v-if="activeResult" :status="normalizeStatus(activeResult)" />
+              <StatusBadge v-if="normalizeStatus(activeResult) !== 'PROCESSING' || !activeResult.progress" :status="normalizeStatus(activeResult)" />
+              <ProgressBar v-else :progress="activeResult.progress || 0" :stage="activeResult.phase" :status="activeResult.status" :show-labels="true" />
               <span v-if="showResultPhase" class="muted tiny">{{ activeResult?.phase }}</span>
               <span v-if="selected.results.length > 1" class="muted tiny">
                 {{ readerResultIndex + 1 }}/{{ selected.results.length }}

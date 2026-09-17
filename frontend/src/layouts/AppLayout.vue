@@ -24,7 +24,9 @@ const title = computed(() => {
   // Short nav labels — topbar space is tight on mobile.
   if (route.name === 'summary') return t('nav.summary')
   if (route.name === 'store') return t('nav.store')
+  if (route.name === 'plans') return t('nav.plans')
   if (route.name === 'profile') return t('nav.profile')
+  if (route.name === 'comparar' || route.name === 'comparar-slug') return t('demo.compareTitle')
   return t('app.name')
 })
 
@@ -84,7 +86,8 @@ async function logout() {
       v-model:visible="drawerOpen"
       position="left"
       class="mobile-drawer"
-      :showCloseIcon="false"
+      :show-close-icon="false"
+      :base-z-index="1200"
     >
       <AppSidebar show-locale @logout="logout" @navigate="drawerOpen = false" />
     </Drawer>

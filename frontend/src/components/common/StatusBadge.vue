@@ -16,7 +16,12 @@ const label = computed(() => statusLabel(normalized.value, t, te))
 const tone = computed(() => {
   if (normalized.value === 'COMPLETED') return 'completed'
   if (normalized.value === 'FAILED') return 'failed'
-  if (normalized.value === 'PROCESSING' || normalized.value === 'TRANSCRIBING' || normalized.value === 'TRANSCRIBED') {
+  if (
+    normalized.value === 'PROCESSING'
+    || normalized.value === 'QUEUED'
+    || normalized.value === 'TRANSCRIBING'
+    || normalized.value === 'TRANSCRIBED'
+  ) {
     return 'processing'
   }
   return 'unknown'

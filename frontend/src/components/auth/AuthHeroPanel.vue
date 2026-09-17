@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import AppLogo from '@/components/common/AppLogo.vue'
+import logoBgUrl from '@/assets/images/logo-bg.png'
 import constellationUrl from '@/assets/images/auth-constellation.svg?url'
 import documentsUrl from '@/assets/images/auth-documents.svg?url'
 import { useI18n } from 'vue-i18n'
@@ -13,7 +13,7 @@ const { t } = useI18n()
     <img :src="constellationUrl" alt="" class="hero-mesh" aria-hidden="true" />
     <img :src="documentsUrl" alt="" class="hero-docs" aria-hidden="true" />
     <div class="hero-content">
-      <AppLogo size="md" inverted />
+      <img :src="logoBgUrl" alt="Brevio Logo" class="hero-logo-large" />
       <div class="hero-copy">
         <h1 class="font-serif">{{ t('auth.headline') }}</h1>
         <p>{{ t('auth.subtitle') }}</p>
@@ -98,14 +98,12 @@ const { t } = useI18n()
   line-height: 1.55;
 }
 
-.hero-content :deep(.mark) {
-  width: 3.15rem;
-  height: 3.15rem;
-  border-radius: 0.9rem;
-}
-
-.hero-content :deep(.wordmark strong) {
-  font-size: 1.28rem;
+.hero-logo-large {
+  width: auto;
+  height: 8rem;
+  max-width: 80%;
+  object-fit: contain;
+  margin-bottom: 1rem;
 }
 
 @media (min-width: 1024px) {

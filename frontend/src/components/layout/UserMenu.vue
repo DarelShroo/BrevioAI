@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ChevronDown, LogOut, Settings } from '@lucide/vue'
+import { CreditCard, ChevronDown, LogOut, Settings } from '@lucide/vue'
 import { useAuthStore } from '@/stores/auth.store'
 
 const emit = defineEmits<{
@@ -76,6 +76,15 @@ onUnmounted(() => {
     </button>
 
     <div v-if="open" class="menu" role="menu">
+      <RouterLink
+        :to="{ name: 'plans' }"
+        role="menuitem"
+        data-testid="user-menu-plans"
+        @click="close"
+      >
+        <CreditCard :size="16" :stroke-width="2" />
+        <span>{{ t('nav.plans') }}</span>
+      </RouterLink>
       <RouterLink
         :to="{ name: 'profile' }"
         role="menuitem"

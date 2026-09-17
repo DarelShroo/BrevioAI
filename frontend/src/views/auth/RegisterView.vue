@@ -43,7 +43,11 @@ async function onSubmit() {
       email: form.email.trim(),
       password: form.password,
     })
-    await router.replace({ name: 'summary' })
+    const redirect =
+      typeof router.currentRoute.value.query.redirect === 'string'
+        ? router.currentRoute.value.query.redirect
+        : '/summary'
+    await router.replace(redirect)
   } catch (err) {
     error.value = parseApiError(err, t('auth.registrationFailed'))
   }
@@ -104,11 +108,92 @@ async function onSubmit() {
       data-testid="register-submit"
     />
 
-    <RouterLink :to="{ name: 'login' }">{{ t('auth.alreadyHaveAccount') }}</RouterLink>
+    <div class="links">
+      <RouterLink :to="{ name: 'login' }" class="auth-link flex-center">
+        <i class="pi pi-user" style="margin-right: 0.4rem; color: var(--bv-primary)"></i>
+        {{ t('auth.alreadyHaveAccount') }}
+      </RouterLink>
+    </div>
+
+    <div class="divider">
+      <span class="circle"></span>
+    </div>
+
+    <div class="bottom-links">
+      <RouterLink class="demo-link flex-center" :to="{ name: 'plans' }" data-testid="register-plans-link">
+        {{ t('nav.plans') }} <i class="pi pi-chevron-right" style="font-size: 0.75rem; margin-left: 0.4rem"></i>
+      </RouterLink>
+      <RouterLink class="demo-link flex-center" :to="{ name: 'comparar' }" data-testid="register-demo-link">
+        {{ t('demo.badge') }} <i class="pi pi-chevron-right" style="font-size: 0.75rem; margin-left: 0.4rem"></i>
+      </RouterLink>
+    </div>
   </form>
 </template>
 
 <style scoped>
+.links {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--bv-space-2);
+}
+
+.auth-link {
+  color: var(--bv-primary);
+  font-weight: 500;
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+
+.auth-link:hover {
+  text-decoration: underline;
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  margin: var(--bv-space-4) 0;
+  opacity: 0.6;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--bv-border-color, #e2e8f0);
+}
+
+.divider .circle {
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--bv-border-color, #a0aec0);
+  border-radius: 50%;
+  margin: 0 var(--bv-space-3);
+  background-color: transparent;
+}
+
+.bottom-links {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--bv-space-3);
+  flex-wrap: wrap;
+}
+
+.demo-link {
+  color: var(--bv-primary);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+
+.demo-link:hover {
+  text-decoration: underline;
+}
+
 .error {
   color: var(--bv-danger);
 }

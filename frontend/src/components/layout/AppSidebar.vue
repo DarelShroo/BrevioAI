@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
-import { Archive, LayoutDashboard, LogOut, Settings } from '@lucide/vue'
+import { CreditCard, FilePlus, Library, LogOut, Settings, Sparkles } from '@lucide/vue'
 import AppLogo from '@/components/common/AppLogo.vue'
 import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 
@@ -22,12 +22,18 @@ const { t } = useI18n()
 const route = useRoute()
 
 const items = computed(() => [
-  { label: t('nav.summary'), icon: LayoutDashboard, name: 'summary' },
-  { label: t('nav.store'), icon: Archive, name: 'store' },
+  { label: t('nav.summary'), icon: FilePlus, name: 'summary' },
+  { label: t('nav.store'), icon: Library, name: 'store' },
+  { label: t('nav.plans'), icon: CreditCard, name: 'plans' },
+  { label: t('demo.badge'), icon: Sparkles, name: 'comparar' },
   { label: t('nav.profile'), icon: Settings, name: 'profile' },
 ])
 
-const active = computed(() => String(route.name || ''))
+const active = computed(() => {
+  const name = String(route.name || '')
+  if (name === 'comparar' || name === 'comparar-slug') return 'comparar'
+  return name
+})
 </script>
 
 <template>

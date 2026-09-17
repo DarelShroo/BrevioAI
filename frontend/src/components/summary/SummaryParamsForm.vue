@@ -9,7 +9,6 @@ import * as credentialsService from '@/services/credentials.service'
 import type { SummaryFormParams } from '@/types/brevio'
 import {
   categoryLabel,
-  formatLabel,
   humanizeId,
   providerLabel,
   styleLabel,
@@ -61,12 +60,6 @@ const modelOptions = computed(() =>
 const categoryOptions = computed(() =>
   catalog.categories.map((id) => ({
     label: categoryLabel(id, t, te),
-    value: id,
-  })),
-)
-const formatOptions = computed(() =>
-  catalog.formats.map((id) => ({
-    label: formatLabel(id, t, te),
     value: id,
   })),
 )
@@ -161,9 +154,8 @@ onMounted(() => {
     if (!model.value.style && styleOptions.value.length) {
       model.value.style = styleOptions.value[0].value
     }
-    if (!model.value.format && catalog.formats.length) {
-      model.value.format = catalog.formats.find((f) => f === 'markdown') || catalog.formats[0]
-    }
+    // Format is fixed to markdown for now (selector hidden).
+    model.value.format = 'markdown'
     if (!model.value.summary_level && catalog.summaryLevels.length) {
       model.value.summary_level =
         catalog.summaryLevels.find((l) => l === 'concise') || catalog.summaryLevels[0]
@@ -287,18 +279,6 @@ watch(
         option-label="label"
         option-value="value"
         :placeholder="t('params.selectStyle')"
-        class="w-full"
-      />
-    </div>
-    <div class="stack">
-      <label for="param-format">{{ t('params.format') }}</label>
-      <Select
-        input-id="param-format"
-        v-model="model.format"
-        :options="formatOptions"
-        option-label="label"
-        option-value="value"
-        :placeholder="t('params.selectFormat')"
         class="w-full"
       />
     </div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AuthHeroPanel from '@/components/auth/AuthHeroPanel.vue'
 import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
+import logoBgUrl from '@/assets/images/logo-bg.png'
 </script>
 
 <template>
@@ -8,6 +9,7 @@ import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
     <AuthHeroPanel />
     <div class="auth-panel card-surface">
       <div class="locale-row">
+        <img :src="logoBgUrl" alt="Brevio Logo" class="mobile-logo" />
         <LanguageSwitcher />
       </div>
       <RouterView />
@@ -35,13 +37,29 @@ import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 .locale-row {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   margin-bottom: var(--bv-space-4);
+}
+
+.mobile-logo {
+  display: none;
 }
 
 @media (max-width: 1023px) {
   .auth-shell {
     grid-template-columns: 1fr;
     padding: var(--bv-space-4);
+  }
+
+  .locale-row {
+    justify-content: space-between;
+  }
+
+  .mobile-logo {
+    display: block;
+    height: 2.5rem;
+    width: auto;
+    object-fit: contain;
   }
 }
 </style>

@@ -17,6 +17,7 @@ import FilePicker from '@/components/summary/FilePicker.vue'
 import EstimatePanel from '@/components/summary/EstimatePanel.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import StateBlock from '@/components/common/StateBlock.vue'
+import { Sparkles } from '@lucide/vue'
 import * as brevioService from '@/services/brevio.service'
 import * as credentialsService from '@/services/credentials.service'
 import { useAppToast } from '@/composables/useToast'
@@ -61,7 +62,7 @@ const params = reactive<SummaryFormParams>({
   model: '',
   category: '',
   style: '',
-  format: '',
+  format: 'markdown',
   summary_level: '',
   transcription_provider: '',
   transcription_model: '',
@@ -132,6 +133,16 @@ const canSubmitMedia = computed(() =>
     needsTranscription: true,
   }),
 )
+
+const exampleDemoTo = computed(() => ({
+  name: 'comparar' as const,
+  query: {
+    ...(params.category ? { category: params.category } : {}),
+    ...(params.style ? { style: params.style } : {}),
+    ...(params.model ? { model: params.model } : {}),
+    ...(params.summary_level ? { level: params.summary_level } : {}),
+  },
+}))
 
 onMounted(async () => {
   try {
@@ -274,6 +285,8 @@ async function submitDocuments() {
   try {
     const response = await brevioService.submitDocuments(documentFiles.value, { ...params }, { ...destination })
     lastFolderEntryId.value = response.folder_entry_id || null
+    documentFiles.value = []
+    estimate.value = null
     toast.success(t('summary.documentJobAccepted'))
     await watchJob(response.folder_entry_id)
   } catch (err) {
@@ -303,6 +316,7 @@ async function submitMedia() {
   try {
     const response = await brevioService.submitMedia(mediaFiles.value, { ...params }, { ...destination })
     lastFolderEntryId.value = response.folder_entry_id || null
+    mediaFiles.value = []
     toast.success(t('summary.mediaJobAccepted'))
     await watchJob(response.folder_entry_id)
   } catch (err) {
@@ -338,6 +352,7 @@ async function submitYoutube() {
       library_folder_id: destination.library_folder_id,
       folder_name: destination.folder_name,
     })
+    youtubeUrl.value = ''
     toast.success(t('summary.youtubeJobAccepted'))
   } catch (err) {
     formError.value = parseApiError(err)
@@ -363,6 +378,15 @@ async function download(resultIndex = 0) {
 
 <template>
   <div class="stack summary-view" data-testid="summary-view">
+    <div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">
+      <RouterLink :to="exampleDemoTo" data-testid="view-example-btn" custom v-slot="{ navigate, href }">
+        <Button :href="href" @click="navigate" severity="info" outlined size="small">
+          <Sparkles :size="15" :stroke-width="2.25" style="margin-right: 0.5rem;" aria-hidden="true" />
+          {{ t('demo.viewExample') }}
+        </Button>
+      </RouterLink>
+    </div>
+
     <section class="card-surface panel stack">
       <p class="muted">
         {{ t('summary.intro') }}
@@ -585,6 +609,73 @@ async function download(resultIndex = 0) {
 <style scoped>
 .panel {
   padding: var(--bv-space-5);
+}
+
+.demo-callout {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  padding: 1.35rem 1.5rem 1.45rem;
+  border-radius: 16px;
+  border: 0;
+  background: linear-gradient(90deg, #042c2c 0%, #063836 48%, #0b4741 100%);
+  color: #ffffff;
+  box-shadow: 0 10px 28px rgb(4 44 44 / 0.22);
+}
+
+.demo-callout__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.7rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #2ab59d;
+}
+
+.demo-callout__title {
+  margin: 0;
+  max-width: 52rem;
+  font-size: clamp(1.15rem, 2.1vw, 1.55rem);
+  line-height: 1.28;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.demo-callout__subtitle {
+  margin: 0.55rem 0 0;
+  max-width: 44rem;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  font-weight: 400;
+  color: #ffffff;
+}
+
+.demo-callout__cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1.1rem;
+  padding: 0.62rem 1.15rem;
+  border-radius: 999px;
+  background: #2ab59d;
+  color: #0a1f1c;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 140ms ease, transform 140ms ease;
+}
+
+.demo-callout__cta:hover {
+  background: #34c4ab;
+}
+
+.demo-callout__cta:focus-visible {
+  outline: 2px solid #9af0df;
+  outline-offset: 2px;
 }
 
 .tab-body {
