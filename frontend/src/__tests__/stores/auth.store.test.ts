@@ -39,4 +39,72 @@ describe('auth store', () => {
     expect(store.isAuthenticated).toBe(false)
     expect(store.profile).toBeNull()
   })
+
+  it('hydrate returns false without throwing when session is missing', async () => {
+    const userService = await import('@/services/user.service')
+    vi.mocked(userService.getMe).mockRejectedValueOnce(
+      Object.assign(new Error('Refresh token no proporcionado'), {
+        name: 'ApiError',
+        status: 401,
+      }),
+    )
+    const store = useAuthStore()
+    await expect(store.hydrate()).resolves.toBe(false)
+    expect(store.isAuthenticated).toBe(false)
+    expect(store.profile).toBeNull()
+  })
+
+  it('handleSessionExpired clears state and redirects when a session existed', async () => {
+    const authService = await import('@/services/auth.service')
+    const router = (await import('@/router')).default
+    const replace = vi.spyOn(router, 'replace').mockResolvedValue(undefined as never)
+    vi.spyOn(router, 'currentRoute', 'get').mockReturnValue({
+      value: { name: 'summary', fullPath: '/summary' },
+    } as any)
+
+    const store = useAuthStore()
+    await store.login({ identity: 'tester1', password: 'Aa1@aaaa' })
+    await store.handleSessionExpired()
+
+    expect(store.isAuthenticated).toBe(false)
+    expect(store.profile).toBeNull()
+    expect(authService.logout).toHaveBeenCalled()
+    expect(replace).toHaveBeenCalledWith({
+      name: 'login',
+      query: { redirect: '/summary' },
+    })
+  })
+
+  it('handleSessionExpired always redirects to login from any non-auth screen', async () => {
+    const authService = await import('@/services/auth.service')
+    vi.mocked(authService.logout).mockClear()
+    const router = (await import('@/router')).default
+    const replace = vi.spyOn(router, 'replace').mockResolvedValue(undefined as never)
+    vi.spyOn(router, 'currentRoute', 'get').mockReturnValue({
+      value: { name: 'comparar', fullPath: '/comparar' },
+    } as any)
+
+    const store = useAuthStore()
+    await store.handleSessionExpired()
+
+    expect(store.isAuthenticated).toBe(false)
+    expect(authService.logout).toHaveBeenCalled()
+    expect(replace).toHaveBeenCalledWith({
+      name: 'login',
+      query: { redirect: '/comparar' },
+    })
+  })
+
+  it('handleSessionExpired does not leave the login screen', async () => {
+    const router = (await import('@/router')).default
+    const replace = vi.spyOn(router, 'replace').mockResolvedValue(undefined as never)
+    vi.spyOn(router, 'currentRoute', 'get').mockReturnValue({
+      value: { name: 'login', fullPath: '/auth/login' },
+    } as any)
+
+    const store = useAuthStore()
+    await store.handleSessionExpired()
+
+    expect(replace).not.toHaveBeenCalled()
+  })
 })

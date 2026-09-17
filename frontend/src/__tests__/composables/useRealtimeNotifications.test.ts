@@ -87,7 +87,7 @@ describe('useRealtimeNotifications', () => {
     await nextTick()
     expect(toast.success).toHaveBeenCalled()
     const [detail, summary, options] = toast.success.mock.calls[0]
-    expect(summary).toMatch(/Summary completed/i)
+    expect(summary).toMatch(/Summary ready/i)
     expect(detail).toContain('Quarterly report')
     expect(options.styleClass).toContain('job-id-job-1')
     wrapper.unmount()
@@ -108,7 +108,7 @@ describe('useRealtimeNotifications', () => {
     await nextTick()
     expect(toast.error).toHaveBeenCalled()
     const [detail, summary] = toast.error.mock.calls[0]
-    expect(summary).toMatch(/Error generating/i)
+    expect(summary).toMatch(/Summary failed/i)
     expect(detail).toContain('Quarterly report')
     wrapper.unmount()
   })

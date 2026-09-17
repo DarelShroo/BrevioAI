@@ -31,6 +31,7 @@ describe('LoginView', () => {
           name: 'password-recovery',
           component: { template: '<div />' },
         },
+        { path: '/comparar', name: 'comparar', component: { template: '<div />' } },
       ],
     })
     await router.push('/auth/login')
@@ -66,7 +67,7 @@ describe('LoginView', () => {
     // Form submit still validates even when the button would be disabled in the UI.
     await wrapper.find('form').trigger('submit.prevent')
     await flushPromises()
-    expect(wrapper.text()).toMatch(/Identity is required/i)
+    expect(wrapper.text()).toMatch(/Username or email is required/i)
     expect(wrapper.text()).toMatch(/Password is required/i)
     expect(loginMock).not.toHaveBeenCalled()
   })

@@ -8,6 +8,7 @@ import summaryEsHeadings from '@/__tests__/fixtures/summary-es-headings.md?raw'
 import summaryEsTablesCode from '@/__tests__/fixtures/summary-es-tables-code.md?raw'
 import summaryEsLong from '@/__tests__/fixtures/summary-es-long-imperfect.md?raw'
 import summaryEnShort from '@/__tests__/fixtures/summary-en-short.md?raw'
+import pdfExportSample from '@/__tests__/fixtures/pdf-export-sample.md?raw'
 
 function asDom(html: string) {
   const root = document.createElement('div')
@@ -112,6 +113,29 @@ https://brevio.example/autolink
     expect(en.html.toLowerCase()).toContain('javascript')
   })
 
+  it('renders the PDF export sample with the same semantic HTML the backend exports', () => {
+    const { html } = renderMarkdown(pdfExportSample)
+    const root = asDom(html)
+    expect(root.querySelector('h1')?.textContent).toContain('Título principal')
+    expect(root.querySelector('h2')?.textContent).toContain('Sección')
+    expect(root.querySelector('h3')?.textContent).toContain('Subsección')
+    expect(root.querySelector('strong')?.textContent).toBe('negrita')
+    expect(root.querySelector('em')?.textContent).toBe('cursiva')
+    expect(root.querySelector('a[href="https://example.com"]')).toBeTruthy()
+    expect(root.querySelector('ul')).toBeTruthy()
+    expect(root.querySelector('ul ul')).toBeTruthy()
+    expect(root.querySelector('ol')).toBeTruthy()
+    expect(root.querySelector('blockquote')?.textContent).toContain('Esto es una cita')
+    expect(root.querySelector('hr')).toBeTruthy()
+    expect(root.querySelector('.md-code')).toBeTruthy()
+    expect(root.querySelector('.md-code pre code')?.textContent).toContain('async def main')
+    expect(root.querySelector('.md-code pre code')?.textContent).toMatch(/\n\s+print/)
+    expect(root.querySelector('.md-table')).toBeTruthy()
+    expect(root.querySelector('th')?.textContent).toContain('Campo')
+    expect(html).toContain('8192')
+    expect(html).toContain('ñ')
+  })
+
   it('sanitizes xss payloads', () => {
     const payloads = [
       `<script>alert('xss')</script>`,
@@ -166,6 +190,21 @@ describe('MarkdownViewer', () => {
     expect(wrapper.find('[data-testid="markdown-toc"]').text()).toContain('Intro')
     expect(wrapper.find('[data-testid="markdown-toc"]').text()).toContain('Details')
     expect(wrapper.text()).toContain('Copy')
+    wrapper.unmount()
+  })
+
+  it('starts with toc closed when tocDefaultOpen is false', async () => {
+    const wrapper = mount(MarkdownViewer, {
+      props: {
+        source: '# Intro\n\n## Details\n\nHello\n',
+        tocDefaultOpen: false,
+      },
+    })
+    expect(wrapper.find('.md-layout--toc-closed').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="markdown-toc"] .md-toc__nav.is-open').exists()).toBe(false)
+    await wrapper.find('[data-testid="markdown-toc-toggle"]').trigger('click')
+    expect(wrapper.find('.md-layout--toc-open').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="markdown-toc"] .md-toc__nav.is-open').exists()).toBe(true)
     wrapper.unmount()
   })
 

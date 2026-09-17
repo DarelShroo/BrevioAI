@@ -32,6 +32,6 @@ describe('parseApiError', () => {
       message: 'Network Error',
       response: undefined,
     }
-    expect(parseApiError(axiosLike)).toContain('Backend unavailable')
+    expect(parseApiError(axiosLike)).toContain('can’t reach the server')
   })
 })

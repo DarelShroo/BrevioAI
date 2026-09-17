@@ -59,7 +59,7 @@ describe('EstimatePanel', () => {
         },
       },
     })
-    expect(wrapper.text()).toContain('Ready to process')
+    expect(wrapper.text()).toContain('Ready to run')
     expect(wrapper.text()).toContain('3')
   })
 })
