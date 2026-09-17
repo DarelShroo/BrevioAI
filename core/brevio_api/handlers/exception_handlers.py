@@ -84,7 +84,10 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     code = getattr(exc, "code", None)
     if code:
         content["code"] = code
-    return JSONResponse(status_code=exc.status_code, content=content)
+    headers = getattr(exc, "headers", None) or {}
+    return JSONResponse(
+        status_code=exc.status_code, content=content, headers=dict(headers)
+    )
 
 
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -200,7 +203,10 @@ async def provider_error_exception_handler(
         message = "Cuota o fondos insuficientes en la cuenta del proveedor."
     elif exc.kind == ProviderErrorKind.INSUFFICIENT_CREDITS:
         status_code = 402
-        message = "Esta solicitud de pago por uso requiere créditos en tu cuenta."
+        message = (
+            getattr(exc, "message", None)
+            or "Créditos insuficientes para procesar esta solicitud."
+        )
     elif exc.kind == ProviderErrorKind.MODEL_NOT_ALLOWED:
         status_code = 403
         message = "Este modelo no está disponible en el entorno actual."

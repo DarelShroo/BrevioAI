@@ -9,7 +9,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from jwt import ExpiredSignatureError, PyJWTError
 from pydantic import ValidationError
 from starlette.requests import Request
@@ -37,9 +36,17 @@ from core.brevio_api.routers import (
     auth_router,
     brevio_router,
     events_router,
+    examples_router,
+    plans_router,
     user_credential_router,
     user_router,
 )
+from core.brevio_api.utils.security_runtime import (
+    SecurityHeadersMiddleware,
+    assert_secure_runtime_config,
+    docs_urls_for_environment,
+)
+from core.shared.utils.environment import is_production_environment
 
 load_dotenv()
 
@@ -57,12 +64,41 @@ db = AsyncDB()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    # Código de startup
+    assert_secure_runtime_config()
     await db.verify_connection()
+    try:
+        from urllib.parse import urlparse
+
+        from core.brevio_api.services.billing.credit_service import CreditService
+        from core.brevio_api.services.billing.product_limit_service import (
+            ProductLimitService,
+        )
+        from core.brevio_api.services.billing.usage_service import UsageBillingService
+        from core.brevio_api.repositories.billing.usage_repositories import (
+            CostRecordRepository,
+            UsageRecordRepository,
+            usage_billing_collections,
+        )
+
+        uri = os.getenv("MONGODB_URI", "")
+        path = urlparse(uri).path or "/brevio"
+        db_name = path.lstrip("/").split("?")[0] or "brevio"
+        database = db.database(db_name)
+        await CreditService.from_db(database).ensure_indexes()
+        await ProductLimitService.from_db(database).ensure_indexes()
+        ucols = usage_billing_collections(database)
+        usage = UsageBillingService(
+            UsageRecordRepository(ucols["usage"]),
+            CostRecordRepository(ucols["costs"]),
+        )
+        await usage.ensure_indexes()
+    except Exception:
+        logging.getLogger(__name__).exception("event=billing_indexes_startup_failed")
     yield
-    # Código de shutdown (si hace falta cerrar conexión)
     await db.close()
 
+
+_docs_url, _redoc_url, _openapi_url = docs_urls_for_environment()
 
 app = FastAPI(
     title="Brevio API",
@@ -80,18 +116,20 @@ app = FastAPI(
         "name": "Brevio Development Team",
         "url": "https://github.com/BrevioAI",
     },
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json",
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
+    openapi_url=_openapi_url,
     json_encoder=custom_jsonable_encoder,
+    lifespan=lifespan,
 )
 
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_allow_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-API-KEY", "Last-Event-ID"],
 )
 
 # Registro de manejadores de excepciones
@@ -107,17 +145,23 @@ app.add_exception_handler(PyJWTError, jwt_error_exception_handler)  # type: igno
 app.add_exception_handler(ProviderError, provider_error_exception_handler)  # type: ignore[arg-type]
 app.add_exception_handler(TranscriptionError, transcription_error_exception_handler)  # type: ignore[arg-type]
 
+from core.brevio_api.routers.stripe_router import router as stripe_router
+
 app.include_router(auth_router)
 app.include_router(brevio_router)
 app.include_router(events_router)
+app.include_router(examples_router)
+app.include_router(plans_router)
 app.include_router(user_router)
 app.include_router(user_credential_router)
+app.include_router(stripe_router)
 
 
 def setup_logging() -> None:
-    log_level = os.getenv("LOG_LEVEL", "DEBUG").upper()  # Cambia por INFO en producción
+    default_level = "INFO" if is_production_environment() else "DEBUG"
+    log_level = os.getenv("LOG_LEVEL", default_level).upper()
     logging.basicConfig(
-        level=getattr(logging, log_level),
+        level=getattr(logging, log_level, logging.INFO),
         format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
         handlers=[logging.StreamHandler()],
     )
