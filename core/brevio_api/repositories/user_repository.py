@@ -116,7 +116,7 @@ class UserRepository:
                     )
 
             for key, value in fields.items():
-                if isinstance(value, str) and key.endswith("_id"):
+                if isinstance(value, str) and key.endswith("_id") and key not in ["stripe_customer_id", "stripe_subscription_id", "plan_id"]:
                     try:
                         fields[key] = ObjectId(value)
                     except (InvalidId, TypeError):

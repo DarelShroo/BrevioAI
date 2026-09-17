@@ -40,12 +40,19 @@ class RefreshSessionRepository:
         self,
         family_id: str,
         *,
+        expected_jti: str,
+        expected_token_hash: str,
         jti: str,
         token_hash: str,
         expires_at: datetime,
     ) -> Optional[RefreshSession]:
         updated = await self.collection.find_one_and_update(
-            {"family_id": family_id, "revoked": False},
+            {
+                "family_id": family_id,
+                "revoked": False,
+                "jti": expected_jti,
+                "token_hash": expected_token_hash,
+            },
             {
                 "$set": {
                     "jti": jti,
