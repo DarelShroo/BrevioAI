@@ -32,6 +32,11 @@ def mock_db(monkeypatch):
 
 def test_can_transition_status_idempotent_and_terminal():
     assert can_transition_status(None, JobStatus.PROCESSING.value) is True
+    assert can_transition_status(None, JobStatus.QUEUED.value) is True
+    assert (
+        can_transition_status(JobStatus.QUEUED.value, JobStatus.PROCESSING.value)
+        is True
+    )
     assert (
         can_transition_status(JobStatus.PROCESSING.value, JobStatus.COMPLETED.value)
         is True
@@ -59,6 +64,10 @@ def test_can_transition_status_idempotent_and_terminal():
     )
     assert (
         can_transition_status(JobStatus.FAILED.value, JobStatus.PROCESSING.value)
+        is False
+    )
+    assert (
+        can_transition_status(JobStatus.QUEUED.value, JobStatus.COMPLETED.value)
         is False
     )
 
