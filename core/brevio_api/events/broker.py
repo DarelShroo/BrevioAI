@@ -41,12 +41,14 @@ def is_redis_url(url: str | None) -> bool:
 
 
 def events_redis_url() -> str | None:
+    from core.shared.utils.redis_url import resolve_redis_url
+
     explicit = os.getenv("EVENTS_REDIS_URL")
     if is_redis_url(explicit):
-        return explicit
+        return resolve_redis_url(explicit)
     broker = os.getenv("CELERY_BROKER_URL")
     if is_redis_url(broker):
-        return broker
+        return resolve_redis_url(broker)
     return None
 
 

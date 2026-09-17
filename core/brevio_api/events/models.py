@@ -14,6 +14,7 @@ from core.shared.enums.job_status import JobStatus
 class SummaryEventType(str, Enum):
     COMPLETED = "summary.completed"
     FAILED = "summary.failed"
+    PROGRESS = "summary.progress"
 
 
 class SummaryEventError(BaseModel):
@@ -30,6 +31,9 @@ class SummaryJobEvent(BaseModel):
     event_id: str = ""
     document_name: str = ""
     error: Optional[SummaryEventError] = None
+    progress: Optional[int] = None
+    global_progress: Optional[int] = None
+    stage: Optional[str] = None
 
     @classmethod
     def completed(
@@ -71,4 +75,29 @@ class SummaryJobEvent(BaseModel):
                 code=error_code or "FAILED",
                 message=error_message or "Summary generation failed",
             ),
+        )
+
+    @classmethod
+    def progress(
+        cls,
+        *,
+        job_id: str,
+        document_id: str,
+        status: JobStatus,
+        progress: int,
+        stage: str,
+        global_progress: Optional[int] = None,
+        document_name: str = "",
+        event_id: str = "",
+    ) -> "SummaryJobEvent":
+        return cls(
+            type=SummaryEventType.PROGRESS,
+            job_id=job_id,
+            document_id=document_id,
+            status=status,
+            progress=progress,
+            stage=stage,
+            global_progress=global_progress,
+            document_name=document_name,
+            event_id=event_id,
         )

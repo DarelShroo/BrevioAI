@@ -1,139 +1,114 @@
 import asyncio
 import logging
-from typing import List, Tuple
+from typing import Any
 
 from asgiref.sync import async_to_sync
-from bson import ObjectId, errors
 from celery import shared_task
 
-from core.brevio.enums.extension import (
-    document_extension_values,
-    media_extension_values,
-)
-from core.brevio.enums.language import LanguageType
-from core.brevio.enums.output_format_type import OutputFormatType
-from core.brevio.enums.summary_level import SummaryLevel
-from core.brevio.models.prompt_config_model import PromptConfig
 from core.brevio_api.services.brevio_service import BrevioService
-from core.shared.enums.model import ModelType
-from core.shared.models.brevio.brevio_generate import BrevioGenerate
+from core.brevio_api.services.job_lifecycle import JobHeartbeat
 
 logger = logging.getLogger(__name__)
 
 
-@shared_task(name="core.brevio_api.tasks.process_summary_task")
-def process_summary_task(
-    files: List[Tuple[str, bytes]],
-    language: str,
-    model: str,
-    category: str,
-    style: str,
-    format: str,
-    summary_level: str,
-    _current_user: str,
-    is_media: bool = False,
-    folder_entry_id: str | None = None,
-    transcription_provider: str | None = None,
-    transcription_model: str | None = None,
-    max_output_tokens: int | None = None,
-    temperature: float | None = None,
-    reasoning_effort: str | None = None,
-) -> dict:
-    _ = max_output_tokens
-    _ = temperature
-    allowed_extensions = (
-        media_extension_values() if is_media else document_extension_values()
-    )
-    files_filtered = [
-        (name, content)
-        for name, content in files
-        if any(name.lower().endswith(f".{ext.lower()}") for ext in allowed_extensions)
-    ]
+@shared_task(
+    name="core.brevio_api.tasks.process_summary_task",
+    bind=True,
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
+def process_summary_task(self, job_id: str, **legacy_kwargs: Any) -> dict:
+    """Execute a queued summary job by id. Never accepts file bytes.
 
-    if not files_filtered:
-        logger.error("No se encontraron archivos válidos para procesar")
-        raise ValueError("No se encontraron archivos válidos para procesar")
-
-    prompt_config = PromptConfig(
-        model=ModelType(model),
-        category=category,
-        style=style,
-        format=OutputFormatType(format),
-        language=LanguageType(language),
-        summary_level=SummaryLevel(summary_level),
-        reasoning_effort=reasoning_effort,
-    )
-
-    brevio_service = BrevioService()
-
-    service_method = (
-        brevio_service.generate_summary_documents
-        if not is_media
-        else brevio_service.generate_summary_media_upload
-    )
-
-    try:
-        result = async_to_sync(service_method)(
-            files_filtered,
-            _current_user,
-            prompt_config,
-            folder_entry_id=folder_entry_id,
-            **(
-                {
-                    "transcription_provider": transcription_provider,
-                    "transcription_model": transcription_model,
-                }
-                if is_media
-                else {}
-            ),
+    ``legacy_kwargs`` absorbs old signatures during rolling deploys; bytes
+    payloads are rejected explicitly.
+    """
+    if "files" in legacy_kwargs and legacy_kwargs["files"] is not None:
+        logger.error(
+            "event=celery_bytes_payload_rejected job_id=%s",
+            job_id or legacy_kwargs.get("folder_entry_id"),
         )
-    except Exception as e:
-        logger.error(f"Error al procesar la tarea de resumen: {str(e)}")
-        raise
-
-    return {
-        "message": f"Resumen generado exitosamente para el usuario {_current_user}",
-        "folder_entry_id": folder_entry_id,
-        "result": result,
-    }
-
-
-@shared_task(name="core.brevio_api.tasks.generate_summary_task")
-def generate_summary_task(brevio_generate_dict: dict, user_id: str) -> dict:
-    try:
-        brevio_generate_dict["prompt_config"]["id"] = ObjectId(
-            brevio_generate_dict["prompt_config"]["id"]
+        raise ValueError(
+            "process_summary_task no longer accepts file bytes; pass job_id only"
         )
-    except errors.InvalidId:
-        raise ValueError("El valor de prompt_config.id no es un ObjectId válido")
 
-    brevio_generate = BrevioGenerate(**brevio_generate_dict)
-    brevio_service = BrevioService()
+    resolved_job_id = job_id or legacy_kwargs.get("folder_entry_id")
+    if not resolved_job_id:
+        raise ValueError("job_id is required")
 
-    try:
-        result = asyncio.run(
-            _wrapped_generate(brevio_service, brevio_generate, user_id)
+    return async_to_sync(_run_claimed_job)(str(resolved_job_id))
+
+
+@shared_task(
+    name="core.brevio_api.tasks.generate_summary_task",
+    bind=True,
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
+def generate_summary_task(self, job_id: str, **legacy_kwargs: Any) -> dict:
+    """YouTube/path jobs: transport job_id only (payload lives on FolderEntry)."""
+    if "brevio_generate_dict" in legacy_kwargs:
+        # Legacy rolling-deploy path: still accept once, but prefer job_id.
+        logger.warning(
+            "event=legacy_generate_payload_used job_id=%s",
+            job_id or "none",
         )
-        return result
+    resolved_job_id = job_id or legacy_kwargs.get("folder_entry_id")
+    if not resolved_job_id:
+        raise ValueError("job_id is required")
+    return async_to_sync(_run_claimed_job)(str(resolved_job_id))
+
+
+@shared_task(name="core.brevio_api.tasks.reconcile_stale_jobs_task")
+def reconcile_stale_jobs_task() -> dict:
+    service = BrevioService()
+    return async_to_sync(service.reconcile_stale_jobs)()
+
+
+@shared_task(name="core.brevio_api.tasks.dispatch_capacity_jobs_task")
+def dispatch_capacity_jobs_task() -> dict:
+    """FASE 6 fair dispatcher tick."""
+    service = BrevioService()
+    return async_to_sync(service.dispatch_waiting_jobs)()
+
+
+async def _run_claimed_job(job_id: str) -> dict:
+    service = BrevioService()
+    claimed = await service.claim_summary_job(job_id)
+    if claimed is None:
+        return {"status": "ignored", "job_id": job_id, "reason": "not_claimable"}
+
+    heartbeat = JobHeartbeat(job_id)
+    heartbeat.start()
+    try:
+        result = await service.execute_stored_summary_job(job_id)
+        return {
+            "status": "ok",
+            "job_id": job_id,
+            "result": result,
+        }
     except Exception as exc:
         logger.error(
-            f"[ERROR] Falló generación de resumen para usuario {user_id}: {exc}"
+            "event=job_execution_failed job_id=%s error=%s",
+            job_id,
+            type(exc).__name__,
+            exc_info=True,
         )
         raise
-
-
-async def _wrapped_generate(
-    service: BrevioService,
-    brevio_generate: BrevioGenerate,
-    user_id: str,
-) -> dict:
-    try:
-        return await service.generate(brevio_generate, user_id)
     finally:
-        tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-        if tasks:
-            logger.debug(f"Cancelando {len(tasks)} tareas pendientes...")
+        heartbeat.stop()
+        try:
+            await service.release_capacity_for_job(job_id)
+        except Exception:
+            logger.exception(
+                "event=capacity_release_in_finally_failed job_id=%s", job_id
+            )
+        # Cancel stray asyncio tasks from nested loops (YouTube path).
+        try:
+            tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
             for task in tasks:
                 task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
-            logger.debug("Tareas pendientes canceladas.")
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+        except Exception:
+            pass
