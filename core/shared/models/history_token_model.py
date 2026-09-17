@@ -87,6 +87,7 @@ class HistoryTokenModel(BaseModel):
     toc_chars_after: int = 0
     toc_drop_ratio: float = 0.0
     extraction_kind: str = "generation"
+    # Operational / logs.json only — NOT commercial authority (FASE 4: CostRecord).
     estimated_provider_cost: float = 0.0
     cost_currency: str = "USD"
     pricing_version: str = ""

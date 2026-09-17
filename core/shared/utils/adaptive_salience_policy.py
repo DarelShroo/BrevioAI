@@ -193,6 +193,13 @@ class AdaptiveSaliencePolicy:
             int(artifact_target * 0.55),
             min(absolute_floor, artifact_target),
         )
+        # Short/medium docs: target*0.55 can exceed the source retention floor and
+        # make below_output_min reject legitimate hierarchical/changelog artifacts.
+        # Long docs already have retention_floor >= computed min, so this is a no-op.
+        output_min_tokens = min(
+            output_min_tokens,
+            max(absolute_floor, retention_floor),
+        )
         call_target = min(artifact_target, per_call_cap)
         output_max_tokens = min(
             per_call_cap,

@@ -121,7 +121,7 @@ MODEL_PRICING_REGISTRY: Dict[ModelType, PricingSnapshot] = {
         output_price_per_million=0.0,
         cached_input_price_per_million=0.0,
         currency="USD",
-        **_commercial_fields(minimum_credits=0),
+        **_commercial_fields(minimum_credits=1),
     ),
     ModelType.GPT_OSS_20B: PricingSnapshot(
         provider="ollama",
@@ -130,7 +130,7 @@ MODEL_PRICING_REGISTRY: Dict[ModelType, PricingSnapshot] = {
         output_price_per_million=0.0,
         cached_input_price_per_million=0.0,
         currency="USD",
-        **_commercial_fields(minimum_credits=0),
+        **_commercial_fields(minimum_credits=1),
     ),
     ModelType.GEMMA4_31B_IQ3: PricingSnapshot(
         provider="ollama",
@@ -139,7 +139,7 @@ MODEL_PRICING_REGISTRY: Dict[ModelType, PricingSnapshot] = {
         output_price_per_million=0.0,
         cached_input_price_per_million=0.0,
         currency="USD",
-        **_commercial_fields(minimum_credits=0),
+        **_commercial_fields(minimum_credits=1),
     ),
     ModelType.QWEN3_8B: PricingSnapshot(
         provider="ollama",
@@ -148,7 +148,7 @@ MODEL_PRICING_REGISTRY: Dict[ModelType, PricingSnapshot] = {
         output_price_per_million=0.0,
         cached_input_price_per_million=0.0,
         currency="USD",
-        **_commercial_fields(minimum_credits=0),
+        **_commercial_fields(minimum_credits=1),
     ),
     ModelType.QWEN3_14B_BASE: PricingSnapshot(
         provider="ollama",
@@ -157,7 +157,7 @@ MODEL_PRICING_REGISTRY: Dict[ModelType, PricingSnapshot] = {
         output_price_per_million=0.0,
         cached_input_price_per_million=0.0,
         currency="USD",
-        **_commercial_fields(minimum_credits=0),
+        **_commercial_fields(minimum_credits=1),
     ),
     ModelType.QWEN3_14B: PricingSnapshot(
         provider="ollama",
@@ -166,7 +166,7 @@ MODEL_PRICING_REGISTRY: Dict[ModelType, PricingSnapshot] = {
         output_price_per_million=0.0,
         cached_input_price_per_million=0.0,
         currency="USD",
-        **_commercial_fields(minimum_credits=0),
+        **_commercial_fields(minimum_credits=1),
     ),
     ModelType.QWEN3_32B: PricingSnapshot(
         provider="ollama",
@@ -175,7 +175,7 @@ MODEL_PRICING_REGISTRY: Dict[ModelType, PricingSnapshot] = {
         output_price_per_million=0.0,
         cached_input_price_per_million=0.0,
         currency="USD",
-        **_commercial_fields(minimum_credits=0),
+        **_commercial_fields(minimum_credits=1),
     ),
     ModelType.GPT_4: PricingSnapshot(
         provider="openai",
@@ -212,6 +212,25 @@ def calculate_provider_cost(
     return expected_cost, max_cost
 
 
+def calculate_actual_provider_cost(
+    *,
+    input_tokens: int,
+    output_tokens: int,
+    cached_input_tokens: int,
+    snapshot: PricingSnapshot,
+) -> float:
+    """Real usage cost. Cached tokens priced at cached_input rate when > 0."""
+    cached = max(0, int(cached_input_tokens or 0))
+    inp = max(0, int(input_tokens or 0))
+    out = max(0, int(output_tokens or 0))
+    billable_input = max(0, inp - cached)
+    return (
+        billable_input * snapshot.input_price_per_million
+        + cached * snapshot.cached_input_price_per_million
+        + out * snapshot.output_price_per_million
+    ) / 1_000_000
+
+
 def convert_to_platform_currency(cost: float, snapshot: PricingSnapshot) -> float:
     converted = cost * snapshot.fx_rate_to_platform
     return round(converted * (1 + snapshot.commercial_margin), 6)
@@ -220,7 +239,8 @@ def convert_to_platform_currency(cost: float, snapshot: PricingSnapshot) -> floa
 def calculate_credits(cost: float, snapshot: PricingSnapshot) -> int:
     if snapshot.credit_unit_value <= 0:
         raise ValueError("credit_unit_value must be positive")
+    # Zero-priced local models still burn the plan's minimum credit unit.
     if snapshot.input_price_per_million <= 0 and snapshot.output_price_per_million <= 0:
-        return 0
+        return max(0, int(snapshot.minimum_credits))
     credits = ceil(cost / snapshot.credit_unit_value)
     return max(snapshot.minimum_credits, credits)

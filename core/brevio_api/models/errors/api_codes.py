@@ -33,12 +33,40 @@ class ApiErrorCode(str, Enum):
     SUMMARY_AFTER_TRANSCRIPTION_FAILED = "SUMMARY_AFTER_TRANSCRIPTION_FAILED"
     MODEL_NOT_ALLOWED = "MODEL_NOT_ALLOWED"
     GENERATION_PARAM_INVALID = "GENERATION_PARAM_INVALID"
+    # FASE 5 — product / plan limits
+    PLAN_DOCUMENT_LIMIT = "PLAN_DOCUMENT_LIMIT"
+    PLAN_PAGE_LIMIT = "PLAN_PAGE_LIMIT"
+    PLAN_BYTES_LIMIT = "PLAN_BYTES_LIMIT"
+    PLAN_PERIOD_LIMIT = "PLAN_PERIOD_LIMIT"
+    PLAN_CONCURRENCY_LIMIT = "PLAN_CONCURRENCY_LIMIT"
+    CREDIT_LIMIT = "CREDIT_LIMIT"
+    MODEL_NOT_FUNDED = "MODEL_NOT_FUNDED"
+    BYOK_NOT_ALLOWED = "BYOK_NOT_ALLOWED"
+    MEDIA_DISABLED = "MEDIA_DISABLED"
+    YOUTUBE_DISABLED = "YOUTUBE_DISABLED"
+    # FASE 6 — capacity / scheduler
+    CAPACITY_GLOBAL_LIMIT = "CAPACITY_GLOBAL_LIMIT"
+    CAPACITY_USER_LIMIT = "CAPACITY_USER_LIMIT"
+    QUEUE_GLOBAL_LIMIT = "QUEUE_GLOBAL_LIMIT"
+    SCHEDULER_UNAVAILABLE = "SCHEDULER_UNAVAILABLE"
+    JOB_RESERVATION_EXPIRED = "JOB_RESERVATION_EXPIRED"
+    # FASE 7 — API rate limit / anti-abuse
+    RATE_LIMITED = "RATE_LIMITED"
+    ABUSE_COOLDOWN = "ABUSE_COOLDOWN"
 
 
 class CodedHTTPException(HTTPException):
     def __init__(
-        self, status_code: int, code: ApiErrorCode | str, detail: str | None = None
+        self,
+        status_code: int,
+        code: ApiErrorCode | str,
+        detail: str | None = None,
+        headers: dict | None = None,
     ):
         code_value = code.value if isinstance(code, ApiErrorCode) else code
-        super().__init__(status_code=status_code, detail=detail or code_value)
+        super().__init__(
+            status_code=status_code,
+            detail=detail or code_value,
+            headers=headers,
+        )
         self.code = code_value

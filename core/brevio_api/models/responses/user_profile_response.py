@@ -12,6 +12,10 @@ class UserProfileResponse(BaseResponseModel):
     email: EmailStr
     user_credit: float
     folder_id: Optional[str] = None
+    plan_id: str = "free"
+    plan_name: str = "Free"
+    plan_version: str = "1"
+    entitlements: Optional[dict] = None
 
 
 class UserProfileDataResponse(BaseResponse):

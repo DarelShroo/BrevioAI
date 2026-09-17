@@ -12,6 +12,7 @@ from pydantic import (
 )
 
 from core.brevio.models.prompt_config_model import PromptConfig
+from core.shared.utils.youtube_url import normalize_youtube_url
 
 
 class MediaEntry(BaseModel):
@@ -23,6 +24,16 @@ class MediaEntry(BaseModel):
         if not self.url and not self.path:
             raise ValueError("Se requiere 'url' o 'path'")
         return self
+
+    @field_validator("url", mode="before")
+    @classmethod
+    def validate_youtube_only_url(
+        cls: Type["MediaEntry"], v: Optional[object]
+    ) -> Optional[object]:
+        if v is None:
+            return None
+        # YouTube playlist/video jobs must never accept arbitrary remote URLs.
+        return normalize_youtube_url(str(v))
 
     @field_validator("path", mode="before")
     @classmethod

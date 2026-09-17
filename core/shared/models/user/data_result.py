@@ -26,6 +26,9 @@ class DataResult(BaseModel):
     # None = legacy documents written before explicit job status existed.
     status: Optional[str] = None
     phase: Optional[str] = None
+    progress: int = 0
+    stage_progress: Optional[int] = None
+    weight: int = 1
     success: Optional[bool] = None
     error_type: Optional[str] = None
     error_code: Optional[str] = None
