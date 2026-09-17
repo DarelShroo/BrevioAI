@@ -168,30 +168,25 @@ async def test_ensure_model_access_byok_skips_credits(
 
 @pytest.mark.asyncio
 @patch.dict(os.environ, {"OPENAI_API_KEY": "plat_key", "ENVIRONMENT": "production"})
-async def test_ensure_model_access_pay_per_use_requires_credits(
+async def test_ensure_model_access_pay_per_use_allows_platform_key_without_legacy_credits(
     resolver, mock_policy, mock_repository
 ):
+    """Credits are gated at CreditService.reserve_for_job, not here."""
     mock_repository.get_active_credentials_for_user.return_value = []
     mock_policy.can_use_platform_credential.return_value = False
 
-    with pytest.raises(ProviderError) as exc:
-        await resolver.ensure_model_access("u1", ModelType.GPT_4O_MINI, user_credits=0)
-    assert exc.value.kind == ProviderErrorKind.INSUFFICIENT_CREDITS
-
-    await resolver.ensure_model_access("u1", ModelType.GPT_4O_MINI, user_credits=5)
+    await resolver.ensure_model_access("u1", ModelType.GPT_4O_MINI, user_credits=0)
 
 
 @pytest.mark.asyncio
 @patch.dict(os.environ, {"OPENAI_API_KEY": "plat_key", "ENVIRONMENT": "development"})
-async def test_ensure_model_access_pay_per_use_requires_credits_in_dev(
+async def test_ensure_model_access_pay_per_use_allows_platform_key_in_dev(
     resolver, mock_policy, mock_repository
 ):
     mock_repository.get_active_credentials_for_user.return_value = []
     mock_policy.can_use_platform_credential.return_value = True
 
-    with pytest.raises(ProviderError) as exc:
-        await resolver.ensure_model_access("u1", ModelType.GPT_4O_MINI, user_credits=0)
-    assert exc.value.kind == ProviderErrorKind.INSUFFICIENT_CREDITS
+    await resolver.ensure_model_access("u1", ModelType.GPT_4O_MINI, user_credits=0)
 
 
 @pytest.mark.asyncio

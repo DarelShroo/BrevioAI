@@ -92,6 +92,36 @@ def test_c_extremely_short_output_fails():
     )
 
 
+def test_short_clip_changelog_artifact_passes_capped_output_min():
+    """Regression for folder_id 6aa98ec597a3c29b27d8921c (below_output_min:1071<1316)."""
+    policy = AdaptiveSaliencePolicy()
+    decision = policy.budget(
+        ModelType.QWEN3_14B, SummaryLevel.MODERATE, 7834, LanguageType.ENGLISH
+    )
+    # Synthetic body sized like the failed REDUCE (~1071 tokens / ~647 words).
+    body = ("Computer science covers algorithms, systems, and applications. " * 110).strip()
+    report = evaluate_artifact(
+        body,
+        QualitySignals(
+            source_tokens=7834,
+            source_words=5200,
+            map_tokens=1301,
+            map_words=780,
+            final_tokens=1071,
+            final_words=count_words(body),
+            output_min_tokens=decision.output_min_tokens,
+            output_target_tokens=decision.output_target_tokens,
+            output_hard_limit=decision.output_hard_limit,
+            summary_level=SummaryLevel.MODERATE,
+            route="hierarchical",
+        ),
+    )
+    assert decision.output_min_tokens <= 2200
+    assert int(decision.output_min_tokens * 0.40) <= 1071
+    assert report.deliverable
+    assert not any(reason.startswith("below_output_min:") for reason in report.reasons)
+
+
 def test_d_chatbot_output_fails_and_can_be_salvaged():
     assert looks_like_assistant_chat(CHATBOT)
     report = evaluate_artifact(

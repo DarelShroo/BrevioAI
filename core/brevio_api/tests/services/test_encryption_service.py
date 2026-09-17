@@ -41,3 +41,15 @@ def test_encryption_service_invalid_key_length():
     key = base64.urlsafe_b64encode(os.urandom(16)).decode("utf-8")
     with pytest.raises(EncryptionError):
         EncryptionService(key=key)
+
+
+def test_encryption_service_previous_key_fallback(monkeypatch):
+    old_key = base64.urlsafe_b64encode(os.urandom(32)).decode("utf-8")
+    new_key = base64.urlsafe_b64encode(os.urandom(32)).decode("utf-8")
+    legacy = EncryptionService(key=old_key)
+    encrypted = legacy.encrypt("sk-legacy", "user1", "cred1", "openai")
+
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", new_key)
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY_PREVIOUS", old_key)
+    rotated = EncryptionService()
+    assert rotated.decrypt(encrypted, "user1", "cred1", "openai") == "sk-legacy"

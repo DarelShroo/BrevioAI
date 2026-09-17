@@ -49,7 +49,9 @@ class StubAuthService:
     async def password_recovery_handshake(
         self, recovery_password: RecoveryPassword
     ) -> PasswordRecoveryResponse:
-        return PasswordRecoveryResponse(message="Código de recuperación enviado.")
+        return PasswordRecoveryResponse(
+            message="Si la cuenta existe, se ha enviado un código de recuperación."
+        )
 
     async def change_password(
         self, recovery_password_otp: RecoveryPasswordOtp
@@ -95,8 +97,8 @@ def test_login_success() -> None:
     refresh = _cookie_header(response, REFRESH_COOKIE_NAME)
     assert "HttpOnly" in access
     assert "HttpOnly" in refresh
-    assert "samesite=strict" in access.lower()
-    assert "samesite=strict" in refresh.lower()
+    assert "samesite=lax" in access.lower()
+    assert "samesite=lax" in refresh.lower()
     assert ACCESS_COOKIE_NAME in response.cookies
     assert REFRESH_COOKIE_NAME in response.cookies
 
@@ -166,7 +168,8 @@ def test_register_user_exists() -> None:
     class ErrorAuthService(StubAuthService):
         async def register(self, register_user: RegisterUser) -> AuthSession:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="User already exists"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unable to register with the provided credentials",
             )
 
     app.dependency_overrides[get_auth_service] = lambda: ErrorAuthService()
@@ -177,7 +180,10 @@ def test_register_user_exists() -> None:
     }
     response = client.post("/auth/register", json=payload)
     assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert response.json()["message"] == "User already exists"
+    assert (
+        response.json()["message"]
+        == "Unable to register with the provided credentials"
+    )
 
 
 def test_register_validation_error_missing_field() -> None:
@@ -193,23 +199,31 @@ def test_password_recovery_handshake_success() -> None:
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert data["status"] == "success"
-    assert data["data"]["message"] == "Código de recuperación enviado."
+    assert (
+        data["data"]["message"]
+        == "Si la cuenta existe, se ha enviado un código de recuperación."
+    )
 
 
-def test_password_recovery_handshake_user_not_found() -> None:
-    class ErrorAuthService(StubAuthService):
+def test_password_recovery_handshake_user_not_found_is_opaque() -> None:
+    """Missing accounts must not be distinguishable from existing ones."""
+
+    class MissingUserAuthService(StubAuthService):
         async def password_recovery_handshake(
             self, recovery_password: RecoveryPassword
         ) -> PasswordRecoveryResponse:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Credenciales inválidas."
+            return PasswordRecoveryResponse(
+                message="Si la cuenta existe, se ha enviado un código de recuperación."
             )
 
-    app.dependency_overrides[get_auth_service] = lambda: ErrorAuthService()
+    app.dependency_overrides[get_auth_service] = lambda: MissingUserAuthService()
     payload = {"identity": "test-not-found@gmail.com"}
     response = client.post("/auth/password-recovery-handshake", json=payload)
-    assert response.status_code == status.HTTP_404_NOT_FOUND
-    assert response.json()["message"] == "Credenciales inválidas."
+    assert response.status_code == status.HTTP_200_OK
+    assert (
+        response.json()["data"]["message"]
+        == "Si la cuenta existe, se ha enviado un código de recuperación."
+    )
 
 
 def test_password_recovery_handshake_validation_error_missing_field() -> None:
@@ -233,14 +247,14 @@ def test_password_recovery_verify_invalid_otp() -> None:
         ) -> PasswordRecoveryResponse:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="El código de recuperación es incorrecto.",
+                detail="Código de recuperación inválido o expirado.",
             )
 
     app.dependency_overrides[get_auth_service] = lambda: ErrorAuthService()
     payload = {"email": "user@example.com", "otp": "000000", "password": "NewPass1!"}
     response = client.post("/auth/password-recovery-verify", json=payload)
     assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert response.json()["message"] == "El código de recuperación es incorrecto."
+    assert response.json()["message"] == "Código de recuperación inválido o expirado."
 
 
 def test_password_recovery_verify_user_not_found() -> None:
@@ -249,14 +263,15 @@ def test_password_recovery_verify_user_not_found() -> None:
             self, recovery_password_otp: RecoveryPasswordOtp
         ) -> PasswordRecoveryResponse:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no existe"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Código de recuperación inválido o expirado.",
             )
 
     app.dependency_overrides[get_auth_service] = lambda: ErrorAuthService()
     payload = {"email": "wrong@example.com", "otp": "123456", "password": "NewPass1!"}
     response = client.post("/auth/password-recovery-verify", json=payload)
-    assert response.status_code == status.HTTP_404_NOT_FOUND
-    assert response.json()["message"] == "Usuario no existe"
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.json()["message"] == "Código de recuperación inválido o expirado."
 
 
 def test_password_recovery_verify_validation_error_missing_field() -> None:

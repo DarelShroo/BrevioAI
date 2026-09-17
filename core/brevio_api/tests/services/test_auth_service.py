@@ -55,6 +55,8 @@ def auth_service(
 ) -> AuthService:
     auth_service = AuthService(mock_db, token_service)
     auth_service._user_service = user_service
+    auth_service._user_repository = MagicMock()
+    auth_service._user_repository.update_user = AsyncMock()
     auth_service._refresh_sessions = MagicMock()
     auth_service._refresh_sessions.create = AsyncMock()
     auth_service._refresh_sessions.get_by_family = AsyncMock()
@@ -105,6 +107,7 @@ async def test_register_success(
     )
 
     user_service.get_user_by_email.return_value = None
+    user_service.get_user_by_username.return_value = None
     user_service.create_user.return_value = created_user
     auth_service.directory_manager.createFolder = AsyncMock(
         return_value=FolderResponse(
@@ -151,7 +154,7 @@ async def test_login_user_not_found(
     ):
         with pytest.raises(HTTPException) as excinfo:
             await auth_service.login(user_login)
-    assert excinfo.value.status_code == 404
+    assert excinfo.value.status_code == 401
     assert "credenciales inválidas" in str(excinfo.value.detail).lower()
     user_service.get_user_by_email.assert_awaited_once_with(user_data["email"])
 
@@ -282,7 +285,9 @@ async def test_password_recovery_handshake(
                         recovery_data
                     )
 
-    assert result.message == "Código de recuperación enviado al correo electrónico."
+    assert result.message == (
+        "Si la cuenta existe, se ha enviado un código de recuperación."
+    )
     user_service.get_user_by_email.assert_awaited_once_with(user_data["email"])
     mock_update_user.assert_awaited_once()
     mock_email.return_value.send_recovery_password_email.assert_awaited_once_with(
@@ -362,5 +367,5 @@ async def test_change_password_invalid_otp(
             await auth_service.change_password(recovery_otp)
 
     assert excinfo.value.status_code == 400
-    assert "El código de recuperación es incorrecto." in str(excinfo.value.detail)
+    assert "Código de recuperación inválido o expirado." in str(excinfo.value.detail)
     user_service.get_user_by_email.assert_awaited_once_with(user_data["email"])

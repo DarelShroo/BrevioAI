@@ -166,8 +166,8 @@ async def test_folder_isolation_and_missing(
 
     with pytest.raises(CodedHTTPException) as forbidden:
         await service.require_owned_folder(str(other), str(folder.id))
-    assert forbidden.value.status_code == status.HTTP_403_FORBIDDEN
-    assert forbidden.value.code == ApiErrorCode.FOLDER_FORBIDDEN.value
+    assert forbidden.value.status_code == status.HTTP_404_NOT_FOUND
+    assert forbidden.value.code == ApiErrorCode.FOLDER_NOT_FOUND.value
 
     folders.get_by_id = AsyncMock(return_value=None)
     with pytest.raises(CodedHTTPException) as missing:

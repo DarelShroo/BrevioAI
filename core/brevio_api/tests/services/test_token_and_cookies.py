@@ -67,10 +67,28 @@ def test_auth_cookies_are_httponly_host_only_and_strict() -> None:
     )
     assert "HttpOnly" in access
     assert "HttpOnly" in refresh
-    assert "samesite=strict" in access.lower()
-    assert "samesite=strict" in refresh.lower()
+    assert "samesite=lax" in access.lower()
+    assert "samesite=lax" in refresh.lower()
     assert "domain=" not in access.lower()
     assert "path=/auth" in refresh.lower()
     clear_auth_cookies(response)
     cleared = response.headers.getlist("set-cookie")
     assert any("max-age=0" in item.lower() for item in cleared)
+
+
+def test_refresh_cookie_path_honors_api_prefix(monkeypatch) -> None:
+    monkeypatch.setenv("REFRESH_COOKIE_PATH", "/api/auth")
+    response = Response()
+    set_auth_cookies(
+        response,
+        access_token="access",
+        refresh_token="refresh",
+        access_max_age=900,
+        refresh_max_age=604800,
+    )
+    refresh = next(
+        item
+        for item in response.headers.getlist("set-cookie")
+        if item.startswith(f"{REFRESH_COOKIE_NAME}=")
+    )
+    assert "path=/api/auth" in refresh.lower()

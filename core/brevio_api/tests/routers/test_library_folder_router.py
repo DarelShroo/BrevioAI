@@ -83,15 +83,15 @@ def test_folder_forbidden_and_not_found() -> None:
     user_id = str(ObjectId())
     folders = AsyncMock()
     folders.require_owned_folder = AsyncMock(
-        side_effect=CodedHTTPException(403, ApiErrorCode.FOLDER_FORBIDDEN)
+        side_effect=CodedHTTPException(404, ApiErrorCode.FOLDER_NOT_FOUND)
     )
     folders.rename_folder = AsyncMock(
-        side_effect=CodedHTTPException(403, ApiErrorCode.FOLDER_FORBIDDEN)
+        side_effect=CodedHTTPException(404, ApiErrorCode.FOLDER_NOT_FOUND)
     )
     client = _client(user_id, folders=folders)
     response = client.patch(f"/users/folders/{ObjectId()}", json={"name": "Hack"})
-    assert response.status_code == 403
-    assert response.json()["code"] == ApiErrorCode.FOLDER_FORBIDDEN.value
+    assert response.status_code == 404
+    assert response.json()["code"] == ApiErrorCode.FOLDER_NOT_FOUND.value
 
     folders.rename_folder = AsyncMock(
         side_effect=CodedHTTPException(404, ApiErrorCode.FOLDER_NOT_FOUND)

@@ -106,8 +106,48 @@ class FakeBrevio:
     async def create_summary_job(self, user_id: str, **kwargs: Any) -> str:
         return "folder-abc123"
 
+    async def admit_summary_job_with_files(
+        self, user_id: str, files_data: Any, **kwargs: Any
+    ) -> tuple[str, bool]:
+        job_id = await self.create_summary_job(
+            user_id,
+            name=kwargs.get("name", ""),
+            original_name=kwargs.get("original_name"),
+            library_folder_id=kwargs.get("library_folder_id"),
+            source_type=kwargs.get("source_type"),
+            idempotency_key=kwargs.get("idempotency_key"),
+            transcription_provider=kwargs.get("transcription_provider"),
+            transcription_model=kwargs.get("transcription_model"),
+        )
+        return job_id, True
+
+    async def mark_job_enqueued(self, job_id: str) -> None:
+        return None
+
+    async def find_job_by_idempotency(
+        self, user_id: str, idempotency_key: str
+    ) -> str | None:
+        return None
+
+    @staticmethod
+    def _prompt_metadata(prompt_config: Any, source_type: str) -> dict[str, str]:
+        return {
+            "language": getattr(prompt_config.language, "name", "SPANISH"),
+            "model": getattr(prompt_config.model, "value", str(prompt_config.model)),
+            "category": prompt_config.category,
+            "style": prompt_config.style,
+            "format": getattr(prompt_config.format, "value", str(prompt_config.format)),
+            "summary_level": getattr(
+                prompt_config.summary_level, "value", str(prompt_config.summary_level)
+            ),
+            "source_type": source_type,
+        }
+
     async def get_user_credits(self, user_id: str) -> float:
         return 999.0
+
+    async def reserve_credits_for_admitted_job(self, **kwargs: Any) -> None:
+        return None
 
     def get_languages(self) -> List[str]:
         return ["ENGLISH", "SPANISH"]
@@ -213,9 +253,10 @@ def test_modelos() -> None:
 
 def test_conteo_playlist() -> None:
     app.dependency_overrides[get_brevio_service] = lambda: FakeBrevio()
-    app.dependency_overrides[verify_api_key] = lambda: API_KEY
+    app.dependency_overrides[get_current_user] = lambda: ObjectId()
     r = client.post(
-        "/brevio/count-yt-videos", json={"url": "https://youtube.com/playlist?list=ABC"}
+        "/brevio/count-yt-videos",
+        json={"url": "https://www.youtube.com/playlist?list=ABC"},
     )
     assert r.status_code == 200
     assert r.json()["data"]["count"] == 7
@@ -223,9 +264,10 @@ def test_conteo_playlist() -> None:
 
 def test_duracion_video() -> None:
     app.dependency_overrides[get_brevio_service] = lambda: FakeBrevio()
-    app.dependency_overrides[verify_api_key] = lambda: API_KEY
+    app.dependency_overrides[get_current_user] = lambda: ObjectId()
     r = client.post(
-        "/brevio/count-time-yt-video", json={"url": "https://youtube.com/watch?v=123"}
+        "/brevio/count-time-yt-video",
+        json={"url": "https://www.youtube.com/watch?v=123"},
     )
     assert r.status_code == 200
     assert r.json()["data"]["time"] == 3600
@@ -237,7 +279,7 @@ def test_summary_playlist(mock_prompt_config: PromptConfig) -> None:
     app.dependency_overrides[get_current_user] = lambda: ObjectId()
 
     payload = {
-        "data": [{"url": "https://youtube.com/playlist?list=XYZ"}],
+        "data": [{"url": "https://www.youtube.com/playlist?list=XYZ"}],
         "prompt_config": mock_prompt_config.model_dump(),
     }
     r = client.post("/brevio/summary-yt-playlist", json=payload)
@@ -391,7 +433,10 @@ def test_summary_documents_multiple_files_batch_name(
     assert r.status_code == 202
     assert captured["name"] == ""
     assert captured["original_name"] == "alpha.pdf; beta.docx"
-    assert [name for name, _ in delayed["files"]] == ["alpha.pdf", "beta.docx"]
+    assert delayed.get("job_id") == "folder-abc123" or delayed.get("args") == (
+        "folder-abc123",
+    ) or "files" not in delayed
+    assert "files" not in delayed
 
 
 def test_summary_documents_uses_explicit_entry_name(
@@ -519,9 +564,15 @@ def test_dev_allows_local_whisper_selection(
 ) -> None:
     monkeypatch.setenv("ENVIRONMENT", "development")
     delayed: dict[str, Any] = {}
+    captured: dict[str, Any] = {}
     _capture_task_delay(monkeypatch, delayed)
 
-    app.dependency_overrides[get_brevio_service] = lambda: FakeBrevio()
+    class CapturingBrevio(FakeBrevio):
+        async def create_summary_job(self, user_id: str, **kwargs: Any) -> str:
+            captured.update(kwargs)
+            return "folder-abc123"
+
+    app.dependency_overrides[get_brevio_service] = lambda: CapturingBrevio()
     app.dependency_overrides[verify_api_key] = lambda: API_KEY
     app.dependency_overrides[get_current_user] = lambda: ObjectId()
     r = _post_media(
@@ -531,7 +582,11 @@ def test_dev_allows_local_whisper_selection(
         extra={"transcription_provider": "local_whisper"},
     )
     assert r.status_code == 202, r.text
-    assert delayed.get("transcription_provider") == "local_whisper"
+    assert captured.get("transcription_provider") == "local_whisper"
+    assert delayed.get("job_id") == "folder-abc123" or delayed.get("args") == (
+        "folder-abc123",
+    )
+    assert "files" not in delayed
     assert "api_key" not in delayed
     assert "openai_api_key" not in delayed
 
@@ -624,8 +679,12 @@ def test_youtube_sends_resolved_transcription_provider(
     }
     r = client.post("/brevio/summary-yt-playlist", json=payload)
     assert r.status_code == 202, r.text
-    body = delayed["args"][0]
-    assert body["transcription_provider"] == "local_whisper"
+    # Celery now receives job_id only; payload is persisted on the job.
+    assert delayed.get("job_id") == "folder-abc123" or delayed.get("args") == (
+        "folder-abc123",
+    )
+    assert "brevio_generate_dict" not in delayed
+    assert not any(isinstance(a, dict) and "transcription_provider" in a for a in delayed.get("args", ()))
 
 
 def test_youtube_ignores_user_max_output_tokens(

@@ -3,8 +3,9 @@
 
 Discovers folders under ~/Documentos/libros, matches them to Brevio categories,
 keeps only styles whose source_types include text/pdf/docx, and submits the
-first PDF/DOCX in each folder (sorted by name). PDFs longer than 50 pages are
-clipped to a temporary copy; originals are never modified.
+first PDF/DOCX in each folder (sorted by name). Long PDFs are clipped to pages
+20-30 (1-based, inclusive) so the benchmark skips front matter / TOC; originals
+are never modified. Shorter PDFs are uploaded whole.
 
 Sends the requests. Pass --dry-run to print the plan without POSTing.
 """
@@ -31,7 +32,9 @@ PASSWORD = os.getenv("BREVIO_BENCHMARK_PASSWORD", "")
 API_KEY = os.getenv("API_KEY", "").strip()
 BOOKS_DIR = Path.home() / "Documentos" / "libros"
 ACCESS_COOKIE = "brevio_access"
-MAX_PAGES = 50
+# 1-based inclusive page window used for long PDFs (skips index / front matter).
+CLIP_START_PAGE = 20
+CLIP_END_PAGE = 30
 DOCUMENT_EXTS = {".pdf", ".docx"}
 DOCUMENT_SOURCE_TYPES = {"text", "pdf", "docx"}
 MEDIA_SOURCE_TYPES = {"video", "audio", "media", "image"}
@@ -65,10 +68,19 @@ def pdf_page_count(path: Path) -> int:
     return len(PdfReader(str(path)).pages)
 
 
-def clip_pdf(path: Path, pages: int, destination: Path) -> Path:
+def clip_page_window(total_pages: int) -> tuple[int, int] | None:
+    """Return 0-based [start, end) slice, or None to keep the full PDF."""
+    if total_pages < CLIP_START_PAGE:
+        return None
+    start = CLIP_START_PAGE - 1
+    end = min(CLIP_END_PAGE, total_pages)
+    return start, end
+
+
+def clip_pdf(path: Path, start: int, end: int, destination: Path) -> Path:
     reader = PdfReader(str(path))
     writer = PdfWriter()
-    for index in range(min(pages, len(reader.pages))):
+    for index in range(start, end):
         writer.add_page(reader.pages[index])
     with destination.open("wb") as handle:
         writer.write(handle)
@@ -206,11 +218,13 @@ def prepare_input(document: Path, workdir: Path) -> tuple[Path, int, int]:
     if document.suffix.lower() != ".pdf":
         return document, 1, 1
     total = pdf_page_count(document)
-    pages_used = min(total, MAX_PAGES)
-    if total <= MAX_PAGES:
-        return document, total, pages_used
-    clipped = workdir / f"{document.stem}__benchmark_50p.pdf"
-    clip_pdf(document, MAX_PAGES, clipped)
+    window = clip_page_window(total)
+    if window is None:
+        return document, total, total
+    start, end = window
+    pages_used = end - start
+    clipped = workdir / f"{document.stem}__benchmark_p{CLIP_START_PAGE}-{end}.pdf"
+    clip_pdf(document, start, end, clipped)
     return clipped, total, pages_used
 
 
@@ -258,7 +272,7 @@ def print_dry_run(
     books_dir: Path,
     model: str,
     language: str,
-    summary_level: str,
+    summary_levels: list[str],
 ) -> int:
     print("Brevio Document Benchmark")
     print()
@@ -270,7 +284,7 @@ def print_dry_run(
     print()
     print("Documents:")
     print()
-    total = 0
+    style_jobs = 0
     for item in plan:
         print(item["folder"])
         if item["error"]:
@@ -282,15 +296,20 @@ def print_dry_run(
         print(f"  ✓ {document.name}")
         if document.suffix.lower() == ".pdf":
             print(f"  ✓ {pages} pages")
-            if pages > MAX_PAGES:
-                print(f"  → benchmark input: first {MAX_PAGES} pages")
-            else:
+            window = clip_page_window(pages or 0)
+            if window is None:
                 print("  → benchmark input: complete document")
+            else:
+                start, end = window
+                print(
+                    f"  → benchmark input: pages {start + 1}-{end} "
+                    f"(skip front matter / TOC)"
+                )
         else:
             print("  → benchmark input: complete document")
         print(f"  styles: {', '.join(item['styles']) or '(none)'}")
         print()
-        total += len(item["styles"])
+        style_jobs += len(item["styles"])
     allowed = sorted(
         {
             style
@@ -304,7 +323,7 @@ def print_dry_run(
     print()
     print(f"Model: {model}")
     print(f"Language: {language}")
-    print(f"Summary level: {summary_level}")
+    print(f"Summary levels: {', '.join(summary_levels)}")
     print()
     print("Execution plan:")
     print()
@@ -313,8 +332,10 @@ def print_dry_run(
             continue
         print(f"{item['category']}:")
         for style in item["styles"]:
-            print(f"  - {style}")
+            for level in summary_levels:
+                print(f"  - {style} @ {level}")
         print()
+    total = style_jobs * max(1, len(summary_levels))
     print(f"Total executions: {total}")
     return total
 
@@ -330,8 +351,23 @@ def validate_or_stop(plan: list[dict], books_dir: Path) -> None:
     for item in runnable:
         if item["document"].suffix.lower() == ".pdf" and item["pages"] is None:
             fail(f"could not count pages for {item['document']}")
-        if item["pages"] is not None and min(item["pages"], MAX_PAGES) > MAX_PAGES:
-            fail("page limit invariant broken")
+        if item["pages"] is not None and item["pages"] < 1:
+            fail(f"invalid page count for {item['document']}")
+
+
+def parse_summary_levels(raw: list[str] | None) -> list[str]:
+    if not raw:
+        return ["moderate"]
+    levels: list[str] = []
+    seen: set[str] = set()
+    for chunk in raw:
+        for part in chunk.split(","):
+            level = part.strip().lower()
+            if not level or level in seen:
+                continue
+            seen.add(level)
+            levels.append(level)
+    return levels or ["moderate"]
 
 
 def parse_args() -> argparse.Namespace:
@@ -342,7 +378,16 @@ def parse_args() -> argparse.Namespace:
         help="Print the plan without calling POST /brevio/summary-documents.",
     )
     parser.add_argument("--language", default="ENGLISH", help="Prompt language enum name, e.g. ENGLISH")
-    parser.add_argument("--summary-level", default="moderate")
+    parser.add_argument(
+        "--summary-level",
+        action="append",
+        dest="summary_levels",
+        help=(
+            "Summary depth. Pass multiple times or comma-separated "
+            "(e.g. --summary-level very_concise,moderate,very_detailed). "
+            "Default: moderate."
+        ),
+    )
     parser.add_argument("--format", dest="output_format", default="markdown")
     parser.add_argument("--model", default="", help="Override model id. Must be local unless you pass this.")
     parser.add_argument("--books-dir", type=Path, default=BOOKS_DIR)
@@ -352,6 +397,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     books_dir = args.books_dir.expanduser()
+    summary_levels = parse_summary_levels(args.summary_levels)
     if not IDENTITY or not PASSWORD:
         fail("set BREVIO_BENCHMARK_IDENTITY and BREVIO_BENCHMARK_PASSWORD")
     if not API_KEY:
@@ -377,7 +423,7 @@ def main() -> int:
             books_dir=books_dir,
             model=model,
             language=args.language,
-            summary_level=args.summary_level,
+            summary_levels=summary_levels,
         )
         validate_or_stop(plan, books_dir)
         if args.dry_run:
@@ -399,25 +445,26 @@ def main() -> int:
                     print(f"FAIL {item['folder']}: cannot prepare document ({exc})")
                     continue
                 for style in item["styles"]:
-                    fields = {
-                        "language": args.language.upper(),
-                        "model": model,
-                        "category": item["category"],
-                        "style": style,
-                        "format": args.output_format,
-                        "summary_level": args.summary_level,
-                    }
-                    label = f"{item['category']} + {style}"
-                    try:
-                        payload = client.submit_document(upload, fields)
-                        print(
-                            f"OK   {label}  "
-                            f"file={upload.name} pages={pages_used}/{total_pages} "
-                            f"task={payload.get('task_id')} "
-                            f"entry={payload.get('folder_entry_id')}"
-                        )
-                    except Exception as exc:
-                        print(f"FAIL {label}: {exc}")
+                    for summary_level in summary_levels:
+                        fields = {
+                            "language": args.language.upper(),
+                            "model": model,
+                            "category": item["category"],
+                            "style": style,
+                            "format": args.output_format,
+                            "summary_level": summary_level,
+                        }
+                        label = f"{item['category']} + {style} @ {summary_level}"
+                        try:
+                            payload = client.submit_document(upload, fields)
+                            print(
+                                f"OK   {label}  "
+                                f"file={upload.name} pages={pages_used}/{total_pages} "
+                                f"task={payload.get('task_id')} "
+                                f"entry={payload.get('folder_entry_id')}"
+                            )
+                        except Exception as exc:
+                            print(f"FAIL {label}: {exc}")
         return 0
     finally:
         client.close()

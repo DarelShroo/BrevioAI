@@ -169,7 +169,7 @@ async def test_move_partial_missing_and_foreign_entry() -> None:
     )
     assert result["succeeded"] == [str(owned.id)]
     codes = {item["id"]: item["code"] for item in result["failed"]}
-    assert codes[str(foreign.id)] == ApiErrorCode.ENTRY_FORBIDDEN.value
+    assert codes[str(foreign.id)] == ApiErrorCode.ENTRY_NOT_FOUND.value
     assert codes[missing_id] == ApiErrorCode.ENTRY_NOT_FOUND.value
 
 

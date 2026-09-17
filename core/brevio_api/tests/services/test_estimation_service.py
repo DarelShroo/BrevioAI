@@ -199,8 +199,9 @@ def test_pricing_and_credits() -> None:
 
     local_snapshot = get_pricing_snapshot(ModelType.QWEN3_8B)
     assert local_snapshot.input_price_per_million == 0.0
-    assert calculate_credits(0.0, local_snapshot) == 0
-    assert calculate_credits(1.0, local_snapshot) == 0
+    assert local_snapshot.minimum_credits == 1
+    assert calculate_credits(0.0, local_snapshot) == 1
+    assert calculate_credits(1.0, local_snapshot) == 1
 
 
 @pytest.mark.asyncio

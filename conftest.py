@@ -153,15 +153,6 @@ def pytest_configure(config: pytest.Config) -> None:
     AsyncDB.verify_connection = _isolated_verify_connection  # type: ignore[method-assign]
     AsyncDB.close = _isolated_close  # type: ignore[method-assign]
 
-    try:
-        from transformers.models.auto.tokenization_auto import AutoTokenizer
-
-        def _offline_from_pretrained(cls: Any, *args: Any, **kwargs: Any) -> Any:
-            raise OSError("Tests are offline: tokenizer downloads are disabled")
-
-        AutoTokenizer.from_pretrained = classmethod(_offline_from_pretrained)  # type: ignore[method-assign]
-    except Exception:
-        pass
 
 
 def pytest_collection_modifyitems(

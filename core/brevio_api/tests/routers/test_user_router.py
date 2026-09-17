@@ -28,11 +28,17 @@ async def test_get_current_user_profile() -> None:
     mock_user.username = "testuser"
     mock_user.email = "test@example.com"
     mock_user.user_credit = 42.5
+    mock_user.plan_id = "free"
+    mock_user.plan_version = "1"
     mock_user.folder = MagicMock()
     mock_user.folder.id = folder_id
 
     mock_service = AsyncMock()
     mock_service.get_user_by_id.return_value = mock_user
+    mock_service.user_repo = MagicMock()
+    # Missing nested attributes → profile falls back to legacy user_credit.
+    mock_service.user_repo.collection = None
+
 
     app.dependency_overrides[get_current_user] = lambda: str(mock_user_id)
     app.dependency_overrides[user_service_dependency] = lambda: mock_service
@@ -43,13 +49,16 @@ async def test_get_current_user_profile() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "success"
-    assert body["data"] == {
-        "id": str(mock_user_id),
-        "username": "testuser",
-        "email": "test@example.com",
-        "user_credit": 42.5,
-        "folder_id": str(folder_id),
-    }
+    data = body["data"]
+    assert data["id"] == str(mock_user_id)
+    assert data["username"] == "testuser"
+    assert data["email"] == "test@example.com"
+    assert data["user_credit"] == 42.5
+    assert data["folder_id"] == str(folder_id)
+    assert data["plan_id"] == "free"
+    assert data["plan_name"] == "Free"
+    assert data["plan_version"] == "1"
+    assert data.get("entitlements") is None
     assert "password" not in body["data"]
     assert "otp" not in body["data"]
     mock_service.get_user_by_id.assert_awaited_once_with(str(mock_user_id))
@@ -151,7 +160,7 @@ async def test_delete_user_entry_forbidden() -> None:
     entry_id = str(ObjectId())
     mock_service = AsyncMock()
     mock_service.delete_folder_entry_for_user.side_effect = HTTPException(
-        status_code=403, detail="User does not own this folder entry"
+        status_code=404, detail="FolderEntry not found"
     )
 
     app.dependency_overrides[get_current_user] = lambda: str(mock_user_id)
@@ -160,7 +169,7 @@ async def test_delete_user_entry_forbidden() -> None:
     client = TestClient(app)
     response = client.delete(f"/users/entries/{entry_id}")
 
-    assert response.status_code == 403
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio

@@ -180,6 +180,26 @@ def test_budget_18k_70k_200k_qwen_section_assembly():
     assert moderate_70k.output_min_tokens < moderate_70k.output_target_tokens
 
 
+def test_short_clip_output_min_capped_by_retention_floor():
+    """~7.8k-token clip must not demand target*0.55 mins that fail below_output_min."""
+    from core.shared.utils.adaptive_salience_policy import _LEVEL_MIN_RETENTION
+
+    policy = AdaptiveSaliencePolicy()
+    doc_tokens = 7834
+    decision = policy.budget(
+        ModelType.QWEN3_14B,
+        SummaryLevel.MODERATE,
+        doc_tokens,
+        LanguageType.ENGLISH,
+    )
+    retention_floor = int(doc_tokens * _LEVEL_MIN_RETENTION[SummaryLevel.MODERATE])
+    absolute_floor = 1100
+    assert decision.output_min_tokens <= max(absolute_floor, retention_floor)
+    assert decision.output_min_tokens <= 2200
+    # Gate floor is 40% of min; the failed artifact (~1071) must clear it.
+    assert int(decision.output_min_tokens * 0.40) <= 1071
+
+
 def test_flash_summary_call_cap_is_not_384k():
     from core.shared.utils.model_capabilities import (
         get_model_capabilities,
