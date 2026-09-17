@@ -7,8 +7,17 @@ yarn-error.log
 dist/
 build/
 
-# Archivos de configuración del entorno
+# Archivos de configuración del entorno (secretos locales; no versionar)
 .env
+.env.dev
+.env.local
+.env.*.local
+frontend/.env
+frontend/.env.development
+frontend/.env.local
+frontend/.env.*.local
+# Las plantillas SÍ se versionan:
+#   .env.example  .env.dev.example  frontend/.env.example
 
 # Archivos de caché
 .cache/
@@ -94,3 +103,6 @@ coverage/
 # Logs de ejecución
 core/brevio_api/logs/*.json
 core/brevio_api/logs/*.log
+# Local pip-audit artifacts (P0)
+/tmp_pip_audit/
+

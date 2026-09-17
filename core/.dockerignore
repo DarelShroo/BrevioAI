@@ -1,0 +1,19 @@
+# Build context hygiene: keep expensive layers cacheable and images lean.
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.tmp/
+**/.coverage*
+**/htmlcov/
+**/*.partial
+**/*.partial.bak
+**/.DS_Store
+Dockerfile
+Dockerfile.dev
+.dockerignore
+*.md
+.git
+.gitignore
+.pytest_cache

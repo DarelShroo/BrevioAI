@@ -1,18 +1,39 @@
+# Producción.
+# Uso:
+#   docker compose -f docker-compose.yml up -d --build
+#   (Compose carga ".env" automáticamente para interpolación + env_file)
+# Dominio típico: https://brevio.darelhomelab.duckdns.org/
+# Desarrollo: docker-compose.dev.yml + .env.dev
+
+name: brevioai
+
 services:
+  data-init:
+    image: busybox:1.36
+    user: "0:0"
+    volumes:
+      - ./data:/data
+    command: ["sh", "-c", "mkdir -p /data && chown -R 10001:10001 /data"]
+    networks:
+      - app_network
+
   backend:
     build:
       context: ./core
       dockerfile: Dockerfile
     volumes:
-      - ./core:/app/core
-    ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - ./data:/app/data
+    # Prefer reaching the API via frontend nginx. Host publish is optional for ops.
+    # ports:
+    #   - "${BACKEND_PORT:-8000}:8000"
     env_file:
       - .env
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
+      - data-init
       - database
+      - redis
     networks:
       - app_network
 
@@ -20,10 +41,16 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    volumes:
-      - ./frontend:/app
+      args:
+        # Navegador → https://dominio/api/... → nginx proxy_pass → http://backend:8000/
+        VITE_API_URL: ${VITE_API_URL:-/api}
+        VITE_API_KEY: ${API_KEY:-}
+    # volumes:
+    #   - ./frontend:/app
     ports:
       - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      - backend
     networks:
       - app_network
 
@@ -33,8 +60,9 @@ services:
       dockerfile: Dockerfile
     volumes:
       - db_data:/data/db
-    ports:
-      - "${MONGO_PORT:-27017}:27017"
+    # Do NOT publish MongoDB to the host in production. Reach it only via app_network.
+    expose:
+      - "27017"
     networks:
       - app_network
     env_file:
@@ -42,8 +70,20 @@ services:
 
   redis:
     image: "redis:alpine"
-    ports:
-      - "${REDIS_PORT:-6380}:6379"
+    # Do NOT publish Redis to the host in production. Reach it only via app_network.
+    # ACL: set REDIS_PASSWORD (and optional REDIS_USERNAME=brevio). Entrypoint disables
+    # the default user and creates the app ACL user with non-admin commands.
+    expose:
+      - "6379"
+    env_file:
+      - .env
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_USERNAME: ${REDIS_USERNAME:-brevio}
+    volumes:
+      - redis_data:/data
+      - ./deploy/redis/entrypoint.sh:/entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
     networks:
       - app_network
 
@@ -51,14 +91,29 @@ services:
     build:
       context: ./core
       dockerfile: Dockerfile
-    command: celery -A core.brevio_api.celery worker --loglevel=debug --time-limit=7200 --soft-time-limit=3600
+    command: celery -A core.brevio_api.celery worker --loglevel=info --time-limit=7200 --soft-time-limit=3600
     volumes:
-      - ./core:/app/core
       - ./data:/app/data
     env_file:
       - .env
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      - data-init
+      - database
+      - redis
+    networks:
+      - app_network
+
+  celery-beat:
+    build:
+      context: ./core
+      dockerfile: Dockerfile
+    command: celery -A core.brevio_api.celery beat --loglevel=info
+    # volumes:
+    #   - ./core:/app/core
+    env_file:
+      - .env
     depends_on:
       - database
       - redis
@@ -67,7 +122,14 @@ services:
 
 volumes:
   db_data:
+  redis_data:
 
 networks:
   app_network:
     driver: bridge
+    ipam:
+      config:
+        # Fixed subnet so TRUSTED_PROXY can match the in-repo nginx→backend hop.
+        # External CDN/LB CIDRs are NOT defined here — set TRUSTED_PROXY explicitly
+        # when production adds another proxy hop in front of this compose stack.
+        - subnet: 172.28.0.0/16

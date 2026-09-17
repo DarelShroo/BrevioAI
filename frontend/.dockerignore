@@ -1,0 +1,19 @@
+# Host install artifacts must not enter the image context or overwrite npm ci.
+node_modules
+dist
+.vitest
+coverage
+test-results
+playwright-report
+.git
+.gitignore
+*.log
+.DS_Store
+Dockerfile
+Dockerfile.dev
+.dockerignore
+*.md
+# Permitir frontend/.env en el build (VITE_* se embebe en el SPA).
+# No ignorar .env aquí; el .gitignore de la raíz sigue sin versionarlo.
+.env.local
+.env.*.local

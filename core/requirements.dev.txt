@@ -38,5 +38,5 @@ mongomock-motor
 coverage==7.8.0
 setuptools==79.0.0
 
-# Optional PDF helper kept for experiments / scripts (prod uses reportlab).
+# Optional PDF helper kept for experiments / scripts (prod PDF export uses weasyprint).
 fpdf2==2.8.8
