@@ -6,21 +6,29 @@ Fuentes de verdad:
 
 | Archivo | Qué configura |
 | --- | --- |
-| [`.env.example`](../.env.example) | Backend, Celery, Mongo, Redis, Compose (puertos, GPU, cuotas). Copiar a `.env` en la **raíz**. |
-| [`frontend/.env.example`](../frontend/.env.example) | Solo Vite (`VITE_*`). Copiar a `frontend/.env`. Vite **no** carga el `.env` de la raíz. |
+| [`.env.example`](../.env.example) → `.env` | **Producción**: `docker compose -f docker-compose.yml` (interpolación + `env_file`). |
+| [`.env.dev.example`](../.env.dev.example) → `.env.dev` | **Desarrollo**: `docker compose --env-file .env.dev -f docker-compose.dev.yml`. |
+| [`frontend/.env.example`](../frontend/.env.example) → `frontend/.env` | Build Vite de producción (`VITE_*` en el bundle). |
+| `frontend/.env.development` | Vite `npm run dev` / frontend de compose.dev. |
 | [`core/shared/utils/environment.py`](../core/shared/utils/environment.py) | Parseo único de flags, alias JWT/TPM y helpers compartidos. |
 
 `core/brevio_api/.env.example` está **obsoleto** (usaba `SECRET_KEY`, `ALGORITHM`, `TOKENS_PER_MINUTE`). No lo copies.
 
 ## Cómo se cargan
 
-1. **Docker Compose** interpola `${BACKEND_PORT}` etc. desde el `.env` de la raíz al mapear puertos. Además inyecta ese mismo archivo como `env_file` en `backend`, `celery` y `database`.
-2. **Frontend Compose** no usa `env_file`. El contenedor de desarrollo monta `./frontend` y Vite lee `frontend/.env`.
-3. **Python** llama `load_dotenv()` en `core/brevio_api/__main__.py`, `core/brevio_api/config/dotenv.py`, `ConfigModel` y `EncryptionService`. En Docker eso es redundante porque Compose ya inyectó las variables.
-4. **pytest** (`conftest.py`) **anula** `load_dotenv` y fija un entorno aislado. Los tests no ven tu `.env` real.
-5. **Benchmarks** (`benchmarks/summary_pipeline/cli.py`, `scripts/run_document_summaries.py`) cargan el `.env` de la raíz a propósito.
+1. **Producción** — Compose lee `.env` por defecto para `${PUERTOS}` y lo monta como `env_file` en backend/celery/database/redis. `VITE_*` llegan al build del frontend como build-args.
+2. **Desarrollo** — pasar `--env-file .env.dev` (interpolación); los servicios usan `env_file: .env.dev`. Proyecto Compose `brevioai-dev` (aislado de `brevioai`).
+3. **Frontend Compose prod** — el contenedor nginx no necesita `env_file`; el SPA ya lleva `VITE_*` embebidos.
+4. **Frontend Compose dev** — monta `./frontend`; Vite mode=development carga `frontend/.env.development`.
+5. **Python** llama `load_dotenv()` en varios módulos; en Docker suele ser redundante porque Compose ya inyectó las variables.
+6. **pytest** (`conftest.py`) **anula** `load_dotenv` y fija un entorno aislado.
+7. **Benchmarks** cargan el `.env` de la raíz a propósito (producción o exportar `BREVIO_API_URL`).
 
 Booleanos aceptados en todo el código de aplicación: `1`, `true`, `yes` (verdadero) y `0`, `false`, `no` (falso). Mayúsculas irrelevantes. Antes `SUMMARY_LOCAL_USER_ACCESS=1` se interpretaba como falso; ahora es verdadero.
+
+## Volúmenes locales
+
+El contenedor de API/Celery corre como uid `10001` (`brevio`). El bind mount `./data` debe ser escribible por ese uid; Compose arranca un servicio one-shot `data-init` que hace `chown -R 10001:10001 ./data`. Si ves `Permission denied` / `Error saving media file` al subir documentos, revisa la propiedad de `./data`.
 
 ---
 
@@ -67,9 +75,11 @@ Fuera de Docker (pytest, scripts locales) el host suele ser `127.0.0.1`.
 
 | Variable | Default | Obligatoria | Quién la lee | Efecto |
 | --- | --- | --- | --- | --- |
-| `CELERY_BROKER_URL` | `redis://localhost:6379/0` | En Docker sí | `core/brevio_api/celery.py`, fallback de eventos y de cuotas | Broker de tareas. En Compose: `redis://redis:6379/0` (DB 0). |
+| `CELERY_BROKER_URL` | `redis://localhost:6379/0` | En Docker sí | `core/brevio_api/celery.py` via `resolve_redis_url()` | Broker. Compose: `redis://redis:6379/0` (DB 0). Credenciales ACL se inyectan si `REDIS_PASSWORD` está definido. |
 | `CELERY_RESULT_BACKEND` | `redis://localhost:6379/0` | En Docker sí | `celery.py` | Backend de resultados Celery. |
-| `EVENTS_REDIS_URL` | ninguno → usa `CELERY_BROKER_URL` si es Redis | No | `core/brevio_api/events/broker.py` `events_redis_url()` | Redis Streams para SSE entre API y worker. Si no hay URL Redis, el broker es **in-memory** (solo el proceso de la API ve eventos). |
+| `REDIS_PASSWORD` | vacío (dev abierto) | **Sí en production** | `deploy/redis/entrypoint.sh`, `resolve_redis_url()`, `assert_secure_runtime_config` | Activa ACL: usuario `REDIS_USERNAME` (default `brevio`), `default` off. Mín. 16 chars en production. |
+| `REDIS_USERNAME` | `brevio` | No | ACL + URL injection | Usuario de aplicación (no admin). |
+| `EVENTS_REDIS_URL` | ninguno → usa `CELERY_BROKER_URL` si es Redis | No | `events_redis_url()` | Redis Streams SSE. |
 | `EVENTS_SSE_HEARTBEAT_SECONDS` | `15` | No | `events_router.py` `heartbeat_seconds()` | Comentarios SSE periódicos. Mínimo 1. |
 | `PROVIDER_QUOTA_REDIS_URL` | `CELERY_BROKER_URL` o `redis://localhost:6379/2` | Si las cuotas están activas | `ProviderQuotaManager` | **Debe** ser otra DB que la de Celery (`/2` en Compose) para no mezclar streams/listas. |
 
@@ -88,8 +98,10 @@ pytest fuerza `CELERY_BROKER_URL=memory://` para no hablar con Redis.
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `15` | No | `TokenService` (en construcción, no al importar) | TTL del access token y cookie `brevio_access`. Mínimo 1. |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | `7` | No | `TokenService` | TTL del refresh token y cookie `brevio_refresh`. Mínimo 1. |
 | `COOKIE_SECURE` | derivado de `ENVIRONMENT==production` | No | `auth_cookies.cookie_secure()` | Si está definida, manda. Si no, `true` solo en production. En HTTP local debe ser `false`. |
+| `REFRESH_COOKIE_PATH` | `/auth` | No | `auth_cookies.refresh_cookie_path()` | Path de la cookie `brevio_refresh` **visto por el navegador**. Detrás de nginx `/api/` debe ser `/api/auth` (si queda en `/auth`, el refresh nunca recibe la cookie). |
 | `CORS_ORIGINS` | localhost:3000, 127.0.0.1:3000, localhost, localhost:80 | No | `cors_allow_origins()` | Lista CSV. Hay `allow_credentials=True`, así que **no** puede ser `*`. |
-| `CREDENTIAL_ENCRYPTION_KEY` | fallback de desarrollo (32 bytes fijos en Base64) | **Sí en production** | `EncryptionService` | AES-256-GCM para API keys de usuario. 32 bytes en Base64 URL-safe. Sin ella en production el servicio **no arranca**. |
+| `CREDENTIAL_ENCRYPTION_KEY` | (dev fallback fijo) | **Sí en production** | `EncryptionService` | AES-256-GCM, 32 bytes en Base64 URL-safe. Sin ella en production el servicio **no arranca**. |
+| `CREDENTIAL_ENCRYPTION_KEY_PREVIOUS` | vacío | No | `EncryptionService.decrypt` | Clave anterior solo para decrypt (rotación). Tras rotar, re-guardar BYOK re-cifra con la clave actual. |
 | `DEV_ALLOW_PLATFORM_OVERRIDE` | `true` | No | `PlatformAccessPolicy` | En **development**, permite resolver credencial de plataforma cuando falta clave de usuario. En **production** siempre es falso (la flag no abre el fallback). No omite créditos. |
 
 ### Alias JWT (corregidos)
@@ -123,13 +135,9 @@ Estas cadenas aparecen en tests o en `docs/ARCHITECTURE_SUMMARY_PIPELINE.md` his
 
 | Nombre | Dónde vive realmente |
 | --- | --- |
-| `MAX_TOKENS_PER_CHUNK` | `ModelCapabilities.max_tokens_per_chunk` (por modelo, p. ej. 3000) |
 | `REDUCE_BATCH_TOKENS` | `ModelCapabilities.reduce_batch_tokens` |
-| `MAX_IDLE_TIME` | no existe en código |
 | `MAX_COMPRESSION_ROUNDS` | no existe en código |
 | `TARGET_COMPRESSION_RATIO` | no existe en código (`INTERMEDIATE_COMPRESSION_RATIO` es constante Python) |
-| `OLLAMA_MODEL` | el usuario elige el modelo en la API/UI |
-| `OLLAMA_TIMEOUT` | timeouts del cliente OpenAI-compatible / Whisper, no esta clave |
 
 ---
 
@@ -220,8 +228,53 @@ Leídas **una vez** al importar `core/shared/utils/pricing_registry.py` (todas l
 | `COMMERCIAL_MARGIN` | `0.18` | Margen sobre coste proveedor. |
 | `CREDIT_UNIT_VALUE` | `0.01` | Valor de 1 crédito en moneda plataforma. |
 | `MINIMUM_CREDITS` | `1` | Mínimo de créditos a cobrar en modelos de pago. Ollama fuerza `0` en código. |
+| `CREDIT_RESERVATION_TTL_SECONDS` | `21600` | TTL de reservas PENDING (Mongo `expires_at`; reconciler libera/asienta). |
+| `CREDIT_RESERVATION_SAFETY_MARGIN` | `1.0` | Multiplicador ≥1 sobre `maximum_credits` al reservar. |
+| `CREDIT_DEFAULT_JOB_RESERVATION` | `50` | Reserva por defecto si no hay estimación (media/youtube). |
+| `CREDIT_OVERRUN_POLICY` | `clamp` | `clamp` limita consumo a lo reservado; `reject` falla el settle. |
 
-Los precios USD por millón de tokens **no** son env: están en el registro Python. `core/brevio_api/config/model_pricing.py` es otro diccionario (estimación HTTP) **sin** getenv.
+`CreditAccount.balance` (int) es la autoridad comercial. `User.user_credit` se migra de forma idempotente al crear la cuenta y **no** autoriza Jobs tras FASE 3.
+
+### FASE 5 — Planes y límites de producto
+
+| Variable | Default | Efecto |
+| --- | --- | --- |
+| `COMMERCIAL_PLANS_PATH` | `core/brevio/config/commercial_plans.yaml` | Fuente única de planes FREE/PRO/BUSINESS y límites. |
+
+Periodo por defecto: `calendar_month` UTC (ver YAML `period_mode`). Cambio de plan: `plan_change_usage_policy=keep_period_counters` (detalle en `docs/MIGRATION_PLANS_FASE5.md`). Los créditos de periodo (`credits_used`) vienen del settlement; en admit se usa hold atómico vía `credits_budget` (FASE 6). BYOK no salta límites de producto.
+
+Catálogo HTTP: `GET /plans` (**público**, sin sesión). **No hay Stripe** ni precios comerciales en el YAML/código actuales; ver `docs/PLANS_AND_BILLING.md`.
+
+### FASE 6 — Capacity + fairness
+
+| Variable | Default | Efecto |
+| --- | --- | --- |
+| `GLOBAL_MAX_CONCURRENT_JOBS` | `8` | Techo global de Jobs en ejecución. |
+| `GLOBAL_MAX_QUEUED_JOBS` | `500` | Techo global WAITING en scheduler. |
+| `CAPACITY_MAX_QUEUED_JOBS_PER_USER` | `50` | Techo por usuario en cola fair. |
+| `CAPACITY_LEASE_TTL_SECONDS` | `180` | TTL lease Redis (refresco con heartbeat). |
+| `CAPACITY_REDIS_URL` | heartbeat/quota URL | Slots operativos. |
+| `SCHEDULER_DISPATCH_INTERVAL_SECONDS` | `2` | Tick Celery beat del dispatcher. |
+
+Fairness: soft `scheduler_priority` + weighted deficit round-robin (`scheduler_weight`). Redis down → fail-closed. Provider quota no se duplica. Detalle: `docs/MIGRATION_CAPACITY_FASE6.md`.
+
+### FASE 7 — Rate limiting + anti-abuse
+
+| Variable | Default | Efecto |
+| --- | --- | --- |
+| `RATE_LIMIT_ENABLED` | `true` | Activa/desactiva API rate limits. |
+| `ANTI_ABUSE_ENABLED` | `true` | Violaciones → cooldown. |
+| `ANTI_ABUSE_REDIS_URL` | capacity/heartbeat URL | Redis operativo anti-abuse. |
+| `TRUSTED_PROXY` | private CIDRs | Quién puede fijar `X-Forwarded-For`. |
+| `AUTH_RATE_LIMIT` / `*_WINDOW` | `10`/`60` | Auth login/register/OTP/… |
+| `AUTH_REFRESH_RATE_LIMIT` / `*_WINDOW` | `120`/`60` | `/auth/refresh` (no abuse cooldown) |
+| `JOB_CREATE_RATE_LIMIT` | `20`/`60` | Creación de Jobs. |
+| `UPLOAD_RATE_LIMIT` | `30`/`60` | Uploads. |
+| `YOUTUBE_RATE_LIMIT` | `15`/`60` | YouTube/costosos. |
+| `ANTI_ABUSE_VIOLATION_THRESHOLD` | `20` | Violaciones antes de cooldown. |
+| `ANTI_ABUSE_COOLDOWN_SECONDS` | `300` | TTL cooldown. |
+
+Endpoints caros: fail-closed si Redis cae. Detalle: `docs/MIGRATION_ANTI_ABUSE_FASE7.md`.
 
 ---
 
@@ -267,7 +320,7 @@ Cargan el `.env` de la raíz.
 | `BREVIO_RUN_REDIS_TESTS` | unset → skip | Ejecuta tests marcados `redis`. |
 | `PROVIDER_QUOTA_TEST_REDIS_URL` | `redis://127.0.0.1:6379/14` o `/15` | Redis efímero para tests de cuota. |
 | `CI` | unset | Playwright `forbidOnly`. |
-| `HF_HUB_OFFLINE`, `TRANSFORMERS_OFFLINE`, `HF_DATASETS_OFFLINE`, `TOKENIZERS_PARALLELISM` | fijadas por `conftest.py` | Aíslan HuggingFace. No son config de producto. |
+| `HF_HUB_OFFLINE`, `TRANSFORMERS_OFFLINE`, `HF_DATASETS_OFFLINE`, `TOKENIZERS_PARALLELISM` | fijadas por `conftest.py` (legacy) | Ya no hay stack HuggingFace en prod; tokens vía tiktoken. |
 
 `conftest.py` también fija `ENVIRONMENT=test`, Mongo dummy, keys falsas, `SECRET_TOKEN_KEY`, Celery in-memory, `PROVIDER_QUOTA_ENABLED=false`, etc.
 
@@ -281,13 +334,20 @@ Cargan el `.env` de la raíz.
 4. `CREDENTIAL_ENCRYPTION_KEY` (32 bytes Base64). Sin esto la API no arranca.
 5. `COOKIE_SECURE=true` (o déjalo inferir de production) y HTTPS.
 6. `CORS_ORIGINS` con los orígenes reales del SPA.
-7. Mongo y Redis con credenciales propias; `MONGODB_URI` coherente.
-8. `LOG_LEVEL=INFO`
-9. `PROVIDER_QUOTA_ENABLED=true`, YAML real, `PROVIDER_QUOTA_REDIS_URL` en una DB distinta a Celery.
-10. Keys reales `OPENAI_` / `DEEPSEEK_` / `GOOGLE_` según proveedores que ofrezcas.
-11. `EMAIL_FROM` + `EMAIL_PASSWORD` (app password Gmail) o el registro/OTP fallará.
-12. No dejes `DEV_ALLOW_PLATFORM_OVERRIDE` como muleta: en production no abre el fallback.
-13. No publiques `BREVIO_BENCHMARK_PASSWORD` ni placeholders de Mongo.
+7. `TRUSTED_PROXY` con el CIDR real del hop que habla con el backend.
+   - Compose de producción fija `app_network` en `172.28.0.0/16` → usar `TRUSTED_PROXY=172.28.0.0/16` cuando el único proxy es el nginx del servicio `frontend`.
+   - Si hay Cloudflare / LB delante, sustituye por los CIDRs de **ese** hop (no están en el repo; no inventarlos).
+   - Nunca `*`, `0.0.0.0/0` ni `::/0`.
+8. `REDIS_PASSWORD` (≥16 chars) + opcional `REDIS_USERNAME=brevio`. El entrypoint ACL desactiva el usuario `default`. Las URLs Redis del `.env` pueden ir sin password; `resolve_redis_url()` inyecta credenciales.
+9. Mongo con credenciales propias; `MONGODB_URI` coherente.
+10. `LOG_LEVEL=INFO`
+11. `PROVIDER_QUOTA_ENABLED=true`, YAML real, `PROVIDER_QUOTA_REDIS_URL` en una DB distinta a Celery.
+12. Keys reales `OPENAI_` / `DEEPSEEK_` / `GOOGLE_` según proveedores que ofrezcas.
+13. `EMAIL_FROM` + `EMAIL_PASSWORD` (app password Gmail) o el registro/OTP fallará.
+14. `UPLOAD_MAGIC_BYTES_ENABLED=true` (default) y límites de upload.
+15. No dejes `DEV_ALLOW_PLATFORM_OVERRIDE` como muleta: en production no abre el fallback.
+16. No publiques `BREVIO_BENCHMARK_PASSWORD` ni placeholders de Mongo.
+17. Tras cada release: ejecutar `pip-audit` contra `core/requirements.txt` en Python 3.12 (imagen de prod) y actualizar `docs/DEPENDENCY_SECURITY.md`.
 
 ---
 
@@ -298,8 +358,8 @@ Cargan el `.env` de la raíz.
 | `core/shared/utils/environment.py` | `ENVIRONMENT` y **todos** los helpers/alias (`MAX_TOKEN_PER_MINUTE`/`TOKENS_PER_MINUTE`, JWT, flags) |
 | `core/brevio_api/config/dotenv.py` | `API_KEY`, snapshot JWT, `CORS_ORIGINS` |
 | `core/brevio_api/services/token_service.py` | TTL JWT + secret/algorithm (en `__init__`) |
-| `core/brevio_api/services/auth_cookies.py` | `COOKIE_SECURE`, `ENVIRONMENT` |
-| `core/brevio_api/services/encryption_service.py` | `CREDENTIAL_ENCRYPTION_KEY`, `ENVIRONMENT` |
+| `core/brevio_api/services/auth_cookies.py` | `COOKIE_SECURE`, `REFRESH_COOKIE_PATH`, `ENVIRONMENT` |
+| `core/brevio_api/services/encryption_service.py` | `CREDENTIAL_ENCRYPTION_KEY`, `CREDENTIAL_ENCRYPTION_KEY_PREVIOUS`, `ENVIRONMENT` |
 | `core/brevio_api/core/database.py` | `MONGODB_URI`, timeouts |
 | `core/brevio_api/celery.py` | `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` |
 | `core/brevio_api/events/broker.py` | `EVENTS_REDIS_URL`, `CELERY_BROKER_URL` |

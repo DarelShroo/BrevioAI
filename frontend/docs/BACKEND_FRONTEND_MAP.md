@@ -20,12 +20,21 @@ States: idle / loading / error (credentials, validation, network) / success → 
 
 | Capability | Endpoint | Frontend |
 | ---------- | -------- | -------- |
-| Current user | `GET /users/me` → id, username, email, user_credit, folder_id | `ProfileView` |
+| Current user | `GET /users/me` → id, username, email, user_credit, folder_id, plan_*, entitlements | `ProfileView`, `PlansView` |
 | Provider credentials list | `GET /user-credentials/{provider}` | `ProfileView` |
 | Add credential | `POST /user-credentials` | `ProfileView` |
 | Revoke credential | `DELETE /user-credentials/{id}` | `ProfileView` |
 
 Not available: in-session password change, profile edit (username/email). Use recovery flow.
+
+## Plans & usage
+
+| Capability | Endpoint | Auth | Frontend |
+| ---------- | -------- | ---- | -------- |
+| Commercial catalog | `GET /plans` | **Public** | `PlansView` |
+| Current entitlements | `GET /users/me` → `entitlements` | cookie session | `PlansView` (signed-in), `ProfileView` |
+
+Source of truth: `core/brevio/config/commercial_plans.yaml`. No Stripe Checkout/Portal in this codebase (`checkout_enabled=false`). Route `/plans` is public (DemoLayout), same pattern as `/comparar`. See `docs/PLANS_AND_BILLING.md`.
 
 ## Catalog (summary form options)
 

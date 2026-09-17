@@ -57,39 +57,46 @@ Swagger: [http://localhost:8000/api/docs](http://localhost:8000/api/docs) · ReD
 
 1. Clonar el repositorio y entrar en la raíz.
 
-2. Variables de entorno:
+2. Variables de entorno (plantillas → ficheros locales):
 
    ```bash
-   cp .env.example .env
-   cp frontend/.env.example frontend/.env
+   cp .env.example .env                      # producción
+   cp .env.dev.example .env.dev              # desarrollo
+   cp frontend/.env.example frontend/.env    # Vite prod (ajusta VITE_* / API_KEY)
+   cp frontend/.env.example frontend/.env.development  # luego edita URLs locales
    ```
 
-   Los valores de `.env.example` son **placeholders de desarrollo**, no secretos de producción (`API_KEY=local_api_key_123`, Mongo `root`/`password`, etc.).
+   | Archivo | Compose | Uso |
+   | --- | --- | --- |
+   | `.env` | `docker-compose.yml` | Producción (HTTPS / DuckDNS) |
+   | `.env.dev` | `docker-compose.dev.yml` | Desarrollo local |
+   | `frontend/.env` | build prod Vite | `VITE_*` embebidos en el SPA |
+   | `frontend/.env.development` | Vite `npm run dev` | API en `localhost:8000` |
+
+   Plantillas versionadas: `.env.example`, `.env.dev.example`, `frontend/.env.example`. Inventario: [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md).
 
    - Catálogo HTTP (`/brevio/languages`, modelos, etc.) exige cabecera `X-API-KEY` igual a `API_KEY`. El frontend la envía desde `VITE_API_KEY`.
-   - `CREDENTIAL_ENCRYPTION_KEY` no está activa en `.env.example` (va comentada). Fuera de `ENVIRONMENT=production` el cifrado de claves usa un fallback fijo de desarrollo. En producción hay que definir una clave AES-256 (32 bytes en Base64). Inventario: [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md).
-   - Correo: **solo** Gmail SMTP (`smtp.gmail.com:587`) con `EMAIL_FROM` y `EMAIL_PASSWORD`. Con los placeholders del example el registro **sí crea la cuenta** (el welcome mail se traga el error). La recuperación OTP **sí falla** (HTTP 500) si SMTP no autentica. Si esas variables no existen, `EmailService` lanza al construir y el registro también falla.
-   - `BREVIO_BENCHMARK_IDENTITY` / `BREVIO_BENCHMARK_PASSWORD` son para `benchmark.py`; **no se crea ese usuario al levantar Compose**.
+   - En producción `CREDENTIAL_ENCRYPTION_KEY`, `REDIS_PASSWORD` (≥16), `API_KEY` (≥24) y `SECRET_TOKEN_KEY` (≥32) son obligatorios.
+   - Correo: **solo** Gmail SMTP (`smtp.gmail.com:587`) con `EMAIL_FROM` y `EMAIL_PASSWORD`.
+   - `BREVIO_BENCHMARK_IDENTITY` / `BREVIO_BENCHMARK_PASSWORD` son para benchmarks; **Compose no crea ese usuario**.
 
-3. Desarrollo (hot-reload de Vite en el frontend y `--reload` de Uvicorn en el backend; **Celery no recarga solo**):
+3. Desarrollo (hot-reload de Vite + `--reload` de Uvicorn; **Celery no recarga solo**):
 
    ```bash
-   docker compose -f docker-compose.dev.yml up -d --build
+   docker compose --env-file .env.dev -f docker-compose.dev.yml up -d --build
    ```
 
    - UI: http://localhost:3000
    - API: http://localhost:8000/api/docs
 
-4. “Producción” local (frontend compilado, Nginx en el puerto 80, backend con `fastapi run`, sin `--reload`):
+4. Producción (frontend compilado + Nginx; backend `fastapi run`, sin `--reload`):
 
    ```bash
-   docker compose up -d --build
+   docker compose -f docker-compose.yml up -d --build
    ```
 
-   - UI: http://localhost:80
-   - API: http://localhost:8000/api/docs
-
-   Eso no es un despliegue endurecido: CORS sale de `CORS_ORIGINS` (credenciales activas; no se puede usar `*`), el JWT y Mongo usan los secretos de ejemplo, y el frontend de Compose monta `./frontend:/app` (Nginx sirve `/usr/share/nginx/html` del build, no ese bind mount).
+   - UI / API vía dominio (ej. https://brevio.darelhomelab.duckdns.org/), nginx hace proxy de `/api/` → servicio `backend`.
+   - El proxy del host debe apuntar a `FRONTEND_PORT` (por defecto `10010` en `.env`).
 
 ## Modelos y acceso
 
