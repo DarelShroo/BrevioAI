@@ -82,9 +82,14 @@ class ProviderQuotaManager:
     ):
         self._store = store
         self._registry = registry
-        self._redis_url = redis_url or os.getenv(
-            "PROVIDER_QUOTA_REDIS_URL",
-            os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/2"),
+        from core.shared.utils.redis_url import resolve_redis_url
+
+        self._redis_url = resolve_redis_url(
+            redis_url
+            or os.getenv(
+                "PROVIDER_QUOTA_REDIS_URL",
+                os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/2"),
+            )
         )
         self._client: Any = None
         self._pacing: dict[tuple[str, str, str], _LocalPacingState] = {}

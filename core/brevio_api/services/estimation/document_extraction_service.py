@@ -9,6 +9,7 @@ from typing import List, Tuple
 import pypdf
 
 from core.brevio.managers.directory_manager import DirectoryManager
+from core.brevio_api.utils.upload_security import sanitize_upload_filename
 
 
 @dataclass(frozen=True)
@@ -76,14 +77,18 @@ class DocumentExtractionService:
         )
 
     async def _extract_docx(self, filename: str, content: bytes) -> ExtractedDocument:
+        safe_name = sanitize_upload_filename(filename, fallback="document.docx")
         with TemporaryDirectory(prefix="brevio-estimate-") as temp_dir:
-            temp_path = Path(temp_dir) / filename
+            temp_path = Path(temp_dir) / safe_name
+            # Defense in depth: never write outside the temp directory.
+            if temp_path.resolve().parent != Path(temp_dir).resolve():
+                raise ValueError("Invalid document filename")
             await asyncio.to_thread(temp_path.write_bytes, content)
             text = await self._directory_manager.read_docx(str(temp_path))
 
         normalized_text = self._normalize_text(text)
         return ExtractedDocument(
-            filename=filename,
+            filename=safe_name,
             extension="docx",
             text=normalized_text,
             extraction_status="complete" if normalized_text else "empty",

@@ -356,62 +356,21 @@ class DirectoryManager:
         logger.info(f"DOCX version created: {docx_path}")
         return docx_path
 
-    async def create_pdf_version(self, md_path: Optional[str]) -> Optional[str]:
+    async def create_pdf_version(
+        self,
+        md_path: Optional[str],
+        document_id: Optional[str] = None,
+    ) -> Optional[str]:
         if md_path is None:
             logger.error("No path provided for PDF conversion")
             return None
 
-        pdf_path = md_path.replace(".md", ".pdf")
+        from core.brevio.services.pdf_export import export_markdown_file_to_pdf
 
-        async def blocking_create_pdf() -> None:
-            async with aiofiles.open(md_path, "r", encoding="utf-8") as f:
-                md_content = await f.read()
-
-            from reportlab.lib.pagesizes import letter
-            from reportlab.lib.styles import getSampleStyleSheet
-            from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
-
-            doc = SimpleDocTemplate(
-                pdf_path,
-                pagesize=letter,
-                rightMargin=72,
-                leftMargin=72,
-                topMargin=72,
-                bottomMargin=72,
-            )
-            styles = getSampleStyleSheet()
-            story = []
-
-            html = markdown.markdown(md_content)
-            soup = BeautifulSoup(html, "html.parser")
-
-            for element in soup:
-                if isinstance(element, Tag):
-                    text = element.get_text().strip()
-                    if not text:
-                        continue
-                    if element.name == "h1":
-                        story.append(Paragraph(text, styles["Heading1"]))
-                        story.append(Spacer(1, 12))
-                    elif element.name == "h2":
-                        story.append(Paragraph(text, styles["Heading2"]))
-                        story.append(Spacer(1, 10))
-                    elif element.name == "h3":
-                        story.append(Paragraph(text, styles["Heading3"]))
-                        story.append(Spacer(1, 8))
-                    elif element.name == "p":
-                        story.append(Paragraph(text, styles["Normal"]))
-                        story.append(Spacer(1, 6))
-                    elif element.name in ["ul", "ol"]:
-                        for item in element.find_all("li", recursive=False):
-                            bullet_text = f"• {item.get_text().strip()}"
-                            story.append(Paragraph(bullet_text, styles["Normal"]))
-                            story.append(Spacer(1, 4))
-
-            if story:
-                doc.build(story)
-
-        await blocking_create_pdf()
-
-        logger.info(f"PDF version created: {pdf_path}")
+        pdf_path = await asyncio.to_thread(
+            export_markdown_file_to_pdf,
+            md_path,
+            document_id=document_id,
+        )
+        logger.info("PDF version created: %s", pdf_path)
         return pdf_path

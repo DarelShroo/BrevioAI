@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import Any, Awaitable, Callable, Optional
+from datetime import datetime, timezone
+from typing import Any, Awaitable, Callable, Optional, Protocol
 
 from openai import APIConnectionError, APIStatusError, APITimeoutError, RateLimitError
 
@@ -28,6 +29,14 @@ from core.brevio.services.provider_quota.retry import RetryCoordinator
 logger = logging.getLogger(__name__)
 
 CallFn = Callable[[], Awaitable[Any]]
+
+
+class UsageAttemptSink(Protocol):
+    async def record_provider_attempt(self, event: Any) -> Any: ...
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _request_may_have_reached_provider(exc: BaseException) -> bool:
@@ -90,6 +99,10 @@ class ProviderCallExecutor:
             quota_manager.metrics = metrics
         self.retry = retry_coordinator or RetryCoordinator()
         self.job_budget = job_budget
+        self._billing_job_id: Optional[str] = None
+        self._billing_user_id: Optional[str] = None
+        self._billing_credential_scope: str = "unknown"
+        self._usage_sink: Optional[UsageAttemptSink] = None
 
     def bind_job(
         self,
@@ -100,6 +113,69 @@ class ProviderCallExecutor:
         if metrics is not None:
             self.metrics = metrics
             self.quota_manager.metrics = metrics
+
+    def bind_billing_context(
+        self,
+        *,
+        job_id: Optional[str],
+        user_id: Optional[str],
+        credential_scope: str = "unknown",
+        usage_sink: Optional[UsageAttemptSink] = None,
+    ) -> None:
+        """Attach commercial context for FASE 4 UsageRecord persistence."""
+        self._billing_job_id = job_id
+        self._billing_user_id = user_id
+        self._billing_credential_scope = credential_scope or "unknown"
+        self._usage_sink = usage_sink
+
+    async def _record_attempt(
+        self,
+        *,
+        provider: str,
+        model: str,
+        phase: str,
+        retry_index: int,
+        chunk_id: Optional[str],
+        status: str,
+        response: Any = None,
+        error: Optional[BaseException] = None,
+        started_at: Optional[datetime] = None,
+        is_fallback: bool = False,
+    ) -> None:
+        if self._usage_sink is None:
+            return
+        if not self._billing_job_id or not self._billing_user_id:
+            return
+        try:
+            from core.brevio_api.services.billing.usage_service import (
+                ProviderAttemptEvent,
+            )
+
+            await self._usage_sink.record_provider_attempt(
+                ProviderAttemptEvent(
+                    job_id=self._billing_job_id,
+                    user_id=self._billing_user_id,
+                    provider=provider,
+                    model=model,
+                    phase=phase,
+                    retry_index=retry_index,
+                    chunk_id=chunk_id,
+                    credential_scope=self._billing_credential_scope,
+                    status=status,
+                    response=response,
+                    error=error,
+                    is_fallback=is_fallback,
+                    started_at=started_at,
+                    completed_at=_utcnow(),
+                )
+            )
+        except Exception:
+            logger.exception(
+                "event=usage_record_failed job_id=%s phase=%s retry=%s",
+                self._billing_job_id,
+                phase,
+                retry_index,
+            )
 
     async def _release_lease(
         self,
@@ -153,6 +229,7 @@ class ProviderCallExecutor:
         policy: Optional[QuotaPolicy] = None,
         job_budget: Optional[JobRequestBudget] = None,
         metrics: Optional[ProviderCallMetrics] = None,
+        is_fallback: bool = False,
     ) -> Any:
         policy = policy or self.quota_manager.resolve_policy(
             provider, model, quota_scope_id
@@ -168,6 +245,7 @@ class ProviderCallExecutor:
             allow_refund = False
             actual_prompt: Optional[int] = None
             call_succeeded = False
+            attempt_started = _utcnow()
             try:
                 lease_id, policy, _acq = await self.quota_manager.acquire(
                     provider=provider,
@@ -207,7 +285,6 @@ class ProviderCallExecutor:
                 try:
                     response = await call()
                 except BaseException:
-                    # Ensure release on cancel/timeout before retry decision.
                     raise
                 actual_prompt = _extract_prompt_tokens(response)
                 allow_refund = actual_prompt is not None
@@ -227,6 +304,17 @@ class ProviderCallExecutor:
                     call_succeeded=True,
                 )
                 lease_id = None
+                await self._record_attempt(
+                    provider=provider,
+                    model=model,
+                    phase=phase,
+                    retry_index=attempt,
+                    chunk_id=chunk_id,
+                    status="SUCCESS",
+                    response=response,
+                    started_at=attempt_started,
+                    is_fallback=is_fallback,
+                )
                 stats.record_success(phase=phase)
                 if budget is not None:
                     budget.record_success()
@@ -257,6 +345,19 @@ class ProviderCallExecutor:
                     call_succeeded=False,
                 )
                 lease_id = None
+
+                if may_reached:
+                    await self._record_attempt(
+                        provider=provider,
+                        model=model,
+                        phase=phase,
+                        retry_index=attempt,
+                        chunk_id=chunk_id,
+                        status="ERROR",
+                        error=e,
+                        started_at=attempt_started,
+                        is_fallback=is_fallback,
+                    )
 
                 signals = extract_rate_limit_signals(e)
                 is_429 = signals.status_code == 429 or isinstance(e, RateLimitError)
@@ -319,7 +420,6 @@ class ProviderCallExecutor:
                 await asyncio.sleep(decision.wait_seconds)
                 attempt += 1
             except BaseException:
-                # CancelledError / KeyboardInterrupt: release then re-raise.
                 await self._release_lease(
                     lease_id=lease_id,
                     provider=provider,
@@ -337,7 +437,6 @@ class ProviderCallExecutor:
                 lease_id = None
                 raise
             finally:
-                # Belt-and-suspenders: never leave a lease held after the attempt.
                 if lease_id is not None:
                     await self._release_lease(
                         lease_id=lease_id,

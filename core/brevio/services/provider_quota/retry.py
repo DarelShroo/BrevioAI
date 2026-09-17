@@ -30,13 +30,14 @@ class RetryCoordinator:
         "perday",
         "per_day",
         "requestsperday",
-        "free_tier_requests",
         "generaterequestsperday",
     )
 
     @classmethod
     def is_daily_quota_exhausted(cls, signals: Optional[RateLimitSignals]) -> bool:
         if signals is None:
+            return False
+        if signals.wait_seconds is not None and signals.wait_seconds < 300:
             return False
         blob = " ".join(
             str(part or "")
