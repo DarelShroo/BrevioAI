@@ -144,7 +144,7 @@ function renderCodeBlock(code: string, langHint: string): string {
 
 function createMarkdownIt(toc: TocItem[]): MarkdownRenderer {
   const md = new MarkdownIt({
-    html: false,
+    html: true,
     linkify: true,
     typographer: true,
     breaks: false,

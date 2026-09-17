@@ -81,7 +81,30 @@ export const useRealtimeStore = defineStore('realtime', () => {
       if (first) seenEventIds.delete(first)
     }
     rememberEventId(userId, event.event_id)
-    void refreshJob(event.job_id)
+    
+    if (event.type === 'summary.progress') {
+      const job = entry(event.job_id)
+      if (job) {
+        if (event.global_progress !== undefined) {
+          job.progress = event.global_progress
+        }
+        if (event.stage !== undefined) {
+          job.stage = event.stage
+        }
+        const doc = job.results.find((r) => r.id === event.document_id || r._id === event.document_id)
+        if (doc) {
+          if (event.progress !== undefined) doc.progress = event.progress
+          if (event.stage !== undefined) {
+            doc.phase = event.stage
+            doc.status = event.status
+          }
+        }
+        upsertEntry({ ...job })
+      }
+    } else {
+      void refreshJob(event.job_id)
+    }
+    
     listeners.forEach((listener) => listener(event))
   }
 
@@ -108,7 +131,7 @@ export const useRealtimeStore = defineStore('realtime', () => {
         connected.value = false
         connecting.value = false
         connectionUserId = null
-        void auth.logout()
+        void auth.handleSessionExpired()
       },
     })
   }

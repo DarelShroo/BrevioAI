@@ -41,10 +41,20 @@ export function normalizeStatus(result: DataResult | undefined): string {
 }
 
 export function entryStatus(entry: FolderEntry): string {
-  if (!entry.results?.length) return 'PROCESSING'
+  if (!entry.results?.length) {
+    const top = String((entry as { status?: string | null }).status || '').toUpperCase()
+    if (top === 'QUEUED') return 'QUEUED'
+    if (top === 'FAILED') return 'FAILED'
+    if (top === 'COMPLETED') return 'COMPLETED'
+    return 'PROCESSING'
+  }
   const statuses = entry.results.map((r) => normalizeStatus(r))
   if (statuses.some((s) => IN_PROGRESS_STATUSES.has(s))) {
+    if (statuses.includes('QUEUED') && statuses.every((s) => s === 'QUEUED')) {
+      return 'QUEUED'
+    }
     if (statuses.includes('TRANSCRIBING')) return 'TRANSCRIBING'
+    if (statuses.includes('QUEUED')) return 'QUEUED'
     return 'PROCESSING'
   }
   if (statuses.every((s) => s === 'COMPLETED')) return 'COMPLETED'

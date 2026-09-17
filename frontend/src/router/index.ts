@@ -32,6 +32,33 @@ const router = createRouter({
       ],
     },
     {
+      path: '/comparar',
+      component: () => import('@/layouts/DemoLayout.vue'),
+      children: [
+        {
+          path: '',
+          name: 'comparar',
+          component: () => import('@/views/CompareView.vue'),
+        },
+        {
+          path: ':slug',
+          name: 'comparar-slug',
+          component: () => import('@/views/CompareView.vue'),
+        },
+      ],
+    },
+    {
+      path: '/plans',
+      component: () => import('@/layouts/DemoLayout.vue'),
+      children: [
+        {
+          path: '',
+          name: 'plans',
+          component: () => import('@/views/PlansView.vue'),
+        },
+      ],
+    },
+    {
       path: '/',
       component: () => import('@/layouts/AppLayout.vue'),
       beforeEnter: requireAuth,

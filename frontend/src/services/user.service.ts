@@ -1,3 +1,4 @@
+import type { AxiosRequestConfig } from 'axios'
 import { http } from '@/services/http'
 import type { ApiEnvelope } from '@/types/api'
 import type {
@@ -10,8 +11,10 @@ import type {
   UserProfile,
 } from '@/types/user'
 
-export async function getMe(): Promise<UserProfile> {
-  const { data } = await http.get<ApiEnvelope<UserProfile>>('/users/me')
+export async function getMe(options?: { skipSessionExpired?: boolean }): Promise<UserProfile> {
+  const { data } = await http.get<ApiEnvelope<UserProfile>>('/users/me', {
+    skipSessionExpired: options?.skipSessionExpired === true,
+  } as AxiosRequestConfig)
   return data.data
 }
 
