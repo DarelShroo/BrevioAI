@@ -159,8 +159,9 @@ class CredentialResolver:
         """Fail fast before queuing a job.
 
         Local models: allowed only when SummaryAccessPolicy permits them.
-        BYOK: user profile key is enough, credits are not required.
-        Pay-per-use: platform key plus credits (dev override can skip credits).
+        BYOK: user profile key is enough (credits reserved as 0 at admission).
+        Pay-per-use: platform key required; commercial credit gate is FASE 3
+        reservation at job admission (CreditAccount), not legacy user_credit.
         """
         SummaryAccessPolicy().ensure_user_may_select(model)
         if not model_requires_api_key(model):
@@ -199,20 +200,10 @@ class CredentialResolver:
                 message="Esta solicitud requiere una credencial de API configurada por el usuario o créditos de pago por uso.",
             )
 
-        if float(user_credits or 0) > 0:
-            return
-
-        logger.error(
-            "event=credential_resolution_failed provider=%s user_id=%s "
-            "reason=insufficient_credits credential_source=platform model=%s",
-            provider,
-            user_id,
-            model.value,
-        )
-        raise ProviderError(
-            kind=ProviderErrorKind.INSUFFICIENT_CREDITS,
-            message="Esta solicitud de pago por uso requiere créditos en tu cuenta.",
-        )
+        # Platform key present: model access OK. Credit reservation (FASE 3)
+        # is enforced at job admission, not via legacy user_credits > 0.
+        _ = user_credits
+        return
 
     async def ensure_user_credential(self, user_id: str, provider: str) -> None:
         """Fail fast when a user BYOK credential is required (no platform fallback)."""
