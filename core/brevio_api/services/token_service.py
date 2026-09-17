@@ -36,10 +36,9 @@ class TokenService:
     ) -> str:
         try:
             to_encode = data.copy()
-            expire = datetime.now(timezone.utc) + (
-                expires_delta or timedelta(minutes=self.__expire_minutes)
-            )
-            to_encode.update({"exp": expire.timestamp()})
+            now = datetime.now(timezone.utc)
+            expire = now + (expires_delta or timedelta(minutes=self.__expire_minutes))
+            to_encode.update({"iat": int(now.timestamp()), "exp": expire.timestamp()})
             encoded_jwt = jwt.encode(
                 to_encode, self.__secret_key, algorithm=self.__algorithm
             )

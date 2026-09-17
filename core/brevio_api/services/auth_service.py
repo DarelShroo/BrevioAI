@@ -141,11 +141,15 @@ class AuthService:
         )
         rotated = await self._refresh_sessions.rotate(
             family_id,
+            expected_jti=str(payload["jti"]),
+            expected_token_hash=presented_hash,
             jti=new_jti,
             token_hash=hash_refresh_token(new_refresh),
             expires_at=expires_at,
         )
         if rotated is None:
+            # Concurrent refresh or reuse — revoke family (theft / race).
+            await self._refresh_sessions.revoke_family(family_id)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Refresh token inválido",
@@ -157,7 +161,26 @@ class AuthService:
             refresh_max_age=self._token_service.refresh_max_age_seconds,
         )
 
-    async def logout(self, refresh_token: Optional[str]) -> None:
+    async def logout(
+        self,
+        refresh_token: Optional[str],
+        *,
+        access_token: Optional[str] = None,
+    ) -> None:
+        from core.brevio_api.services.session_revocation import (
+            deny_access_jti,
+            deny_user_access,
+        )
+
+        if access_token:
+            try:
+                access_payload = self._token_service.validate_access_token(access_token)
+                jti = str(access_payload.get("jti") or "")
+                if jti:
+                    deny_access_jti(jti)
+            except HTTPException:
+                pass
+
         if not refresh_token:
             return
         try:
@@ -165,8 +188,12 @@ class AuthService:
         except HTTPException:
             return
         family_id = str(payload.get("fam") or "")
+        user_id = str(payload.get("id") or "")
         if family_id:
             await self._refresh_sessions.revoke_family(family_id)
+        # Defense in depth: deny all access tokens for this user until TTL.
+        if user_id:
+            deny_user_access(user_id)
 
     async def login(self, user_login: LoginUser) -> AuthSession:
         user: User | None = None
@@ -181,8 +208,10 @@ class AuthService:
 
         if not user:
             logger.info(f"User not found for identity: {user_login.identity}")
+            # Same status/message as bad password to avoid account enumeration.
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Credenciales Inválidas"
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Credenciales inválidas",
             )
 
         if not hasattr(user, "password") or user.password is None:
@@ -212,10 +241,15 @@ class AuthService:
         user_folder = UserFolder()
 
         existing_user = await self._user_service.get_user_by_email(validated_email)
+        existing_username = await self._user_service.get_user_by_username(
+            user_register.username
+        )
 
-        if existing_user:
+        if existing_user or existing_username:
+            # Generic message — do not reveal which field collided.
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="User already exists"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unable to register with the provided credentials",
             )
 
         user = User(
@@ -274,9 +308,9 @@ class AuthService:
                     recovery_password_user.identity
                 )
             if not user:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Credenciales inválidas",
+                # Always return a success-shaped message to avoid email enumeration.
+                return PasswordRecoveryResponse(
+                    message="Si la cuenta existe, se ha enviado un código de recuperación."
                 )
 
             now = datetime.now()
@@ -286,7 +320,7 @@ class AuthService:
                 new_time = now + timedelta(minutes=10)
 
                 await self._user_repository.update_user(
-                    user.id, {"otp": otp, "exp": int(new_time.timestamp())}
+                    user.id, {"otp": otp, "exp": int(new_time.timestamp()), "otp_attempts": 0}
                 )
 
                 email_service = EmailService(user.email, "Recuperación de contraseña")
@@ -294,7 +328,7 @@ class AuthService:
                 await email_service.send_recovery_password_email(str(otp))
 
             response = PasswordRecoveryResponse(
-                message="Código de recuperación enviado al correo electrónico."
+                message="Si la cuenta existe, se ha enviado un código de recuperación."
             )
             return response
         except HTTPException:
@@ -306,28 +340,42 @@ class AuthService:
     async def change_password(
         self, recovery_password_otp: RecoveryPasswordOtp
     ) -> PasswordRecoveryResponse:
+        from core.shared.utils.environment import env_int
+
         user = await self._user_service.get_user_by_email(recovery_password_otp.email)
 
         if not user:
-            raise HTTPException(status_code=404, detail="Usuario no existe")
+            raise HTTPException(
+                status_code=400, detail="Código de recuperación inválido o expirado."
+            )
 
         if not user.exp or user.exp < int(datetime.now().timestamp()):
-            detail_message = (
-                "El código de recuperación ya fue utilizado."
-                if user.exp == 0
-                else "El código de recuperación ha expirado."
-            )
-            raise HTTPException(status_code=400, detail=detail_message)
-
-        if user.otp != recovery_password_otp.otp:
             raise HTTPException(
-                status_code=400, detail="El código de recuperación es incorrecto."
+                status_code=400, detail="Código de recuperación inválido o expirado."
+            )
+
+        max_attempts = max(3, env_int("OTP_MAX_ATTEMPTS", 5))
+        attempts = int(getattr(user, "otp_attempts", 0) or 0)
+        if attempts >= max_attempts:
+            raise HTTPException(
+                status_code=400, detail="Código de recuperación inválido o expirado."
+            )
+
+        if not OTPUtils.constant_time_equals(user.otp, recovery_password_otp.otp):
+            await self._user_repository.update_user(
+                user.id, {"otp_attempts": attempts + 1}
+            )
+            raise HTTPException(
+                status_code=400, detail="Código de recuperación inválido o expirado."
             )
 
         await self._user_service.change_password(
             user.email, recovery_password_otp.password
         )
         await self._refresh_sessions.revoke_all_for_user(user.id)
+        from core.brevio_api.services.session_revocation import deny_user_access
+
+        deny_user_access(str(user.id))
 
         email_service = EmailService(user.email, "Confirmación de cambio de contraseña")
         try:

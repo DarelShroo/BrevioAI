@@ -19,6 +19,10 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="Token no proporcionado o nulo")
 
     payload = token_service.validate_access_token(token)
+    from core.brevio_api.services.session_revocation import is_access_revoked
+
+    if is_access_revoked(payload):
+        raise HTTPException(status_code=401, detail="Token inválido o expirado")
     user_id = payload.get("id")
     if not user_id:
         raise HTTPException(status_code=401, detail="Token inválido o expirado")

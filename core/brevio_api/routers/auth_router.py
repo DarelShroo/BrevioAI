@@ -62,9 +62,13 @@ class AuthRoutes:
             },
         )
         async def login(
+            request: Request,
             login_user: LoginUser,
             auth_service: AuthService = Depends(get_auth_service),
         ) -> JSONResponse:
+            from core.brevio_api.utils.rate_limit import enforce_auth_rate_limit
+
+            enforce_auth_rate_limit(request, "login")
             session: AuthSession = await auth_service.login(login_user)
             response = LoginDataResponse(
                 status="success",
@@ -83,9 +87,13 @@ class AuthRoutes:
             },
         )
         async def register(
+            request: Request,
             register_user: RegisterUser,
             auth_service: AuthService = Depends(get_auth_service),
         ) -> JSONResponse:
+            from core.brevio_api.utils.rate_limit import enforce_auth_rate_limit
+
+            enforce_auth_rate_limit(request, "register")
             session: AuthSession = await auth_service.register(register_user)
             folder = session.folder
             if folder is None:
@@ -111,6 +119,9 @@ class AuthRoutes:
             request: Request,
             auth_service: AuthService = Depends(get_auth_service),
         ) -> JSONResponse:
+            from core.brevio_api.utils.rate_limit import enforce_auth_rate_limit
+
+            enforce_auth_rate_limit(request, "refresh")
             refresh_token = request.cookies.get(REFRESH_COOKIE_NAME)
             if not refresh_token:
                 raise HTTPException(
@@ -133,7 +144,12 @@ class AuthRoutes:
             request: Request,
             auth_service: AuthService = Depends(get_auth_service),
         ) -> JSONResponse:
-            await auth_service.logout(request.cookies.get(REFRESH_COOKIE_NAME))
+            from core.brevio_api.services.auth_cookies import ACCESS_COOKIE_NAME
+
+            await auth_service.logout(
+                request.cookies.get(REFRESH_COOKIE_NAME),
+                access_token=request.cookies.get(ACCESS_COOKIE_NAME),
+            )
             payload = {
                 "status": "success",
                 "data": {"authenticated": False},
@@ -180,9 +196,13 @@ class AuthRoutes:
             },
         )
         async def password_send_otp_recovery(
+            request: Request,
             identity: RecoveryPassword,
             auth_service: AuthService = Depends(get_auth_service),
         ) -> PasswordRecoveryDataResponse:
+            from core.brevio_api.utils.rate_limit import enforce_auth_rate_limit
+
+            enforce_auth_rate_limit(request, "password_recovery")
             try:
                 recovery_password: RecoveryPassword = RecoveryPassword.model_validate(
                     identity
@@ -216,10 +236,14 @@ class AuthRoutes:
             },
         )
         async def password_recovery_verify(
+            request: Request,
             recovery_password_otp: RecoveryPasswordOtp,
             response: Response,
             auth_service: AuthService = Depends(get_auth_service),
         ) -> PasswordRecoveryDataResponse:
+            from core.brevio_api.utils.rate_limit import enforce_auth_rate_limit
+
+            enforce_auth_rate_limit(request, "password_verify")
             recovery_password_response: PasswordRecoveryResponse = (
                 await auth_service.change_password(recovery_password_otp)
             )
