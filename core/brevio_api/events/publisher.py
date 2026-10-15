@@ -26,18 +26,18 @@ def publish_summary_job_event(
         return None
     try:
         if status == JobStatus.COMPLETED.value:
-            event = SummaryJobEvent.completed(
+            event = SummaryJobEvent.create_completed(
                 job_id=job_id,
                 document_id=str(document_id),
                 document_name=document_name or "",
             )
         elif status == JobStatus.FAILED.value:
-            event = SummaryJobEvent.failed(
+            event = SummaryJobEvent.create_failed(
                 job_id=job_id,
                 document_id=str(document_id),
                 document_name=document_name or "",
                 error_code=error_code or "FAILED",
-                error_message=error_message or "Summary generation failed",
+                error_message=error_message or error_code or "SUMMARY_GENERATION_FAILED",
             )
         else:
             return None

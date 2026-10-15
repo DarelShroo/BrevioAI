@@ -28,13 +28,13 @@ class ProgressReporter:
         for item in results:
             weight = getattr(item, "weight", 1) or 1
             progress = getattr(item, "progress", 0) or 0
-            
+
             if getattr(item, "status", None) == JobStatus.COMPLETED.value:
                 progress = 100
-                
+
             total_weight += weight
             current_progress += (progress * weight)
-        
+
         if total_weight == 0:
             return 0
         return min(100, max(0, int(current_progress / total_weight)))
@@ -53,36 +53,35 @@ class ProgressReporter:
         result.progress = progress
         result.phase = stage
         result.status = status
-        
+
         async with self._lock:
             try:
                 # Fetch fresh to get global state correctly
                 entry = await self.repo.get_folder_entry_by_id(self.job_id)
                 global_progress = await self._calculate_global_progress(entry.results or [])
-                
+
                 # Check if we should persist to mongo (diff > 5% or stage change)
                 last_prog = self._last_persisted_progress.get(document_id, -1)
                 last_stage = self._last_persisted_stage.get(document_id, "")
-                
+
                 needs_persist = force_persist or (stage != last_stage) or (abs(progress - last_prog) >= 5)
-                
+
                 if needs_persist:
-                    # Persist item update
                     fields = {
                         "progress": progress,
                         "phase": stage,
                         "status": status,
                     }
                     await self.repo.update_data_result(self.job_id, document_id, fields)
-                    
+
                     # Persist global progress
                     await self.repo.update_folder_entry(self.job_id, {"$set": {"progress": global_progress, "stage": stage}})
-                    
+
                     self._last_persisted_progress[document_id] = progress
                     self._last_persisted_stage[document_id] = stage
-                
+
                 # Always emit SSE for smooth frontend
-                event = SummaryJobEvent.progress(
+                event = SummaryJobEvent.create_progress(
                     job_id=self.job_id,
                     document_id=document_id,
                     status=JobStatus(status),
@@ -96,21 +95,72 @@ class ProgressReporter:
                 logger.error(f"Failed to update progress for {document_id}: {e}", exc_info=True)
 
     async def complete_item(self, document_id: str, result: DataResult) -> None:
-        await self.update_item_progress(
-            document_id=document_id,
-            result=result,
-            progress=100,
-            stage="COMPLETED",
-            status=JobStatus.COMPLETED.value,
-            force_persist=True
-        )
+        """Mark a document as successfully completed. Explicitly persists success=True
+        so it cannot be contradicted by an earlier success=False write."""
+        result.success = True
+        async with self._lock:
+            try:
+                entry = await self.repo.get_folder_entry_by_id(self.job_id)
+                global_progress = await self._calculate_global_progress(entry.results or [])
+                fields = {
+                    "progress": 100,
+                    "phase": "COMPLETED",
+                    "status": JobStatus.COMPLETED.value,
+                    "success": True,
+                    "error_type": None,
+                    "error_code": None,
+                    "error_message": None,
+                }
+                await self.repo.update_data_result(self.job_id, document_id, fields)
+                await self.repo.update_folder_entry(
+                    self.job_id, {"$set": {"progress": global_progress, "stage": "COMPLETED"}}
+                )
+                self._last_persisted_progress[document_id] = 100
+                self._last_persisted_stage[document_id] = "COMPLETED"
+                event = SummaryJobEvent.create_progress(
+                    job_id=self.job_id,
+                    document_id=document_id,
+                    status=JobStatus.COMPLETED,
+                    progress=100,
+                    stage="COMPLETED",
+                    global_progress=global_progress,
+                    document_name=result.name or "",
+                )
+                get_event_broker().publish(self.user_id, event)
+            except Exception as e:
+                logger.error(f"Failed to complete item {document_id}: {e}", exc_info=True)
 
     async def fail_item(self, document_id: str, result: DataResult, error: str) -> None:
-        await self.update_item_progress(
-            document_id=document_id,
-            result=result,
-            progress=result.progress or 0,
-            stage="FAILED",
-            status=JobStatus.FAILED.value,
-            force_persist=True
-        )
+        """Mark a document as failed. Explicitly persists success=False and the error reason."""
+        current_progress = min(100, max(0, int(result.progress or 0)))
+        result.success = False
+        async with self._lock:
+            try:
+                entry = await self.repo.get_folder_entry_by_id(self.job_id)
+                global_progress = await self._calculate_global_progress(entry.results or [])
+                fields = {
+                    "progress": current_progress,
+                    "phase": "FAILED",
+                    "status": JobStatus.FAILED.value,
+                    "success": False,
+                    "error_message": error,
+                    "error_code": getattr(result, "error_code", None) or "SUMMARY_GENERATION_FAILED",
+                    "error_type": getattr(result, "error_type", None) or "SummaryError",
+                }
+                await self.repo.update_data_result(self.job_id, document_id, fields)
+                await self.repo.update_folder_entry(
+                    self.job_id, {"$set": {"progress": global_progress, "stage": "FAILED"}}
+                )
+                self._last_persisted_progress[document_id] = current_progress
+                self._last_persisted_stage[document_id] = "FAILED"
+                event = SummaryJobEvent.create_failed(
+                    job_id=self.job_id,
+                    document_id=document_id,
+                    document_name=result.name or "",
+                    error_code=fields["error_code"],
+                    error_message=error,
+                )
+                get_event_broker().publish(self.user_id, event)
+            except Exception as e:
+                logger.error(f"Failed to mark item {document_id} as failed: {e}", exc_info=True)
+

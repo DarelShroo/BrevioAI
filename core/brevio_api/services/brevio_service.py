@@ -1,7 +1,9 @@
 import asyncio
+import base64
 import json
 import logging
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path as FilePath
 from typing import Any, Dict, List, Tuple
@@ -163,24 +165,34 @@ class BrevioService:
         expected_credits = None
         if source_type == "documents" and files_data:
             try:
-                from core.brevio_api.models.brevio.document_processing_request import (
-                    DocumentProcessingRequest,
+                from core.brevio_api.services.billing.product_limit_service import (
+                    measure_documents,
                 )
-                from core.brevio_api.services.estimation.estimation_service import (
-                    EstimationService,
+                from core.shared.utils.pricing_registry import (
+                    get_pricing_snapshot,
+                    calculate_provider_cost,
+                    convert_to_platform_currency,
+                    calculate_credits,
                 )
 
-                request = DocumentProcessingRequest(
-                    language=prompt_config.language,
-                    model=prompt_config.model,
-                    category=prompt_config.category,
-                    style=prompt_config.style,
-                    format=prompt_config.format,
-                    summary_level=prompt_config.summary_level,
-                )
-                outcome = await EstimationService().estimate(request, files_data)
-                maximum_credits = int(outcome.maximum_credits)
-                expected_credits = int(outcome.expected_credits)
+                docs = measure_documents(files_data, source_type=source_type)
+                total_pages = sum(d.pages for d in docs)
+                
+                try:
+                    snapshot = get_pricing_snapshot(prompt_config.model)
+                    input_tokens = total_pages * 550
+                    output_tokens = max(2000, total_pages * 150)
+                    _, provider_max = calculate_provider_cost(
+                        input_tokens, output_tokens, output_tokens, snapshot
+                    )
+                    platform_max = convert_to_platform_currency(provider_max, snapshot)
+                    estimated_max = max(1, calculate_credits(platform_max, snapshot))
+                except Exception:
+                    # Fallback: ~2 credits per page
+                    estimated_max = max(1, total_pages * 2)
+                    
+                maximum_credits = estimated_max
+                expected_credits = estimated_max
             except Exception:
                 logger.warning(
                     "event=credit_estimation_fallback job_id=%s source_type=%s",
@@ -254,6 +266,10 @@ class BrevioService:
                 result = await credits.settle_job(
                     job_id=job_id, consumed_credits=int(consumed_credits)
                 )
+            elif not success:
+                result = await credits.settle_job(
+                    job_id=job_id, consumed_credits=0, metadata={"reason": "job_failed"}
+                )
             else:
                 from core.brevio_api.services.billing.usage_service import (
                     UsageBillingService,
@@ -307,11 +323,12 @@ class BrevioService:
                         credits_limit = int(plan.rollover_max)
                     except Exception:
                         credits_limit = 0
-                await products.record_settled_credits(
-                    job_id,
-                    consumed,
-                    credits_limit=max(0, credits_limit),
-                )
+                if success and consumed > 0:
+                    await products.record_settled_credits(
+                        job_id,
+                        consumed,
+                        credits_limit=max(0, credits_limit),
+                    )
                 record = await products.records.get_by_job(job_id)
                 if record and record.status == "RESERVED":
                     if success:
@@ -718,9 +735,27 @@ class BrevioService:
             if not user_id:
                 user_id = store.get_lease_user(job_id) or ""
             if not user_id:
+                logger.warning(
+                    "event=capacity_release_skipped job_id=%s reason=no_user_id",
+                    job_id,
+                )
                 return
+            g_before = store.global_active()
+            u_before = store.user_active(user_id)
             store.release(job_id=job_id, user_id=user_id)
             scheduler.unregister(job_id, user_id)
+            g_after = store.global_active()
+            u_after = store.user_active(user_id)
+            logger.info(
+                "event=capacity_released job_id=%s user_id=%s "
+                "global_active=%s->%s user_active=%s->%s",
+                job_id,
+                user_id,
+                g_before,
+                g_after,
+                u_before,
+                u_after,
+            )
         finally:
             store.close()
 
@@ -885,13 +920,11 @@ class BrevioService:
                 new_status=JobStatus.COMPLETED.value,
                 from_statuses=[JobStatus.PROCESSING.value],
             )
-            await self.release_capacity_for_job(job_id)
             await self.settle_job_credits(job_id, success=True)
             logger.info("event=job_completed job_id=%s", job_id)
             return result if isinstance(result, dict) else {"result": result}
         except Exception as exc:
             await user_service.fail_processing_results(job_id, exc)
-            await self.release_capacity_for_job(job_id)
             await self.settle_job_credits(job_id, success=False)
             raise
 
@@ -944,6 +977,7 @@ class BrevioService:
                         # Re-register / dispatch via fair scheduler (not blind Celery).
                         if (job.enqueue_attempts or 0) < 3:
                             try:
+                                await self.mark_job_enqueued(job_id)
                                 await self.schedule_or_dispatch(job_id)
                                 stats["reenqueued"] += 1
                                 logger.info(
@@ -1667,6 +1701,41 @@ class BrevioService:
             )
 
         elif fmt in ["md", "markdown"]:
+            try:
+                async with aiofiles.open(md_path, "r", encoding="utf-8") as f_md:
+                    md_text = await f_md.read()
+                if "diagrams/diagram-" in md_text:
+                    diagrams_dir = os.path.join(download_loc, "diagrams")
+                    if os.path.isdir(diagrams_dir):
+                        modified = False
+
+                        def _inline_svg(match: re.Match) -> str:
+                            nonlocal modified
+                            alt = match.group(1)
+                            fname = match.group(2)
+                            svg_path = os.path.join(diagrams_dir, fname)
+                            if os.path.exists(svg_path):
+                                try:
+                                    with open(svg_path, "rb") as sf:
+                                        b64 = base64.b64encode(sf.read()).decode("utf-8").replace("\n", "").replace("\r", "")
+                                    modified = True
+                                    return f'<img src="data:image/svg+xml;base64,{b64}" alt="{alt}" class="md-img" />'
+                                except Exception:
+                                    pass
+                            return match.group(0)
+
+                        new_md_text = re.sub(
+                            r"!\[(.*?)\]\(diagrams/(diagram-\d+\.svg)\)",
+                            _inline_svg,
+                            md_text,
+                        )
+                        if modified:
+                            async with aiofiles.open(md_path, "w", encoding="utf-8") as f_out:
+                                await f_out.write(new_md_text)
+                            logger.info(f"Inlined legacy diagram SVGs into {md_path}")
+            except Exception as exc:
+                logger.warning(f"Error checking legacy diagram references in {md_path}: {exc}")
+
             return (
                 md_path,
                 f"summary_{folder_entry_id}.md",

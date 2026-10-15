@@ -816,7 +816,7 @@ class UserService:
         *,
         status: str,
         phase: str,
-        success: bool,
+        success: bool | None = None,
         error_type: str | None = None,
         error_code: str | None = None,
         error_message: str | None = None,
@@ -849,8 +849,9 @@ class UserService:
             fields: dict = {
                 "status": status,
                 "phase": phase,
-                "success": success,
             }
+            if success is not None:
+                fields["success"] = success
             if error_type is not None:
                 fields["error_type"] = error_type
             if error_code is not None:
@@ -873,7 +874,8 @@ class UserService:
             )
             result.status = status
             result.phase = phase
-            result.success = success
+            if success is not None:
+                result.success = success
             result.error_type = (
                 None if status == JobStatus.COMPLETED.value else error_type
             )
