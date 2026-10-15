@@ -103,7 +103,7 @@ async def test_generate_success(
         data = BrevioGenerate(
             data=[
                 MediaEntry(
-                    url=HttpUrl("http://example.com/test.mp3"), path=test_file_path
+                    url=HttpUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ"), path=test_file_path
                 )
             ],
             prompt_config=mock_prompt_config,
@@ -140,7 +140,7 @@ async def test_generate_brevio_error(
         data = BrevioGenerate(
             data=[
                 MediaEntry(
-                    url=HttpUrl("http://example.com/test.mp3"), path=test_file_path
+                    url=HttpUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ"), path=test_file_path
                 )
             ],
             prompt_config=mock_prompt_config,

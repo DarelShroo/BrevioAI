@@ -218,10 +218,16 @@ class BrevioRoutes:
         async def get_models(
             verify_api_key: str = Depends(verify_api_key),
             brevio_service: BrevioService = Depends(get_brevio_service),
+            resolver: CredentialResolver = Depends(get_credential_resolver),
         ) -> ModelsDataResponse:
             models = brevio_service.get_models()
             payload = build_models_payload(models)
             payload["environment"] = SummaryAccessPolicy().environment
+            
+            # Inject platform credential availability
+            for p in payload.get("providers", []):
+                p["has_platform_credential"] = resolver.has_platform_credential(p["id"])
+                
             response = ModelsDataResponse(
                 data=ModelsResponse(**payload),
             )

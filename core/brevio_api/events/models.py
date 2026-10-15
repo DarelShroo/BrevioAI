@@ -36,7 +36,7 @@ class SummaryJobEvent(BaseModel):
     stage: Optional[str] = None
 
     @classmethod
-    def completed(
+    def create_completed(
         cls,
         *,
         job_id: str,
@@ -54,7 +54,7 @@ class SummaryJobEvent(BaseModel):
         )
 
     @classmethod
-    def failed(
+    def create_failed(
         cls,
         *,
         job_id: str,
@@ -73,12 +73,12 @@ class SummaryJobEvent(BaseModel):
             event_id=event_id,
             error=SummaryEventError(
                 code=error_code or "FAILED",
-                message=error_message or "Summary generation failed",
+                message=error_message or error_code or "SUMMARY_GENERATION_FAILED",
             ),
         )
 
     @classmethod
-    def progress(
+    def create_progress(
         cls,
         *,
         job_id: str,
@@ -101,3 +101,7 @@ class SummaryJobEvent(BaseModel):
             document_name=document_name,
             event_id=event_id,
         )
+
+    completed = create_completed
+    failed = create_failed
+    progress_event = create_progress

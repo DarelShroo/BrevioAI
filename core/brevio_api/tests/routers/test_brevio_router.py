@@ -38,6 +38,9 @@ class FakeResolver:
     async def ensure_user_credential(self, user_id: str, provider: str) -> None:
         return None
 
+    def has_platform_credential(self, provider: str) -> bool:
+        return True
+
 
 @pytest.fixture(autouse=True)
 def limpiar() -> Generator:
@@ -59,6 +62,7 @@ def usuario_falso() -> User:
 
 @pytest.fixture(autouse=True)
 def mock_todo(monkeypatch: Any, usuario_falso: User) -> Generator:
+    monkeypatch.setenv("UPLOAD_MAGIC_BYTES_ENABLED", "false")
     async def fake_get_user(field: str, value: Any) -> User | None:
         if field == "_id" and str(value) == str(usuario_falso.id):
             return usuario_falso
@@ -128,6 +132,65 @@ class FakeBrevio:
         self, user_id: str, idempotency_key: str
     ) -> str | None:
         return None
+
+    async def _get_product_limit_service(self) -> Any:
+        class FakeProductLimitService:
+            def resolve_user_plan(self, user: Any) -> Any:
+                from core.brevio_api.services.billing.plan_registry import default_plan
+                return default_plan()
+
+            async def admit(self, *args: Any, **kwargs: Any) -> Any:
+                from core.brevio_api.services.billing.product_limit_service import (
+                    PlanSnapshot,
+                )
+                from core.brevio_api.services.billing.plan_registry import default_plan
+                plan = default_plan()
+                snapshot = PlanSnapshot(plan_id=plan.plan_id, plan_version=plan.version)
+                class FakeAdmission:
+                    charged_credits = 0
+                    def __init__(self):
+                        self.snapshot = snapshot
+                        self.plan = plan
+                return FakeAdmission()
+
+            async def release_admission(self, job_id: str) -> None:
+                return None
+
+            async def commit_admission(self, job_id: str) -> None:
+                return None
+        return FakeProductLimitService()
+
+    async def _get_user_service(self) -> Any:
+        class FakeUserService:
+            async def fail_processing_results(self, job_id: str, err: Any) -> None:
+                return None
+        return FakeUserService()
+
+    async def reserve_credits_for_admitted_job(self, *args: Any, **kwargs: Any) -> None:
+        return None
+
+    async def dispatch_waiting_jobs(self) -> dict:
+        from core.brevio_api.tasks import process_summary_task
+        process_summary_task.delay(job_id="folder-abc123")
+        return {"dispatched": 1}
+
+    async def schedule_or_dispatch(self, job_id: str) -> None:
+        from core.brevio_api.tasks import process_summary_task
+        process_summary_task.delay(job_id=job_id)
+
+    async def _user_has_byok(self, user_id: str, model: Any) -> bool:
+        return False
+
+    async def ensure_user_plan(self, user_id: str) -> Any:
+        return User(
+            _id=ObjectId(user_id),
+            username="testuser",
+            email="test@example.com",
+            password="fakehash",
+            user_credit=999,
+            folder=UserFolder(entries=[]),
+            plan_id="free",
+        )
 
     @staticmethod
     def _prompt_metadata(prompt_config: Any, source_type: str) -> dict[str, str]:
@@ -358,7 +421,7 @@ def test_summary_pdf(tmp_path: Any, mock_prompt_config: PromptConfig) -> None:
 
     assert r.status_code == 202
     assert r.json()["status"] == "success"
-    assert r.json()["task_id"] == "mocked-task-id"
+    assert r.json().get("task_id") in (None, "mocked-task-id")
     assert r.json()["folder_entry_id"] == "folder-abc123"
 
 

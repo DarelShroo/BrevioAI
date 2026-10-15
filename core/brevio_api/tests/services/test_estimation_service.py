@@ -326,7 +326,7 @@ def test_estimate_documents_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     app.dependency_overrides[get_current_user] = lambda: str(ObjectId())
     app.dependency_overrides[get_estimation_service] = lambda: mock_service
 
-    files = {"files": ("guide.pdf", b"fake-pdf", "application/pdf")}
+    files = {"files": ("guide.pdf", b"%PDF-1.4\n", "application/pdf")}
     data = {
         "language": "SPANISH",
         "model": "gpt-4o-mini",
