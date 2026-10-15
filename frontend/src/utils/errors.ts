@@ -49,22 +49,30 @@ export function extractErrorCode(body: unknown): string | null {
   return null
 }
 
+function isStackTrace(str: string): boolean {
+  return str.includes('Traceback') || str.includes('\n  File ') || str.includes('\n    at ')
+}
+
 export function extractDetail(body: unknown): string | null {
   if (!body || typeof body !== 'object') return null
   const data = body as ApiErrorBody
 
   if (typeof data.detail === 'string' && data.detail.trim()) {
+    if (isStackTrace(data.detail)) return null
     return data.detail
   }
 
   if (Array.isArray(data.detail) && data.detail.length > 0) {
-    return data.detail
+    const messages = data.detail
       .map((item) => item.msg || JSON.stringify(item))
-      .filter(Boolean)
-      .join('; ')
+      .filter((msg) => msg && !isStackTrace(msg))
+    if (messages.length > 0) {
+      return messages.join('; ')
+    }
   }
 
   if (typeof data.message === 'string' && data.message.trim()) {
+    if (isStackTrace(data.message)) return null
     return data.message
   }
 

@@ -48,7 +48,7 @@ import {
   normalizeStatus,
 } from '@/utils/entries'
 import { parseApiError } from '@/utils/errors'
-import { categoryLabel, styleLabel, summaryLevelLabel } from '@/utils/labels'
+import { categoryLabel, statusLabel, styleLabel, summaryLevelLabel } from '@/utils/labels'
 
 const { t, te } = useI18n()
 const route = useRoute()
@@ -63,7 +63,7 @@ const filter = ref('')
 const statusFilter = ref<StoreStatusFilter>('ALL')
 const sortField = ref<StoreSortField>('created')
 const viewMode = ref<StoreViewMode>('grid')
-const selected = ref<FolderEntry | null>(null)
+const selectedEntryId = ref<string | null>(null)
 const detailOpen = ref(false)
 const downloadFormat = ref<DownloadFormat>('md')
 const downloading = ref(false)
@@ -92,6 +92,18 @@ const viewOptions = computed(() => [
   { label: t('store.table'), value: 'table' as const },
 ])
 
+const liveEntries = computed(() => {
+  return entries.value.map(entry => {
+    const id = entryId(entry)
+    return id ? (realtime.entry(id) || entry) : entry
+  })
+})
+
+const selected = computed(() => {
+  if (!selectedEntryId.value) return null
+  return liveEntries.value.find(e => entryId(e) === selectedEntryId.value) || null
+})
+
 const statusOptions = computed(() => [
   { label: t('store.all'), value: 'ALL' as const },
   { label: t('store.statusProcessing'), value: 'PROCESSING' as const },
@@ -107,11 +119,11 @@ const sortOptions = computed(() => [
 ])
 
 const scopedEntries = computed(() => {
-  if (currentScope.value === 'all') return entries.value
+  if (currentScope.value === 'all') return liveEntries.value
   if (currentScope.value === 'unfiled') {
-    return entries.value.filter((entry) => !entryFolderId(entry))
+    return liveEntries.value.filter((entry) => !entryFolderId(entry))
   }
-  return entries.value.filter((entry) => entryFolderId(entry) === currentScope.value)
+  return liveEntries.value.filter((entry) => entryFolderId(entry) === currentScope.value)
 })
 
 const counts = computed(() => {
@@ -250,8 +262,24 @@ const showResultPhase = computed(() => {
   return normalizeStatus(activeResult.value) !== String(activeResult.value.phase).toUpperCase()
 })
 
+const activeResultPhaseLabel = computed(() => {
+  return statusLabel(activeResult.value?.phase, t, te)
+})
+
+const selectedCategoryLabel = computed(() => {
+  return selected.value?.category ? categoryLabel(selected.value.category, t, te) : ''
+})
+
+const selectedStyleLabel = computed(() => {
+  return selected.value?.style ? styleLabel(selected.value.category, selected.value.style, t, te) : ''
+})
+
+const selectedSummaryLevelLabel = computed(() => {
+  return selected.value?.summary_level ? summaryLevelLabel(selected.value.summary_level, t, te) : ''
+})
+
 function openDetail(entry: FolderEntry, resultIndex = 0) {
-  selected.value = entry
+  selectedEntryId.value = entryId(entry)
   readerResultIndex.value = resultIndex
   detailOpen.value = true
 }
@@ -267,9 +295,7 @@ function upsertEntry(item: FolderEntry) {
   } else {
     entries.value = [item, ...entries.value]
   }
-  if (selected.value && entryId(selected.value) === id) {
-    selected.value = item
-  }
+  realtime.upsertEntry(item)
 }
 
 function openEntryFromQuery() {
@@ -302,6 +328,7 @@ async function load() {
   try {
     const [list] = await Promise.all([userService.listEntries(), library.load().catch(() => undefined)])
     entries.value = list
+    list.forEach(item => realtime.upsertEntry(item))
     const valid = new Set(list.map((entry) => entryId(entry)).filter(Boolean))
     selectedIds.value = selectedIds.value.filter((id) => valid.has(id))
     openEntryFromQuery()
@@ -364,9 +391,9 @@ async function removeEntry(entry: FolderEntry) {
     await userService.deleteEntry(id)
     entries.value = entries.value.filter((item) => entryId(item) !== id)
     selectedIds.value = selectedIds.value.filter((item) => item !== id)
-    if (selected.value && entryId(selected.value) === id) {
+    if (selectedEntryId.value === id) {
       detailOpen.value = false
-      selected.value = null
+      selectedEntryId.value = null
     }
     toast.success(t('store.entryDeleted'))
     await library.load().catch(() => undefined)
@@ -506,6 +533,7 @@ async function bulkDelete() {
 onMounted(load)
 
 const stopRealtime = realtime.subscribe((event) => {
+  if (event.type === 'summary.progress') return
   void realtime.refreshJob(event.job_id).then((item) => {
     if (item) upsertEntry(item)
     void library.load().catch(() => undefined)
@@ -706,7 +734,7 @@ onUnmounted(stopRealtime)
           </Column>
           <Column :header="t('store.status')">
             <template #body="{ data }">
-              <StatusBadge v-if="entryStatus(data) !== 'PROCESSING' || !data.progress" :status="entryStatus(data)" />
+              <StatusBadge v-if="entryStatus(data) !== 'PROCESSING' || data.progress == null" :status="entryStatus(data)" />
               <ProgressBar v-else :progress="data.progress || 0" :stage="data.stage" :status="data.status" :show-labels="false" style="width: 100px;" />
             </template>
           </Column>
@@ -787,7 +815,7 @@ onUnmounted(stopRealtime)
           <div class="detail-title">
             <h3 class="font-serif">{{ entryPrimaryName(selected) }}</h3>
             <p class="muted tiny">{{ t('job.id') }}: {{ entryId(selected) }}</p>
-            <StatusBadge v-if="entryStatus(selected) !== 'PROCESSING' || !selected.progress" :status="entryStatus(selected)" />
+            <StatusBadge v-if="entryStatus(selected) !== 'PROCESSING' || selected.progress == null" :status="entryStatus(selected)" />
             <ProgressBar v-else :progress="selected.progress || 0" :stage="selected.stage" :status="selected.status" :show-labels="true" />
           </div>
 
@@ -818,15 +846,15 @@ onUnmounted(stopRealtime)
             </div>
             <div v-if="selected.category">
               <span class="meta-key">{{ t('store.category') }}</span>
-              <strong class="meta-val">{{ categoryLabel(selected.category, t, te) }}</strong>
+              <strong class="meta-val">{{ selectedCategoryLabel }}</strong>
             </div>
             <div v-if="selected.style">
               <span class="meta-key">{{ t('store.style') }}</span>
-              <strong class="meta-val">{{ styleLabel(selected.category, selected.style, t, te) }}</strong>
+              <strong class="meta-val">{{ selectedStyleLabel }}</strong>
             </div>
             <div v-if="selected.summary_level">
               <span class="meta-key">{{ t('store.level') }}</span>
-              <strong class="meta-val">{{ summaryLevelLabel(selected.summary_level, t, te) }}</strong>
+              <strong class="meta-val">{{ selectedSummaryLevelLabel }}</strong>
             </div>
           </div>
 
@@ -838,9 +866,9 @@ onUnmounted(stopRealtime)
             <span class="active-doc__label">{{ t('store.summaryReader') }}</span>
             <strong class="active-doc__name" :title="activeResultName">{{ activeResultName }}</strong>
             <div class="active-doc__meta">
-              <StatusBadge v-if="normalizeStatus(activeResult) !== 'PROCESSING' || !activeResult.progress" :status="normalizeStatus(activeResult)" />
-              <ProgressBar v-else :progress="activeResult.progress || 0" :stage="activeResult.phase" :status="activeResult.status" :show-labels="true" />
-              <span v-if="showResultPhase" class="muted tiny">{{ activeResult?.phase }}</span>
+              <StatusBadge v-if="activeResult && (normalizeStatus(activeResult) !== 'PROCESSING' || activeResult.progress == null)" :status="normalizeStatus(activeResult)" />
+              <ProgressBar v-else-if="activeResult" :progress="activeResult.progress || 0" :stage="activeResult.phase" :status="activeResult.status" :show-labels="true" />
+              <span v-if="showResultPhase" class="muted tiny">{{ activeResultPhaseLabel }}</span>
               <span v-if="selected.results.length > 1" class="muted tiny">
                 {{ readerResultIndex + 1 }}/{{ selected.results.length }}
               </span>
@@ -852,7 +880,7 @@ onUnmounted(stopRealtime)
               v-model="readerResultIndex"
               :options="
                 selected.results.map((result, index) => ({
-                  label: result.name || t('job.result', { index: index + 1 }),
+                  label: result.name || t('store.result', { index: index + 1 }),
                   value: result.index ?? index,
                 }))
               "

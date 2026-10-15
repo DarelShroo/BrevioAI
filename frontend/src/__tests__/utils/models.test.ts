@@ -102,10 +102,12 @@ describe('model catalog helpers', () => {
     expect(resolveModelId({ label: 'qwen3:8b', value: 'qwen3:8b' })).toBe('qwen3:8b')
     expect(isLocalModelId('qwen3:8b')).toBe(true)
     expect(isLocalModelId('gpt-4o-mini')).toBe(false)
-    expect(accessHintForModel(local, false, 0)).toBe('local')
-    expect(accessHintForModel(paid, true, 0)).toBe('byok')
-    expect(accessHintForModel(paid, false, 12)).toBe('credits')
-    expect(accessHintForModel(paid, false, 0)).toBe('blocked')
+    const providerWithKey = { id: 'openai', access: 'pay_per_use' as const, requires_api_key: true, has_platform_credential: true }
+    const providerWithoutKey = { id: 'openai', access: 'pay_per_use' as const, requires_api_key: true, has_platform_credential: false }
+    expect(accessHintForModel(local, false, undefined)).toBe('local')
+    expect(accessHintForModel(paid, true, undefined)).toBe('byok')
+    expect(accessHintForModel(paid, false, providerWithKey)).toBe('credits')
+    expect(accessHintForModel(paid, false, providerWithoutKey)).toBe('blocked')
     expect(
       accessHintForModel(
         {
@@ -115,14 +117,14 @@ describe('model catalog helpers', () => {
           provider: 'unknown',
         },
         false,
-        0,
+        undefined,
       ),
     ).toBe('local')
   })
 
   it('does not treat ollama-style ids as pay-per-use when the catalog is a string list', () => {
     const catalog = normalizeModelsPayload(['qwen3:8b', 'gpt-4o-mini']).catalog
-    expect(accessHintForModel(catalog[0], false, 0)).toBe('local')
-    expect(accessHintForModel(catalog[1], false, 0)).toBe('blocked')
+    expect(accessHintForModel(catalog[0], false, undefined)).toBe('local')
+    expect(accessHintForModel(catalog[1], false, undefined)).toBe('blocked')
   })
 })

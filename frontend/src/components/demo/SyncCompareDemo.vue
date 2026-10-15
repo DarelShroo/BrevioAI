@@ -14,6 +14,7 @@ import {
   type ExampleEntry,
 } from '@/services/examples.service'
 import { parseApiError } from '@/utils/errors'
+import { categoryLabel, styleLabel, summaryLevelLabel } from '@/utils/labels'
 
 interface SyncAnchor {
   id: string
@@ -45,7 +46,7 @@ const emit = defineEmits<{
   'update:slug': [value: string]
 }>()
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const catalog = ref<ExampleEntry[]>([])
 const defaultSlug = ref('summary_d89204')
 const selectedSlug = ref('')
@@ -82,21 +83,16 @@ const primaryCtaTo = computed(() =>
 )
 
 function styleLabelFor(item: ExampleEntry): string {
-  const key = (item.style_key || '').trim()
-  if (key) {
-    const path = `styles._.${key}`
-    const translated = t(path)
-    if (translated !== path) return translated
-  }
-  return item.style || key || '—'
+  const cat = (item.category_key || item.category || '').trim()
+  const style = (item.style_key || item.style || '').trim()
+  return styleLabel(cat, style, t, te)
 }
 
 function exampleTypeLabel(item: ExampleEntry): string {
-  const level =
-    item.summary_level_label ||
-    (item.summary_level ? t(`summaryLevels.${item.summary_level}`) : '') ||
-    ''
-  return [item.category, styleLabelFor(item), level].filter(Boolean).join(' · ')
+  const cat = categoryLabel(item.category_key || item.category, t, te)
+  const style = styleLabelFor(item)
+  const level = summaryLevelLabel(item.summary_level, t, te)
+  return [cat, style, level].filter(Boolean).join(' · ')
 }
 
 function exampleOptionLabel(item: ExampleEntry): string {
@@ -414,7 +410,7 @@ onBeforeUnmount(() => {
     <!-- Toolbar simplificada unificada con el Selector -->
     <div class="demo-toolbar">
       <div class="demo-toolbar__main">
-         <span class="demo-toolbar__title">Explorador de ejemplos</span>
+         <span class="demo-toolbar__title">{{ t('demo.explorerTitle') }}</span>
       </div>
       <Select
         v-if="options.length"
@@ -437,7 +433,7 @@ onBeforeUnmount(() => {
         <article class="demo-pane demo-pane--pdf">
           <header class="demo-pane__head">
             <h4>{{ t('demo.original') }}</h4>
-            <span class="muted" :title="entry?.document_name || 'PDF'">{{ documentLabel }}</span>
+            <span class="muted" :title="entry?.document_name || t('fileKind.pdf')">{{ documentLabel }}</span>
           </header>
           <div class="demo-pane__body demo-pane__body--pdf">
             <div class="demo-pdf-wrapper">
@@ -474,10 +470,10 @@ onBeforeUnmount(() => {
           
           <!-- Chips minimalistas para la metadata -->
           <div v-if="entry" class="demo-meta demo-meta--clean">
-            <span class="demo-meta-chip">{{ entry.category }}</span>
+            <span class="demo-meta-chip">{{ categoryLabel(entry.category_key || entry.category, t, te) }}</span>
             <span class="demo-meta-chip">{{ styleLabelFor(entry) }}</span>
-            <span v-if="entry.summary_level_label || entry.summary_level" class="demo-meta-chip">
-              {{ entry.summary_level_label || t(`summaryLevels.${entry.summary_level}`) }}
+            <span v-if="entry.summary_level" class="demo-meta-chip">
+              {{ summaryLevelLabel(entry.summary_level, t, te) }}
             </span>
             <span class="demo-meta-chip">{{ entry.model }}</span>
           </div>
@@ -796,7 +792,7 @@ onBeforeUnmount(() => {
   padding: 2.5rem 3rem !important;
   font-size: 1.05rem;
   line-height: 1.75;
-  color: #1e293b;
+  color: var(--md-ink, #0b1f2a);
   max-width: 70ch;
   margin: 0 auto;
 }
@@ -804,7 +800,12 @@ onBeforeUnmount(() => {
 .demo-summary :deep(.md-body h1),
 .demo-summary :deep(.md-body h2),
 .demo-summary :deep(.md-body h3) {
-  color: #061a24;
+  color: var(--md-ink, #061a24);
+}
+
+.demo-summary :deep(.md-body p),
+.demo-summary :deep(.md-body li) {
+  color: var(--md-ink-soft, #355064);
 }
 
 /* Rediseño del resaltado de sincronización: Menta muy sutil, sin fondo pesado */
@@ -870,7 +871,64 @@ onBeforeUnmount(() => {
   color: #ef4444;
 }
 
+[data-theme='dark'] .demo-stage,
+.p-dark .demo-stage {
+  border-color: #30363d;
+  background: #0d1117;
+}
+
+[data-theme='dark'] .demo-pane,
+.p-dark .demo-pane {
+  background: #0d1117;
+  border-color: #30363d;
+}
+
+[data-theme='dark'] .demo-pane__head,
+.p-dark .demo-pane__head {
+  background: #161b22;
+  border-color: #30363d;
+}
+
+[data-theme='dark'] .demo-pane__head h4,
+.p-dark .demo-pane__head h4 {
+  color: #e6edf3;
+}
+
+[data-theme='dark'] .demo-pane__body,
+.p-dark .demo-pane__body {
+  background: #0d1117;
+}
+
+[data-theme='dark'] .demo-pane__body--pdf,
+.p-dark .demo-pane__body--pdf {
+  background: #161b22;
+}
+
+[data-theme='dark'] .demo-pane__foot,
+.p-dark .demo-pane__foot {
+  background: #161b22;
+  border-color: #30363d;
+}
+
+[data-theme='dark'] .demo-meta--clean,
+.p-dark .demo-meta--clean {
+  background: #161b22;
+  border-color: #30363d;
+}
+
+[data-theme='dark'] .demo-meta-chip,
+.p-dark .demo-meta-chip {
+  background: #21262d;
+  color: #c9d1d9;
+  border-color: #30363d;
+}
+
 @media (max-width: 960px) {
+  .demo-stage {
+    height: auto;
+    min-height: 42rem;
+  }
+
   .demo-split {
     grid-template-columns: 1fr;
   }
@@ -878,10 +936,15 @@ onBeforeUnmount(() => {
   .demo-pane {
     border-inline-end: 0;
     border-bottom: 1px solid #e2e8f0;
+    height: 28rem;
   }
 
   .demo-pane:last-child {
     border-bottom: 0;
+  }
+
+  .demo-summary :deep(.md-body) {
+    padding: 1.25rem 1rem !important;
   }
 }
 </style>

@@ -18,7 +18,7 @@ import { useCatalogStore } from '@/stores/catalog.store'
 import { useAppToast } from '@/composables/useToast'
 import type { UserCredential } from '@/types/user'
 import { parseApiError } from '@/utils/errors'
-import { providerLabel } from '@/utils/labels'
+import { providerLabel, statusLabel } from '@/utils/labels'
 
 const FALLBACK_PAID_PROVIDERS = ['openai', 'deepseek', 'google', 'xai', 'anthropic']
 
@@ -296,7 +296,7 @@ watch(providerFilter, () => {
             </RouterLink>
             <Button
               v-if="isPremium"
-              label="Manage Billing"
+              :label="t('profile.manageBilling')"
               icon="pi pi-credit-card"
               :loading="managingBilling"
               @click="manageBilling"
@@ -349,7 +349,11 @@ watch(providerFilter, () => {
             {{ providerLabel(data.provider, t, te) }}
           </template>
         </Column>
-        <Column field="status" :header="t('profile.status')" />
+        <Column field="status" :header="t('profile.status')">
+          <template #body="{ data }">
+            {{ statusLabel(data.status, t, te) }}
+          </template>
+        </Column>
         <Column :header="t('profile.default')">
           <template #body="{ data }">
             <Tag

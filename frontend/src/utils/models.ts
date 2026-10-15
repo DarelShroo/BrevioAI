@@ -1,3 +1,5 @@
+import { statusLabel } from '@/utils/labels'
+
 export type ModelAccess = 'local' | 'pay_per_use'
 export type ModelAccessHint = 'local' | 'byok' | 'credits' | 'blocked'
 
@@ -20,6 +22,7 @@ export interface CatalogProvider {
   id: string
   access: ModelAccess
   requires_api_key: boolean
+  has_platform_credential?: boolean
 }
 
 export interface ModelsCatalogPayload {
@@ -149,9 +152,9 @@ export function normalizeModelsPayload(data: unknown): ModelsCatalogPayload {
     ? typed.models.map(asCatalogModel).filter((item): item is CatalogModel => item !== null)
     : []
   const catalog = fromCatalog.length ? fromCatalog : fromModels
-  const providers = Array.isArray(typed.providers)
-    ? typed.providers
-        .map((item) => {
+  const providers: CatalogProvider[] = Array.isArray(typed.providers)
+    ? (typed.providers
+        .map((item): CatalogProvider | null => {
           if (!item || typeof item !== 'object' || !('id' in item)) return null
           const provider = item as Partial<CatalogProvider>
           if (!provider.id) return null
@@ -163,9 +166,10 @@ export function normalizeModelsPayload(data: unknown): ModelsCatalogPayload {
             id: provider.id,
             access,
             requires_api_key: access === 'pay_per_use',
-          } satisfies CatalogProvider
+            has_platform_credential: Boolean(provider.has_platform_credential),
+          }
         })
-        .filter((item): item is CatalogProvider => item !== null)
+        .filter((item): item is CatalogProvider => item !== null))
     : uniqueProviders(catalog)
 
   return {
@@ -188,7 +192,7 @@ export function defaultModelId(catalog: CatalogModel[]): string {
   return (recommendedLocal || local || recommendedPaid || catalog[0])?.id || ''
 }
 
-export function modelGroups(catalog: CatalogModel[]): ModelOptionGroup[] {
+export function modelGroups(catalog: CatalogModel[], t?: (key: string) => string, te?: (key: string) => boolean): ModelOptionGroup[] {
   const local = catalog.filter((item) => item.access === 'local')
   const paid = catalog.filter((item) => item.access === 'pay_per_use')
   const groups: ModelOptionGroup[] = []
@@ -204,7 +208,7 @@ export function modelGroups(catalog: CatalogModel[]): ModelOptionGroup[] {
       labelKey: 'params.paidModels',
       access: 'pay_per_use',
       items: paid.map((item) => ({
-        label: item.status === 'deprecated' ? `${item.display_name} (deprecated)` : item.display_name,
+        label: item.status === 'deprecated' ? `${item.display_name} (${statusLabel('DEPRECATED', t, te)})` : item.display_name,
         value: item.id,
       })),
     })
@@ -215,7 +219,7 @@ export function modelGroups(catalog: CatalogModel[]): ModelOptionGroup[] {
 export function accessHintForModel(
   model: CatalogModel | undefined,
   hasProviderKey: boolean,
-  credits: number,
+  providerCatalogInfo?: CatalogProvider,
 ): ModelAccessHint | null {
   if (!model) return null
   if (
@@ -226,6 +230,6 @@ export function accessHintForModel(
     return 'local'
   }
   if (hasProviderKey) return 'byok'
-  if (credits > 0) return 'credits'
+  if (providerCatalogInfo?.has_platform_credential) return 'credits'
   return 'blocked'
 }

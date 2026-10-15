@@ -12,6 +12,7 @@ describe('UserMenu', () => {
       routes: [
         { path: '/', name: 'home', component: { template: '<div />' } },
         { path: '/profile', name: 'profile', component: { template: '<div />' } },
+        { path: '/plans', name: 'plans', component: { template: '<div />' } },
       ],
     })
     await router.push('/')

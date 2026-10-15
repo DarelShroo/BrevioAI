@@ -47,7 +47,7 @@ const { t } = useI18n()
             <FileText :size="18" :stroke-width="2" aria-hidden="true" />
           </span>
         </div>
-        <StatusBadge v-if="entryStatus(entry) !== 'PROCESSING' || !entry.progress" :status="entryStatus(entry)" />
+        <StatusBadge v-if="entryStatus(entry) !== 'PROCESSING' || entry.progress == null" :status="entryStatus(entry)" />
         <ProgressBar v-else :progress="entry.progress || 0" :stage="entry.stage" :status="entry.status" :show-labels="false" style="width: 100px;" />
       </div>
 

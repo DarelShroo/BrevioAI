@@ -5,6 +5,7 @@ import Button from 'primevue/button'
 import Checkbox from 'primevue/checkbox'
 import Dialog from 'primevue/dialog'
 import Select from 'primevue/select'
+import { formatLabel } from '@/utils/labels'
 import type { DownloadFormat } from '@/types/brevio'
 import type { FolderEntry } from '@/types/user'
 import { completedDownloadableResults, entryPrimaryName } from '@/utils/entries'
@@ -22,9 +23,16 @@ const emit = defineEmits<{
   confirm: [payload: { indexes: number[]; format: DownloadFormat }]
 }>()
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const format = ref<DownloadFormat>('md')
 const selected = ref<number[]>([])
+
+const formatOptions = computed(() =>
+  ['md', 'docx', 'pdf', 'txt'].map((id) => ({
+    label: formatLabel(id, t, te),
+    value: id as DownloadFormat,
+  })),
+)
 
 const options = computed(() =>
   props.entry ? completedDownloadableResults(props.entry) : [],
@@ -103,7 +111,9 @@ function confirm() {
       <Select
         input-id="store-dl-format"
         v-model="format"
-        :options="['md', 'docx', 'pdf', 'txt']"
+        :options="formatOptions"
+        option-label="label"
+        option-value="value"
         class="w-full"
         data-testid="store-download-format"
       />

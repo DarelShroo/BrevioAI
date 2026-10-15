@@ -13,13 +13,14 @@ export function useRealtimeNotifications() {
   const { t } = useI18n()
 
   function documentName(event: SummaryJobEvent) {
-    return event.document_name?.trim() || t('job.untitledEntry')
+    return event.document_name?.trim() || t('store.untitled')
   }
 
   function notify(event: SummaryJobEvent) {
     const name = documentName(event)
     const styleClass = jobEventToastClass(event.job_id)
     const hint = t('notifications.viewSummaryHint')
+    
     if (event.type === 'summary.completed') {
       toast.success(
         `${t('notifications.summaryCompletedDetail', { name })} ${hint}`,
@@ -28,11 +29,30 @@ export function useRealtimeNotifications() {
       )
       return
     }
-    toast.error(
-      `${t('notifications.summaryFailedDetail', { name })} ${hint}`,
-      t('notifications.summaryFailed'),
-      { life: 8000, styleClass },
-    )
+
+    if (event.type === 'summary.failed') {
+      let errorMessage = t('notifications.summaryFailedDetail', { name })
+
+      if (event.error?.code) {
+        // En vue-i18n, podemos comprobar si existe la traducción
+        const codeKey = `errors.codes.${event.error.code}`
+        // Como te() no está destructurado, usamos t() y comparamos
+        const translated = t(codeKey)
+        if (translated !== codeKey) {
+          errorMessage = `${errorMessage} ${translated}`
+        } else if (event.error.message && !event.error.message.includes('\n') && !event.error.message.includes('Traceback')) {
+          errorMessage = `${errorMessage} ${event.error.message}`
+        }
+      } else if (event.error?.message && !event.error.message.includes('\n') && !event.error.message.includes('Traceback')) {
+        errorMessage = `${errorMessage} ${event.error.message}`
+      }
+
+      toast.error(
+        `${errorMessage} ${hint}`,
+        t('notifications.summaryFailed'),
+        { life: 8000, styleClass },
+      )
+    }
   }
 
   const stopEvents = realtime.subscribe(notify)

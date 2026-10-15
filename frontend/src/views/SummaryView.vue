@@ -32,7 +32,7 @@ import {
   isSummaryModelBlocked,
   isTranscriptionKeyMissing,
 } from '@/utils/processingAccess'
-import { humanizeId, providerLabel } from '@/utils/labels'
+import { formatLabel, humanizeId, providerLabel, statusLabel } from '@/utils/labels'
 import { isDocumentFile, isMediaFile, isYoutubeUrl } from '@/utils/validation'
 
 const { t, te } = useI18n()
@@ -79,6 +79,12 @@ const completedResults = computed(() =>
     (result) => String(result.status || '').toUpperCase() === 'COMPLETED',
   ),
 )
+const formatOptions = computed(() =>
+  ['md', 'docx', 'pdf', 'txt'].map((id) => ({
+    label: formatLabel(id, t, te),
+    value: id as DownloadFormat,
+  })),
+)
 const transcriptionProviderOptions = computed(() =>
   catalog.selectableTranscriptionProviders.map((item) => ({
     label: providerLabel(item.id, t, te),
@@ -92,7 +98,7 @@ const transcriptionModelOptions = computed(() =>
       const base = humanizeId(item.display_name || item.id)
       if (item.status === 'deprecated' || item.status === 'preview') {
         return {
-          label: `${base} (${humanizeId(item.status)})`,
+          label: `${base} (${statusLabel(item.status, t, te)})`,
           value: item.id,
         }
       }
@@ -109,13 +115,15 @@ const transcriptionHint = computed(() => {
   if (keyedProviders.value.has(provider.id)) return 'byok'
   return 'missing'
 })
-const summaryBlocked = computed(() =>
-  isSummaryModelBlocked(
-    catalog.modelById(params.model),
+const summaryBlocked = computed(() => {
+  const modelInfo = catalog.modelById(params.model)
+  const providerInfo = catalog.providers.find(p => p.id === modelInfo?.provider)
+  return isSummaryModelBlocked(
+    modelInfo,
     keyedProviders.value,
-    auth.profile?.user_credit ?? 0,
-  ),
-)
+    providerInfo,
+  )
+})
 const transcriptionBlocked = computed(() =>
   isTranscriptionKeyMissing(selectedTranscriptionProvider.value, keyedProviders.value),
 )
@@ -596,7 +604,9 @@ async function download(resultIndex = 0) {
           <div v-if="completedResults.length" class="row actions">
             <Select
               v-model="downloadFormat"
-              :options="['md', 'docx', 'pdf', 'txt']"
+              :options="formatOptions"
+              option-label="label"
+              option-value="value"
               :aria-label="t('job.downloadFormat')"
             />
           </div>

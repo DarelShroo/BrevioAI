@@ -9,11 +9,15 @@ export interface TranscriptionAccessProvider {
 export function isSummaryModelBlocked(
   model: CatalogModel | undefined,
   keyedProviders: Set<string>,
-  credits: number,
+  providerCatalogInfo?: import('./models').CatalogProvider,
 ): boolean {
   if (!model) return false
   const provider = model.provider?.trim().toLowerCase() || ''
-  const hint = accessHintForModel(model, Boolean(provider && keyedProviders.has(provider)), credits)
+  const hint = accessHintForModel(
+    model,
+    Boolean(provider && keyedProviders.has(provider)),
+    providerCatalogInfo,
+  )
   return hint === 'blocked'
 }
 

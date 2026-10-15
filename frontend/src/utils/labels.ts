@@ -89,6 +89,14 @@ export function summaryLevelLabel(
   return catalogLabel('summaryLevels', id, t, te)
 }
 
+export function reasoningLevelLabel(
+  id: string | null | undefined,
+  t?: Translate,
+  te?: TranslateExists,
+): string {
+  return catalogLabel('reasoningLevels', id, t, te)
+}
+
 export function providerLabel(
   id: string | null | undefined,
   t?: Translate,

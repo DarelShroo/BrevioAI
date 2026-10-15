@@ -3,7 +3,10 @@ import { expect, type Page, type Route } from '@playwright/test'
 const API_ORIGIN = process.env.VITE_API_URL || 'http://localhost:8000'
 
 export function appNavLink(page: Page, name: string) {
-  return page.getByRole('link', { name, exact: true })
+  const key = name.toLowerCase()
+  const routeName = key === 'settings' ? 'profile' : key
+  const tid = `nav-${routeName}`
+  return page.locator(`[data-testid="${tid}"]`).filter({ visible: true }).first()
 }
 
 export function makeJwt(id = 'user-1', expiresInSeconds = 3600): string {
@@ -90,11 +93,22 @@ export async function mockApi(
     queuedSseBody = sseBody(payload)
   }
 
-  await page.route(`${API_ORIGIN}/**`, async (route) => {
+  await page.route('**/*', async (route) => {
     const request = route.request()
     const url = new URL(request.url())
-    const path = url.pathname
+    let path = url.pathname
     const method = request.method()
+
+    if (
+      !url.href.startsWith(API_ORIGIN) &&
+      !url.pathname.startsWith('/api/')
+    ) {
+      return route.fallback()
+    }
+    
+    // strip /api prefix if present so paths match the mock
+    const normalizedPath = path.startsWith('/api/') ? path.substring(4) : path;
+    path = normalizedPath
 
     if (path === '/events/stream') {
       if (queuedSseBody) {
@@ -300,6 +314,7 @@ export async function mockApi(
             media_enabled: true,
             youtube_enabled: true,
             price_amount: 9.99,
+            annual_price_amount: 95.88,
             price_currency: 'EUR',
             billing_interval: 'month',
             highlighted: true,
@@ -330,6 +345,7 @@ export async function mockApi(
             media_enabled: true,
             youtube_enabled: true,
             price_amount: 19.99,
+            annual_price_amount: 191.88,
             price_currency: 'EUR',
             billing_interval: 'month',
             highlighted: false,
