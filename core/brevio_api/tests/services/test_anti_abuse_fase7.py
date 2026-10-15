@@ -108,6 +108,7 @@ def test_ttl_window_expires(rclient):
 
 
 def test_redis_fail_closed_expensive(monkeypatch):
+    monkeypatch.setenv("RATE_LIMIT_ENABLED", "true")
     bad = redis.Redis.from_url("redis://127.0.0.1:1/0", decode_responses=True)
     limiter = DistributedRateLimiter(bad)
     bucket = BucketConfig("fail", 10, 60, fail_closed=True)

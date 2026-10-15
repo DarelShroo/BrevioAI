@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -276,6 +277,104 @@ async def test_reconciler_reenqueues_orphan_queued():
 
     assert stats["reenqueued"] == 1
     service.schedule_or_dispatch.assert_awaited()
+    repo.mark_job_enqueued.assert_awaited_once_with(str(job.id))
+
+
+@pytest.mark.asyncio
+async def test_reconciler_exhausted_enqueue_attempts_marks_failed():
+    from core.brevio_api.services.brevio_service import BrevioService
+
+    old = datetime.now(timezone.utc) - timedelta(seconds=400)
+    job = SimpleNamespace(
+        id=ObjectId(),
+        status=JobStatus.QUEUED.value,
+        queued_at=old,
+        created_at=old,
+        claimed_at=None,
+        enqueued_at=None,
+        enqueue_attempts=3,
+    )
+    user_service = MagicMock()
+    user_service.fail_processing_results = AsyncMock()
+    repo = MagicMock()
+    repo.list_jobs_by_status = AsyncMock(return_value=[job])
+    repo.mark_job_enqueued = AsyncMock()
+    user_service._folder_entry_repo = repo
+
+    service = BrevioService()
+    service._get_user_service = AsyncMock(return_value=user_service)
+    service.schedule_or_dispatch = AsyncMock()
+    service.release_capacity_for_job = AsyncMock()
+    service.settle_job_credits = AsyncMock()
+    service.dispatch_waiting_jobs = AsyncMock(return_value={"dispatched": 0})
+    service._get_credit_service = AsyncMock(side_effect=Exception("skip credits"))
+
+    with patch("core.brevio_api.services.capacity.CapacityStore") as store_cls:
+        store = MagicMock()
+        store.reclaim_expired_holders.return_value = 0
+        store_cls.return_value = store
+        stats = await service.reconcile_stale_jobs()
+
+    assert stats["failed_orphan_queued"] == 1
+    assert stats["reenqueued"] == 0
+    repo.mark_job_enqueued.assert_not_awaited()
+    user_service.fail_processing_results.assert_awaited_once()
+    service.release_capacity_for_job.assert_awaited_once_with(str(job.id))
+    service.settle_job_credits.assert_awaited_once_with(str(job.id), success=False)
+
+
+@pytest.mark.asyncio
+async def test_claim_queued_job_atomic_concurrency_real_mongo():
+    import os
+    from core.brevio_api.repositories.folder_entry_repository import FolderEntryRepository
+
+    mongo_uri = os.environ.get("FASE3_MONGO_URI", "mongodb://127.0.0.1:27017")
+    try:
+        from motor.motor_asyncio import AsyncIOMotorClient
+        client = AsyncIOMotorClient(mongo_uri, serverSelectionTimeoutMS=2000)
+        # Test connection
+        await client.admin.command("ping")
+    except Exception:
+        pytest.skip("MongoDB server is not reachable for real concurrency test")
+
+    db = client.get_database("test_lifecycle_db")
+    coll = db.folder_entries
+    repo = FolderEntryRepository(coll)
+
+    job_id = ObjectId()
+    user_id = ObjectId()
+    await coll.insert_one({
+        "_id": job_id,
+        "user_id": user_id,
+        "name": "concurrent_test_job",
+        "status": JobStatus.QUEUED.value,
+        "queued_at": datetime.now(timezone.utc),
+        "results": [{"_id": ObjectId(), "index": 0, "status": JobStatus.QUEUED.value}],
+        "file_manifest": [],
+    })
+
+    try:
+        # Two concurrent workers attempting to claim the exact same queued job
+        results = await asyncio.gather(
+            repo.claim_queued_job(str(job_id)),
+            repo.claim_queued_job(str(job_id)),
+        )
+
+        claimed = [r for r in results if r is not None]
+        unclaimed = [r for r in results if r is None]
+
+        assert len(claimed) == 1
+        assert len(unclaimed) == 1
+        assert claimed[0].status == JobStatus.PROCESSING.value
+
+        # Verify state in DB
+        doc = await coll.find_one({"_id": job_id})
+        assert doc["status"] == JobStatus.PROCESSING.value
+        assert doc["claimed_at"] is not None
+        assert doc["results"][0]["status"] == JobStatus.PROCESSING.value
+    finally:
+        await coll.delete_one({"_id": job_id})
+        client.close()
 
 
 @pytest.mark.asyncio
