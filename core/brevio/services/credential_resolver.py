@@ -110,7 +110,7 @@ class CredentialResolver:
             )
             raise ProviderError(
                 kind=ProviderErrorKind.PLATFORM_CREDENTIAL_UNAVAILABLE,
-                message="El servicio no está disponible temporalmente para procesar esta solicitud.",
+                message="Los servicios de Brevio no se pueden usar por su plan. Si quiere usarlo deberá configurar una API Key en su perfil.",
             )
 
         logger.error(
@@ -119,7 +119,7 @@ class CredentialResolver:
         )
         raise ProviderError(
             kind=ProviderErrorKind.USER_CREDENTIAL_REQUIRED,
-            message="Esta solicitud requiere una credencial de API configurada por el usuario o créditos de pago por uso.",
+            message="Los servicios de Brevio no se pueden usar por su plan. Si quiere usarlo deberá configurar una API Key en su perfil.",
         )
 
     async def can_resolve(self, user_id: str, provider: str) -> bool:
@@ -143,12 +143,27 @@ class CredentialResolver:
             if credentials:
                 return True
 
-            if self._get_platform_key(provider_clean):
+            if self.has_platform_credential(provider_clean):
                 return True
 
             return False
         except Exception:
             return False
+
+    def has_platform_credential(self, provider: str) -> bool:
+        """
+        Check if the platform has a credential configured for this provider,
+        and if the current environment permits using it.
+        """
+        provider_clean = provider.lower()
+        if is_local_provider(provider_clean):
+            return True
+            
+        current_env = current_environment()
+        if not self.platform_policy.can_use_platform_credential(current_env, provider_clean):
+            return False
+            
+        return bool(self._get_platform_key(provider_clean))
 
     async def ensure_model_access(
         self,
@@ -164,30 +179,31 @@ class CredentialResolver:
         reservation at job admission (CreditAccount), not legacy user_credit.
         """
         SummaryAccessPolicy().ensure_user_may_select(model)
-        if not model_requires_api_key(model):
-            return
         provider = get_model_capabilities(model).provider.lower()
+        if not model_requires_api_key(model):
+            if provider in ("ollama", "runai"):
+                try:
+                    import httpx
+                    url = self._get_platform_base_url(provider)
+                    base_url = url.replace("/v1", "")
+                    async with httpx.AsyncClient() as client:
+                        await client.get(base_url, timeout=2.0)
+                except Exception as e:
+                    logger.error(f"Local provider {provider} is unreachable during preflight: {e}")
+                    raise ProviderError(
+                        kind=ProviderErrorKind.PROVIDER_ERROR,
+                        message="El modelo local seleccionado no está encendido o es inaccesible en este momento."
+                    )
+            return
+        
         credentials = await self.repository.get_active_credentials_for_user(
             user_id, provider
         )
         if credentials:
             return
 
-        platform_key = self._get_platform_key(provider)
         current_env = current_environment()
-        if not platform_key:
-            if self.platform_policy.can_use_platform_credential(current_env, provider):
-                logger.error(
-                    "event=credential_resolution_failed provider=%s user_id=%s "
-                    "reason=platform_credential_missing credential_source=platform model=%s",
-                    provider,
-                    user_id,
-                    model.value,
-                )
-                raise ProviderError(
-                    kind=ProviderErrorKind.PLATFORM_CREDENTIAL_UNAVAILABLE,
-                    message="El servicio no está disponible temporalmente para procesar esta solicitud.",
-                )
+        if not self.platform_policy.can_use_platform_credential(current_env, provider):
             logger.error(
                 "event=credential_resolution_failed provider=%s user_id=%s "
                 "reason=user_credential_required credential_source=user model=%s",
@@ -197,7 +213,21 @@ class CredentialResolver:
             )
             raise ProviderError(
                 kind=ProviderErrorKind.USER_CREDENTIAL_REQUIRED,
-                message="Esta solicitud requiere una credencial de API configurada por el usuario o créditos de pago por uso.",
+                message="Los servicios de Brevio no se pueden usar por su plan. Si quiere usarlo deberá configurar una API Key en su perfil.",
+            )
+
+        platform_key = self._get_platform_key(provider)
+        if not platform_key:
+            logger.error(
+                "event=credential_resolution_failed provider=%s user_id=%s "
+                "reason=platform_credential_missing credential_source=platform model=%s",
+                provider,
+                user_id,
+                model.value,
+            )
+            raise ProviderError(
+                kind=ProviderErrorKind.PLATFORM_CREDENTIAL_UNAVAILABLE,
+                message="Los servicios de Brevio no se pueden usar por su plan. Si quiere usarlo deberá configurar una API Key en su perfil.",
             )
 
         # Platform key present: model access OK. Credit reservation (FASE 3)
@@ -222,7 +252,7 @@ class CredentialResolver:
         )
         raise ProviderError(
             kind=ProviderErrorKind.USER_CREDENTIAL_REQUIRED,
-            message="Esta solicitud requiere una credencial de API configurada por el usuario.",
+            message="Los servicios de Brevio no se pueden usar por su plan. Si quiere usarlo deberá configurar una API Key en su perfil.",
         )
 
     async def resolve_user_credential(
@@ -241,7 +271,7 @@ class CredentialResolver:
             )
             raise ProviderError(
                 kind=ProviderErrorKind.USER_CREDENTIAL_REQUIRED,
-                message="Esta solicitud requiere una credencial de API configurada por el usuario.",
+                message="Los servicios de Brevio no se pueden usar por su plan. Si quiere usarlo deberá configurar una API Key en su perfil.",
             )
         user_key = self.repository.decrypt_credential(user_doc)
         return ResolvedCredential(

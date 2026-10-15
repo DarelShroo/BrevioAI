@@ -111,9 +111,11 @@ async def test_resolve_local_ollama_without_api_key_in_production(
 
 
 @pytest.mark.asyncio
+@patch("httpx.AsyncClient.get")
 async def test_ensure_model_access_skips_key_for_local_models(
-    resolver, mock_policy, mock_repository
+    mock_get, resolver, mock_policy, mock_repository
 ):
+    # Local models do not require a key. They are skipped before checking keys.
     mock_repository.get_active_credentials_for_user.return_value = []
     mock_policy.can_use_platform_credential.return_value = False
 
@@ -149,10 +151,16 @@ async def test_ensure_model_access_paid_without_platform_key_requires_user_key(
 @patch.dict(os.environ, {"OPENAI_API_KEY": "plat_key"})
 async def test_can_resolve(resolver, mock_policy, mock_repository):
     mock_repository.get_active_credentials_for_user.return_value = []
+    # If policy forbids platform key, it can't resolve
     mock_policy.can_use_platform_credential.return_value = False
+    assert await resolver.can_resolve("u1", "openai") is False
 
+    # If policy allows platform key, it resolves
+    mock_policy.can_use_platform_credential.return_value = True
     assert await resolver.can_resolve("u1", "openai") is True
 
+    # If user has a key, it resolves regardless of policy
+    mock_policy.can_use_platform_credential.return_value = False
     mock_repository.get_active_credentials_for_user.return_value = [MagicMock()]
     assert await resolver.can_resolve("u1", "openai") is True
 
@@ -173,7 +181,7 @@ async def test_ensure_model_access_pay_per_use_allows_platform_key_without_legac
 ):
     """Credits are gated at CreditService.reserve_for_job, not here."""
     mock_repository.get_active_credentials_for_user.return_value = []
-    mock_policy.can_use_platform_credential.return_value = False
+    mock_policy.can_use_platform_credential.return_value = True
 
     await resolver.ensure_model_access("u1", ModelType.GPT_4O_MINI, user_credits=0)
 
