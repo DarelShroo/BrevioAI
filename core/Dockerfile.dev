@@ -42,7 +42,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Dependency layer: only invalidated when requirements change.
 # openai-whisper's setup.py imports pkg_resources. Pip's isolated build env can
 # pull setuptools>=82 (pkg_resources removed) and fail. Pin the build env too.
-COPY requirements.dev.txt /app/core/requirements.dev.txt
+COPY requirements.txt requirements.dev.txt /app/core/
 RUN printf 'setuptools>=65,<81\n' > /tmp/pip-build-constraints.txt && \
     pip install --upgrade pip "setuptools==79.0.0" wheel && \
     pip install --no-cache-dir \
