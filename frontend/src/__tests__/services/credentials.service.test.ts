@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as credentialsService from '@/services/credentials.service'
 import { http } from '@/services/http'
+import { i18n } from '@/i18n'
 
 vi.mock('@/services/http', () => ({
   http: {
@@ -64,7 +65,7 @@ describe('credentials.service', () => {
   })
 
   it('rejects delete without id', async () => {
-    await expect(credentialsService.deleteCredential('  ')).rejects.toThrow('Credential id is required')
+    await expect(credentialsService.deleteCredential('  ')).rejects.toThrow(i18n.global.t('errors.codes.CREDENTIAL_ID_INVALID'))
     expect(http.delete).not.toHaveBeenCalled()
   })
 

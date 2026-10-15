@@ -14,21 +14,24 @@ from pydantic import (
 from core.brevio_api.utils.email_utils import isEmail
 
 
+from core.brevio_api.models.errors.api_codes import ApiErrorCode
+
+
 class AuthWithPassword(BaseModel):
     password: str
 
     @field_validator("password")
     def validate_password(cls, value: str) -> str:
         if len(value) < 8:
-            raise ValueError("La contraseña debe tener al menos 8 caracteres.")
+            raise ValueError(ApiErrorCode.PASSWORD_TOO_SHORT.value)
         if not re.search(r"[A-Z]", value):
-            raise ValueError("La contraseña debe tener al menos una letra mayúscula.")
+            raise ValueError(ApiErrorCode.PASSWORD_NO_UPPERCASE.value)
         if not re.search(r"[a-z]", value):
-            raise ValueError("La contraseña debe tener al menos una letra minúscula.")
+            raise ValueError(ApiErrorCode.PASSWORD_NO_LOWERCASE.value)
         if not re.search(r"\d", value):
-            raise ValueError("La contraseña debe tener al menos un número.")
+            raise ValueError(ApiErrorCode.PASSWORD_NO_DIGIT.value)
         if not re.search(r"[\W_]", value):
-            raise ValueError("La contraseña debe tener al menos un carácter especial.")
+            raise ValueError(ApiErrorCode.PASSWORD_NO_SPECIAL.value)
         return value
 
 
@@ -45,8 +48,6 @@ class IdentityBase(BaseModel):
             return value
 
         if not USERNAME_REGEX.match(value):
-            raise ValueError(
-                "Invalid identity format: must be a valid username or email"
-            )
+            raise ValueError(ApiErrorCode.INVALID_IDENTITY_FORMAT.value)
 
         return value

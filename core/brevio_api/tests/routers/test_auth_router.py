@@ -43,7 +43,7 @@ class StubAuthService:
     async def refresh(self, refresh_token: str) -> AuthSession:
         return _session()
 
-    async def logout(self, refresh_token: str | None) -> None:
+    async def logout(self, refresh_token: str | None, *, access_token: str | None = None) -> None:
         return None
 
     async def password_recovery_handshake(

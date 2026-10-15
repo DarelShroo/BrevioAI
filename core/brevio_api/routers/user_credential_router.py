@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel, Field, field_validator
 
+from core.brevio_api.models.errors.api_codes import ApiErrorCode, CodedHTTPException
+
 from core.brevio.services.provider_registry import (
     InvalidProviderCredential,
     ProviderRegistry,
@@ -53,7 +55,7 @@ class CredentialCreateRequest(BaseModel):
     def strip_name(cls, value: str) -> str:
         cleaned = value.strip()
         if not cleaned:
-            raise ValueError("Credential name is required")
+            raise ValueError(ApiErrorCode.CREDENTIAL_NAME_REQUIRED.value)
         return cleaned
 
 
@@ -67,7 +69,7 @@ class CredentialUpdateRequest(BaseModel):
             return None
         cleaned = value.strip()
         if not cleaned:
-            raise ValueError("Credential name is required")
+            raise ValueError(ApiErrorCode.CREDENTIAL_NAME_REQUIRED.value)
         return cleaned
 
 
@@ -203,7 +205,10 @@ async def set_default_credential(
     enforce_account_mutation_rate_limit(http_request, str(_current_user))
     credential_id = credential_id.strip()
     if not credential_id:
-        raise HTTPException(status_code=400, detail="Invalid credential ID")
+        raise CodedHTTPException(
+            status_code=400,
+            code=ApiErrorCode.CREDENTIAL_ID_INVALID,
+        )
 
     current = await repo.get_credential(credential_id)
     if (
@@ -211,7 +216,10 @@ async def set_default_credential(
         or current.user_id != str(_current_user)
         or current.status != CredentialStatus.ACTIVE
     ):
-        raise HTTPException(status_code=404, detail="Credential not found")
+        raise CodedHTTPException(
+            status_code=404,
+            code=ApiErrorCode.CREDENTIAL_NOT_FOUND,
+        )
 
     try:
         updated = await repo.set_default_credential(
@@ -220,7 +228,11 @@ async def set_default_credential(
             provider=current.provider,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise CodedHTTPException(
+            status_code=404,
+            code=ApiErrorCode.CREDENTIAL_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
     return _to_response(updated)
 
 
@@ -241,9 +253,15 @@ async def update_credential(
     enforce_account_mutation_rate_limit(http_request, str(_current_user))
     credential_id = credential_id.strip()
     if not credential_id:
-        raise HTTPException(status_code=400, detail="Invalid credential ID")
+        raise CodedHTTPException(
+            status_code=400,
+            code=ApiErrorCode.CREDENTIAL_ID_INVALID,
+        )
     if request.name is None:
-        raise HTTPException(status_code=400, detail="Nothing to update")
+        raise CodedHTTPException(
+            status_code=400,
+            code=ApiErrorCode.NOTHING_TO_UPDATE,
+        )
 
     try:
         updated = await repo.update_credential_name(
@@ -252,10 +270,17 @@ async def update_credential(
             name=request.name,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise CodedHTTPException(
+            status_code=400,
+            code=ApiErrorCode.CREDENTIAL_NAME_REQUIRED,
+            detail=str(exc),
+        ) from exc
 
     if updated is None:
-        raise HTTPException(status_code=404, detail="Credential not found")
+        raise CodedHTTPException(
+            status_code=404,
+            code=ApiErrorCode.CREDENTIAL_NOT_FOUND,
+        )
     return _to_response(updated)
 
 
@@ -271,9 +296,15 @@ async def delete_credential(
     enforce_account_mutation_rate_limit(http_request, str(_current_user))
     credential_id = credential_id.strip()
     if not credential_id:
-        raise HTTPException(status_code=400, detail="Invalid credential ID")
+        raise CodedHTTPException(
+            status_code=400,
+            code=ApiErrorCode.CREDENTIAL_ID_INVALID,
+        )
 
     revoked = await repo.revoke_credential(credential_id, str(_current_user))
     if not revoked:
-        raise HTTPException(status_code=404, detail="Credential not found")
+        raise CodedHTTPException(
+            status_code=404,
+            code=ApiErrorCode.CREDENTIAL_NOT_FOUND,
+        )
     return

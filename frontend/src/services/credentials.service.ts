@@ -1,4 +1,5 @@
 import { http } from '@/services/http'
+import { i18n } from '@/i18n'
 import type {
   CredentialCreateRequest,
   CredentialUpdateRequest,
@@ -21,13 +22,14 @@ export function credentialId(item: Pick<UserCredential, 'id' | '_id'> | string |
 
 export function credentialDisplayName(
   item: Pick<UserCredential, 'name' | 'id' | '_id'> | null | undefined,
-  fallback = 'Unnamed key',
+  fallback?: string,
 ): string {
-  if (!item) return fallback
+  const resolvedFallback = fallback || String(i18n.global.t('profile.unnamedCredential'))
+  if (!item) return resolvedFallback
   const name = (item.name || '').trim()
   if (name) return name
   const id = credentialId(item)
-  return id ? `${fallback} (${id.slice(0, 8)})` : fallback
+  return id ? `${resolvedFallback} (${id.slice(0, 8)})` : resolvedFallback
 }
 
 export async function listAllCredentials(): Promise<UserCredential[]> {
@@ -50,7 +52,7 @@ export async function createCredential(
 export async function setDefaultCredential(id: string): Promise<UserCredential> {
   const credentialIdValue = credentialId(id)
   if (!credentialIdValue) {
-    throw new Error('Credential id is required')
+    throw new Error(i18n.global.t('errors.codes.CREDENTIAL_ID_INVALID'))
   }
   const { data } = await http.post<UserCredential>(
     `/user-credentials/${encodeURIComponent(credentialIdValue)}/default`,
@@ -64,7 +66,7 @@ export async function renameCredential(
 ): Promise<UserCredential> {
   const credentialIdValue = credentialId(id)
   if (!credentialIdValue) {
-    throw new Error('Credential id is required')
+    throw new Error(i18n.global.t('errors.codes.CREDENTIAL_ID_INVALID'))
   }
   const { data } = await http.patch<UserCredential>(
     `/user-credentials/${encodeURIComponent(credentialIdValue)}`,
@@ -76,7 +78,7 @@ export async function renameCredential(
 export async function deleteCredential(id: string): Promise<void> {
   const credentialIdValue = credentialId(id)
   if (!credentialIdValue) {
-    throw new Error('Credential id is required')
+    throw new Error(i18n.global.t('errors.codes.CREDENTIAL_ID_INVALID'))
   }
   await http.delete(`/user-credentials/${encodeURIComponent(credentialIdValue)}`)
 }
