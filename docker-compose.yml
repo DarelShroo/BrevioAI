@@ -21,11 +21,12 @@ services:
     build:
       context: ./core
       dockerfile: Dockerfile
+    restart: unless-stopped
     volumes:
       - ./data:/app/data
-    # Prefer reaching the API via frontend nginx. Host publish is optional for ops.
-    # ports:
-    #   - "${BACKEND_PORT:-8000}:8000"
+    # El proxy de Nginx externo debe redirigir /api/ hacia este puerto.
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
     env_file:
       - .env
     extra_hosts:
@@ -42,13 +43,14 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # Navegador → https://dominio/api/... → nginx proxy_pass → http://backend:8000/
+        # El Nginx externo enviará las rutas /api/ al backend y el resto al frontend.
         VITE_API_URL: ${VITE_API_URL:-/api}
         VITE_API_KEY: ${API_KEY:-}
     # volumes:
     #   - ./frontend:/app
+    restart: unless-stopped
     ports:
-      - "${FRONTEND_PORT:-80}:80"
+      - "${FRONTEND_PORT:-3000}:3000"
     depends_on:
       - backend
     networks:
@@ -58,6 +60,7 @@ services:
     build:
       context: ./database
       dockerfile: Dockerfile
+    restart: unless-stopped
     volumes:
       - db_data:/data/db
     # Do NOT publish MongoDB to the host in production. Reach it only via app_network.
@@ -73,6 +76,7 @@ services:
     # Do NOT publish Redis to the host in production. Reach it only via app_network.
     # ACL: set REDIS_PASSWORD (and optional REDIS_USERNAME=brevio). Entrypoint disables
     # the default user and creates the app ACL user with non-admin commands.
+    restart: unless-stopped
     expose:
       - "6379"
     env_file:
@@ -91,6 +95,7 @@ services:
     build:
       context: ./core
       dockerfile: Dockerfile
+    restart: unless-stopped
     command: celery -A core.brevio_api.celery worker --loglevel=info --time-limit=7200 --soft-time-limit=3600
     volumes:
       - ./data:/app/data
@@ -109,6 +114,7 @@ services:
     build:
       context: ./core
       dockerfile: Dockerfile
+    restart: unless-stopped
     command: celery -A core.brevio_api.celery beat --loglevel=info
     # volumes:
     #   - ./core:/app/core

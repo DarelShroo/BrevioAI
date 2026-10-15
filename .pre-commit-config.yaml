@@ -31,7 +31,7 @@ repos:
     hooks:
       - id: pytest-backend
         name: Run backend pytest
-        entry: bash -c 'PYTHONPATH=. pytest --import-mode=importlib -v'
+        entry: bash -c 'PYTHONPATH=. .venv/bin/pytest --import-mode=importlib -v'
         language: system
         pass_filenames: false
         always_run: true
