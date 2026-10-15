@@ -3,6 +3,7 @@ from typing import Any, Dict
 from pydantic import EmailStr, Field, field_validator, model_validator, validate_email
 
 from core.brevio_api.models.auth.auth_base import AuthWithPassword, IdentityBase
+from core.brevio_api.models.errors.api_codes import ApiErrorCode
 from core.brevio_api.utils.email_utils import isEmail
 
 
@@ -18,7 +19,7 @@ class RegisterUser(AuthWithPassword):
     def check_username_length(cls, values: dict[str, Any]) -> dict[str, Any]:
         username = values.get("username")
         if username and len(username) < 6:
-            raise ValueError("El nombre de usuario debe tener al menos 6 caracteres.")
+            raise ValueError(ApiErrorCode.USERNAME_TOO_SHORT.value)
         return values
 
     def to_dict(self) -> Dict[str, Any]:
@@ -42,5 +43,5 @@ class RecoveryPassword(UserIdentity):
     @classmethod
     def validate_email_identity(cls, value: str) -> str:
         if not isEmail(value):
-            raise ValueError("Invalid identity format: must be a valid email")
+            raise ValueError(ApiErrorCode.INVALID_IDENTITY_FORMAT.value)
         return value
