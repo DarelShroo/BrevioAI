@@ -99,3 +99,19 @@ async def test_integration_mmdc(processor, temp_dir):
     svg_file = os.path.join(temp_dir, "diagrams", "diagram-001.svg")
     assert os.path.exists(svg_file)
     assert os.path.getsize(svg_file) > 0
+
+
+@pytest.mark.asyncio
+async def test_integration_mmdc_html_format(processor, temp_dir):
+    """Real integration test with mmdc producing inline HTML base64 format."""
+    if not shutil.which("mmdc"):
+        pytest.skip("mmdc is not installed in the current environment")
+
+    markdown = "```mermaid\ngraph TD\nA-->B\n```"
+    result, blocks = await processor.process(markdown, temp_dir, output_format="html")
+
+    assert len(blocks) == 1
+    assert blocks[0].success
+    assert '<img src="data:image/svg+xml;base64,' in result
+    assert 'alt="Diagrama" class="md-img" />' in result
+
