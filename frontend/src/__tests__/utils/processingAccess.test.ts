@@ -23,11 +23,13 @@ const local: CatalogModel = {
 }
 
 describe('processingAccess', () => {
-  it('blocks paid summary models without a key or credits', () => {
-    expect(isSummaryModelBlocked(paid, new Set(), 0)).toBe(true)
-    expect(isSummaryModelBlocked(paid, new Set(['openai']), 0)).toBe(false)
-    expect(isSummaryModelBlocked(paid, new Set(), 8)).toBe(false)
-    expect(isSummaryModelBlocked(local, new Set(), 0)).toBe(false)
+  it('blocks paid summary models without a key or platform credential', () => {
+    const providerWithKey = { id: 'openai', access: 'pay_per_use' as const, requires_api_key: true, has_platform_credential: true }
+    const providerWithoutKey = { id: 'openai', access: 'pay_per_use' as const, requires_api_key: true, has_platform_credential: false }
+    expect(isSummaryModelBlocked(paid, new Set(), providerWithoutKey)).toBe(true)
+    expect(isSummaryModelBlocked(paid, new Set(['openai']), providerWithoutKey)).toBe(false)
+    expect(isSummaryModelBlocked(paid, new Set(), providerWithKey)).toBe(false)
+    expect(isSummaryModelBlocked(local, new Set(), undefined)).toBe(false)
   })
 
   it('requires an OpenAI key only for paid transcription providers', () => {

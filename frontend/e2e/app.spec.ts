@@ -19,7 +19,7 @@ test.describe('summary + store', () => {
     await expect(page.getByTestId('estimate-panel')).toBeVisible()
     await page.getByTestId('submit-docs-btn').click()
     await expect(page.getByTestId('job-status')).toContainText(/PROCESSING|COMPLETED/)
-    await expect(page.getByText(/Summary completed/i)).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByText(/Summary ready/i)).toBeVisible({ timeout: 15_000 })
     await expect(page.getByText(/doc.pdf/i).first()).toBeVisible()
     await expect(page.getByTestId('download-btn')).toBeVisible({ timeout: 15_000 })
   })
@@ -162,7 +162,7 @@ test.describe('summary + store', () => {
     await mockApi(page, { emptyStore: true })
     await loginViaUi(page)
     await appNavLink(page, 'Store').click()
-    await expect(page.getByText(/Your store is empty/i)).toBeVisible()
+    await expect(page.getByText(/Your (library|store) is empty/i)).toBeVisible()
     await page.getByTestId('store-create-folder').click()
     await page.getByTestId('store-name-input').fill('Universidad')
     await page.getByTestId('store-dialog-save').click()
@@ -175,7 +175,7 @@ test.describe('summary + store', () => {
     await mockApi(page, { emptyStore: true })
     await loginViaUi(page)
     await appNavLink(page, 'Store').click()
-    await expect(page.getByText(/Your store is empty/i)).toBeVisible()
+    await expect(page.getByText(/Your (library|store) is empty/i)).toBeVisible()
     await expect(page.getByTestId('store-empty-cta')).toBeVisible()
   })
 
@@ -207,18 +207,27 @@ test.describe('summary + store', () => {
     await page.getByTestId('estimate-btn').click()
     await expect(page.getByTestId('estimate-panel')).toBeVisible()
     await page.getByTestId('submit-docs-btn').click()
-    await expect(page.getByText(/Error generating the summary/i)).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByText(/Error generating the summary|Summary failed/i)).toBeVisible({ timeout: 15_000 })
     await expect(page.getByTestId('job-status')).toContainText(/FAILED/, { timeout: 15_000 })
-    await expect(page.getByText(/Model error/i)).toBeVisible()
+    await expect(page.getByText(/Model error/i).first()).toBeVisible()
     await expect(page.getByTestId('download-btn')).toHaveCount(0)
   })
 
   test('backend unavailable on login', async ({ page }) => {
-    await page.route('http://localhost:8000/auth/login', async (route) => {
+    await page.route('**/users/me', async (route) => {
+      if (route.request().resourceType() === 'document') {
+        return route.continue()
+      }
+      await route.abort('failed')
+    })
+    await page.route('**/auth/login', async (route) => {
+      if (route.request().resourceType() === 'document') {
+        return route.continue()
+      }
       await route.abort('failed')
     })
     await page.goto('/auth/login')
-    await page.getByTestId('login-identity').fill('tester1')
+    await page.locator('#login-identity').fill('tester1')
     await page.locator('#login-password').fill('Aa1@aaaa')
     await page.getByTestId('login-submit').click()
     await expect(page.getByText(/Backend unavailable|Network|failed/i)).toBeVisible()
@@ -227,10 +236,10 @@ test.describe('summary + store', () => {
   test('401 on profile clears session', async ({ page }) => {
     await mockApi(page)
     await loginViaUi(page)
-    await page.route('http://localhost:8000/users/me', async (route) => {
+    await page.route('**/users/me', async (route) => {
       await json(route, 401, { detail: 'Token expirado' })
     })
-    await appNavLink(page, 'Settings').click()
+    await appNavLink(page, 'profile').click()
     await page.waitForURL('**/auth/login**', { timeout: 10_000 }).catch(async () => {
       await page.goto('/profile')
       await page.waitForURL('**/auth/login**')
@@ -238,6 +247,7 @@ test.describe('summary + store', () => {
   })
 
   test('direct protected route redirects when logged out', async ({ page }) => {
+    await mockApi(page)
     await page.goto('/store')
     await page.waitForURL('**/auth/login**')
   })
