@@ -216,7 +216,7 @@ defineExpose({
         <div ref="pagesEl" class="pdf-pages" />
       </div>
     </div>
-    <p v-if="pageCount" class="pdf-pages-label">{{ pageCount }} pág.</p>
+    <p v-if="pageCount" class="pdf-pages-label">{{ t('demo.pageCount', { n: pageCount }) }}</p>
   </div>
 </template>
 

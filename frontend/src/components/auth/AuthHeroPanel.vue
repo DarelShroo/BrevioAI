@@ -13,7 +13,7 @@ const { t } = useI18n()
     <img :src="constellationUrl" alt="" class="hero-mesh" aria-hidden="true" />
     <img :src="documentsUrl" alt="" class="hero-docs" aria-hidden="true" />
     <div class="hero-content">
-      <img :src="logoBgUrl" alt="Brevio Logo" class="hero-logo-large" />
+      <img :src="logoBgUrl" :alt="t('app.name')" class="hero-logo-large" />
       <div class="hero-copy">
         <h1 class="font-serif">{{ t('auth.headline') }}</h1>
         <p>{{ t('auth.subtitle') }}</p>

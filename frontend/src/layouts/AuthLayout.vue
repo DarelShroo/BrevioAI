@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import AuthHeroPanel from '@/components/auth/AuthHeroPanel.vue'
 import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 import logoBgUrl from '@/assets/images/logo-bg.png'
+
+const { t } = useI18n()
 </script>
 
 <template>
@@ -9,7 +12,7 @@ import logoBgUrl from '@/assets/images/logo-bg.png'
     <AuthHeroPanel />
     <div class="auth-panel card-surface">
       <div class="locale-row">
-        <img :src="logoBgUrl" alt="Brevio Logo" class="mobile-logo" />
+        <img :src="logoBgUrl" :alt="t('app.name')" class="mobile-logo" />
         <LanguageSwitcher />
       </div>
       <RouterView />

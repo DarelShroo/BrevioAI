@@ -21,6 +21,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { statusLabel } from '@/utils/labels'
 
 const props = defineProps<{
   progress: number
@@ -29,7 +30,7 @@ const props = defineProps<{
   showLabels?: boolean
 }>()
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 const clampedProgress = computed(() => Math.min(100, Math.max(0, props.progress || 0)))
 const isComplete = computed(() => props.status === 'COMPLETED' || clampedProgress.value >= 100)
@@ -37,10 +38,10 @@ const isError = computed(() => props.status === 'FAILED')
 const isActive = computed(() => !isComplete.value && !isError.value && props.status === 'PROCESSING')
 
 const stageText = computed(() => {
-  if (isError.value) return t('job.status.failed')
-  if (isComplete.value) return t('job.status.completed')
-  if (props.stage) return t(`job.phase.${props.stage.toLowerCase()}`, props.stage)
-  return t('job.status.processing')
+  if (isError.value) return statusLabel('FAILED', t, te)
+  if (isComplete.value) return statusLabel('COMPLETED', t, te)
+  if (props.stage) return statusLabel(props.stage, t, te)
+  return statusLabel('PROCESSING', t, te)
 })
 </script>
 

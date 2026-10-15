@@ -11,6 +11,8 @@ import {
   categoryLabel,
   humanizeId,
   providerLabel,
+  reasoningLevelLabel,
+  statusLabel,
   styleLabel,
   summaryLevelLabel,
 } from '@/utils/labels'
@@ -50,7 +52,7 @@ const modelOptions = computed(() =>
     const base = item.display_name || item.id
     if (item.status === 'deprecated' || item.status === 'preview') {
       return {
-        label: `${base} (${humanizeId(item.status)})`,
+        label: `${base} (${statusLabel(item.status, t, te)})`,
         value: item.id,
       }
     }
@@ -73,6 +75,12 @@ const selectedModelId = computed(() => resolveModelId(model.value.model))
 const selectedCatalogModel = computed(() => catalog.modelById(selectedModelId.value))
 const parameterIds = computed(() => selectedCatalogModel.value?.parameters || [])
 const reasoningValues = computed(() => selectedCatalogModel.value?.reasoning_values || [])
+const reasoningOptions = computed(() =>
+  reasoningValues.value.map((id) => ({
+    label: reasoningLevelLabel(id, t, te),
+    value: id,
+  })),
+)
 const hasProviderKey = computed(() => {
   const provider = selectedCatalogModel.value?.provider?.trim().toLowerCase()
   return Boolean(provider && keyedProviders.value.has(provider))
@@ -81,10 +89,11 @@ const accessHint = computed(() => {
   if (isLocalModelId(selectedModelId.value, selectedCatalogModel.value?.provider)) {
     return 'local'
   }
+  const providerInfo = catalog.providers.find(p => p.id === selectedCatalogModel.value?.provider)
   return accessHintForModel(
     selectedCatalogModel.value,
     hasProviderKey.value,
-    auth.profile?.user_credit ?? 0,
+    providerInfo,
   )
 })
 
@@ -252,7 +261,9 @@ watch(
       <Select
         input-id="param-reasoning"
         v-model="model.reasoning_effort"
-        :options="reasoningValues"
+        :options="reasoningOptions"
+        option-label="label"
+        option-value="value"
         :placeholder="t('params.selectReasoning')"
         class="w-full"
         data-testid="param-reasoning"
