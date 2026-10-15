@@ -7,6 +7,8 @@ import type { CategoryStylesMap, TranscriptionModel, TranscriptionProvider } fro
 import type { CatalogModel, CatalogProvider, ModelOptionGroup } from '@/utils/models'
 import { defaultModelId, modelGroups, resolveModelId } from '@/utils/models'
 
+import { parseApiError } from '@/utils/errors'
+
 export const useCatalogStore = defineStore('catalog', () => {
   const languages = ref<string[]>([])
   const catalog = ref<CatalogModel[]>([])
@@ -77,7 +79,7 @@ export const useCatalogStore = defineStore('catalog', () => {
       defaultTranscriptionModel.value = transcription.default_model || null
       loaded.value = true
     } catch (err) {
-      error.value = err instanceof Error ? err.message : i18n.global.t('errors.loadCatalogs')
+      error.value = parseApiError(err, String(i18n.global.t('errors.loadCatalogs')))
       throw err
     } finally {
       loading.value = false

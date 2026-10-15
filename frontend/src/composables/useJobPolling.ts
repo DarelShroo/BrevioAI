@@ -1,4 +1,5 @@
 import { onUnmounted, ref } from 'vue'
+import { i18n } from '@/i18n'
 import * as userService from '@/services/user.service'
 import type { FolderEntry } from '@/types/user'
 import { entryId, entryStatus, isTerminalStatus } from '@/utils/entries'
@@ -65,7 +66,7 @@ export function useJobPolling(options: UseJobPollingOptions = {}) {
       await pollOnce(entryIds)
       if (done.value || attempts >= maxAttempts || stopped) {
         if (attempts >= maxAttempts && !done.value) {
-          error.value = error.value || 'Polling timed out.'
+          error.value = error.value || i18n.global.t('errors.pollingTimeout')
         }
         return
       }

@@ -83,23 +83,28 @@ export const useRealtimeStore = defineStore('realtime', () => {
     rememberEventId(userId, event.event_id)
     
     if (event.type === 'summary.progress') {
-      const job = entry(event.job_id)
-      if (job) {
+      const originalJob = entry(event.job_id)
+      if (originalJob) {
+        const job = { ...originalJob }
         if (event.global_progress !== undefined) {
           job.progress = event.global_progress
         }
         if (event.stage !== undefined) {
           job.stage = event.stage
         }
-        const doc = job.results.find((r) => r.id === event.document_id || r._id === event.document_id)
-        if (doc) {
+        const results = job.results ? [...job.results] : []
+        const docIndex = results.findIndex((r) => r.id === event.document_id || r._id === event.document_id)
+        if (docIndex >= 0) {
+          const doc = { ...results[docIndex] }
           if (event.progress !== undefined) doc.progress = event.progress
           if (event.stage !== undefined) {
             doc.phase = event.stage
             doc.status = event.status
           }
+          results[docIndex] = doc
         }
-        upsertEntry({ ...job })
+        job.results = results
+        upsertEntry(job)
       }
     } else {
       void refreshJob(event.job_id)

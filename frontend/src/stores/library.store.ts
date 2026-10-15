@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as userService from '@/services/user.service'
 import type { LibraryFolder } from '@/types/user'
+import { parseApiError } from '@/utils/errors'
 
 export const useLibraryStore = defineStore('library', () => {
   const folders = ref<LibraryFolder[]>([])
@@ -25,7 +26,7 @@ export const useLibraryStore = defineStore('library', () => {
       folders.value = payload.folders
       unfiledCount.value = payload.unfiled_count
     } catch (err) {
-      error.value = String(err)
+      error.value = parseApiError(err)
       throw err
     } finally {
       loading.value = false

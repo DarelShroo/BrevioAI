@@ -26,6 +26,18 @@ export const http: AxiosInstance = axios.create({
   withCredentials: true,
 })
 
+http.interceptors.request.use((config) => {
+  try {
+    const locale = i18n?.global?.locale?.value
+    if (locale && config.headers) {
+      config.headers['Accept-Language'] = locale
+    }
+  } catch {
+    // i18n may not be ready in early unit tests
+  }
+  return config
+})
+
 function shouldSkipRefresh(url: string): boolean {
   return AUTH_SKIP_REFRESH.some((path) => url.includes(path))
 }
@@ -52,7 +64,7 @@ function errorStatus(error: unknown): number {
 
 async function refreshCookies(): Promise<void> {
   if (refreshBlocked) {
-    const err = new Error('Session refresh unavailable') as Error & {
+    const err = new Error(i18n.global.t('errors.sessionRefreshUnavailable')) as Error & {
       response?: { status: number }
       status?: number
     }
