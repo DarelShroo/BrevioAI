@@ -9,7 +9,10 @@ from core.brevio_api.models.responses.plans_response import (
     PlansCatalogResponse,
 )
 from core.brevio_api.services.billing.plan_registry import get_plan_registry
-from core.brevio_api.services.billing.stripe_service import get_cached_stripe_prices
+from core.brevio_api.services.billing.stripe_service import (
+    StripeConfig,
+    get_cached_stripe_prices,
+)
 
 router = APIRouter(prefix="/plans", tags=["plans"])
 
@@ -84,14 +87,17 @@ async def list_plans() -> PlansCatalogResponse:
             if "year" in dynamic_prices[plan.plan_id]:
                 plan.annual_price_amount = dynamic_prices[plan.plan_id]["year"]
 
+    stripe_cfg = StripeConfig()
+    has_stripe = bool(stripe_cfg.secret_key and stripe_cfg.webhook_secret)
+
     return PlansCatalogResponse(
         default_plan_id=registry.default_plan_id,
         period_mode=registry.period_mode,
         rolling_days=registry.rolling_days,
         plan_change_usage_policy=registry.plan_change_usage_policy,
-        checkout_enabled=False,
-        billing_provider=None,
-        customer_portal_enabled=False,
+        checkout_enabled=has_stripe,
+        billing_provider="stripe" if has_stripe else None,
+        customer_portal_enabled=has_stripe,
         show_billing_toggle=pricing.show_billing_toggle,
         annual_discount_percent=pricing.annual_discount_percent,
         sales_email=pricing.sales_email,

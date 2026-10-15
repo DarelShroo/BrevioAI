@@ -323,9 +323,9 @@ class StripeService:
             elif event_type in ("invoice.paid", "invoice.payment_succeeded"):
                 await self._handle_invoice_paid(data)
             elif event_type == "invoice.payment_failed":
-                logger.warning(
-                    f"Payment failed for invoice {data.get('id')} customer {data.get('customer')}"
-                )
+                await self._handle_invoice_payment_failed(data)
+            elif event_type == "charge.refunded":
+                await self._handle_charge_refunded(data)
             else:
                 logger.debug(f"Unhandled Stripe webhook event type: {event_type}")
 
@@ -503,6 +503,17 @@ class StripeService:
             return
 
         if status in ["active", "trialing"]:
+            if (
+                getattr(user, "stripe_subscription_id", None) == subscription_id
+                and getattr(user, "stripe_subscription_status", None) == "canceled"
+            ):
+                logger.warning(
+                    "event=stripe_out_of_order_event subscription=%s customer=%s status=canceled_already",
+                    subscription_id,
+                    customer_id,
+                )
+                return
+
             plan_id = metadata.get("plan_id")
             if not plan_id:
                 price_id = extract_price_id_from_subscription(data)
@@ -532,6 +543,7 @@ class StripeService:
     async def _handle_subscription_deleted(self, subscription: Any) -> None:
         data = _as_dict(subscription)
         customer_id = data.get("customer")
+        subscription_id = data.get("id")
 
         user = await self.user_service.get_user_by_stripe_customer_id(customer_id)
         if not user:
@@ -539,14 +551,14 @@ class StripeService:
             return
 
         logger.info(f"Subscription deleted for customer {customer_id}, reverting to free")
-        await self.user_service.user_repo.update_user(
-            user.id,
-            {
-                "stripe_subscription_status": "canceled",
-                "plan_id": "free",
-                "plan_version": "1",
-            },
-        )
+        update_fields: dict[str, Any] = {
+            "stripe_subscription_status": "canceled",
+            "plan_id": "free",
+            "plan_version": "1",
+        }
+        if subscription_id:
+            update_fields["stripe_subscription_id"] = str(subscription_id)
+        await self.user_service.user_repo.update_user(user.id, update_fields)
 
     async def _handle_invoice_paid(self, invoice: Any) -> None:
         data = _as_dict(invoice)
@@ -607,6 +619,36 @@ class StripeService:
         except Exception as e:
             logger.error(f"Failed to grant credits for invoice {invoice_id}: {e}")
             raise
+
+    async def _handle_invoice_payment_failed(self, invoice: Any) -> None:
+        data = _as_dict(invoice)
+        customer_id = data.get("customer")
+        invoice_id = data.get("id")
+        logger.warning(
+            f"Payment failed for invoice {invoice_id} customer {customer_id}"
+        )
+        if not customer_id:
+            return
+        user = await self.user_service.get_user_by_stripe_customer_id(customer_id)
+        if not user:
+            logger.error(f"User not found for failed invoice customer {customer_id}")
+            return
+        await self.user_service.user_repo.update_user(
+            user.id,
+            {"stripe_subscription_status": "past_due"},
+        )
+        logger.info(
+            f"User {user.id} subscription status marked past_due after payment failure on invoice {invoice_id}"
+        )
+
+    async def _handle_charge_refunded(self, charge: Any) -> None:
+        data = _as_dict(charge)
+        customer_id = data.get("customer")
+        charge_id = data.get("id")
+        amount_refunded = data.get("amount_refunded")
+        logger.info(
+            f"event=stripe_charge_refunded charge_id={charge_id} customer={customer_id} amount={amount_refunded}"
+        )
 
     async def sync_user_subscription(
         self, user: User, *, session_id: Optional[str] = None

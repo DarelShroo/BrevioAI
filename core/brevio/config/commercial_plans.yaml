@@ -48,7 +48,8 @@ plans:
       - qwen3:32b
       - deepseek-r1:8b-llama-distill-q4_K_M
       - gpt-oss:20b
-      - gemma4:31b-iq3
+      - batiai/gemma4-31b:iq3
+      - qwen3-vl-30b-a3b
     retention_days: 7
     media_enabled: true
     youtube_enabled: false
@@ -80,7 +81,8 @@ plans:
       - qwen3:32b
       - deepseek-r1:8b-llama-distill-q4_K_M
       - gpt-oss:20b
-      - gemma4:31b-iq3
+      - batiai/gemma4-31b:iq3
+      - qwen3-vl-30b-a3b
       - gpt-4o-mini
       - gemini-3.1-flash-lite
     retention_days: 30
