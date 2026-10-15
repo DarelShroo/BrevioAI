@@ -16,12 +16,12 @@ ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_API_KEY=$VITE_API_KEY
 
 RUN npm run build-only
-FROM nginx:alpine
+FROM node:22-alpine
 
-COPY --from=build /app/dist /usr/share/nginx/html
+RUN npm install -g serve
 
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY --from=build /app/dist /app/dist
 
-EXPOSE 80
+EXPOSE 3000
 
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["serve", "-s", "/app/dist", "-l", "3000"]
