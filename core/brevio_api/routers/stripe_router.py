@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from core.brevio_api.models.errors.api_codes import ApiErrorCode, CodedHTTPException
 from core.brevio_api.dependencies.user_dependency import get_current_user
 from core.brevio_api.dependencies.user_service_dependency import user_service_dependency
 from core.brevio_api.dependencies.stripe_service_dependency import get_stripe_service
@@ -74,7 +75,10 @@ async def stripe_webhook(
     sig_header = request.headers.get("stripe-signature")
     
     if not sig_header:
-        raise HTTPException(status_code=400, detail="Missing signature")
+        raise CodedHTTPException(
+            status_code=400,
+            code=ApiErrorCode.MISSING_SIGNATURE,
+        )
         
     try:
         await stripe_service.handle_webhook(payload, sig_header)
