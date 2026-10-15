@@ -1,0 +1,83 @@
+"""Spanish linguistic resources for AI pipeline cleaning, quality gates, and postprocessing."""
+
+from __future__ import annotations
+
+from core.brevio.constants.linguistic.base import LinguisticResource
+
+SPANISH_LINGUISTIC = LinguisticResource(
+    language_code="es",
+    pdf_default_title="Resumen",
+    help_phrases=(
+        "¿qué necesitas?",
+        "que necesitas?",
+        "qué necesitas?",
+        "cómo puedo ayudarte",
+        "como puedo ayudarte",
+        "en qué puedo ayudarte",
+        "en que puedo ayudarte",
+        "¿en qué puedo ayudarte?",
+        "estoy aquí para ayudarte",
+        "estoy aqui para ayudarte",
+        "opciones para ayudarte",
+        "especifica una",
+        "dime qué necesitas",
+        "dime que necesitas",
+        "gracias por compartir",
+        "basado en los fragmentos proporcionados",
+        "aquí tienes una síntesis estructurada de lo que podría estar buscando",
+        "¿quieres que continúe?",
+        "quieres que continue?",
+        "puedo continuar si lo deseas",
+        "¿qué deseas que haga?",
+        "aquí tienes el resumen",
+        "continuemos",
+        "¿procedo?",
+    ),
+    menu_headings=(
+        "opciones para ayudarte",
+        "menú de opciones",
+        "menu de opciones",
+        "cómo puedo ayudarte hoy",
+    ),
+    greeting_prefixes=(
+        "hola",
+        "buenos días",
+        "buenas tardes",
+        "saludos",
+    ),
+    continuation_phrases=(
+        "continuar...",
+        "continuemos",
+        "¿quieres que continúe?",
+        "puedo continuar",
+    ),
+    intro_heading_regex=r"(?i)^#+\s*(?:1\.\s*)?introducci[oó]n",
+    conclusion_heading_regex=r"(?i)^#+\s*(?:\d+\.\s*)?conclusi[oó]n",
+    final_points_replacement="Puntos Finales",
+    toc_markers=(
+        "tabla de contenido",
+        "tabla de contenidos",
+        "tabla de ejemplos",
+        "índice de contenido",
+        "indice de contenido",
+        "índice general",
+        "indice general",
+        "índice detallado",
+        "indice detallado",
+    ),
+    caption_markers=(
+        "figura",
+        "tabla",
+        "foto",
+        "imagen",
+        "ilustración",
+        "ilustracion",
+        "gráfico",
+        "grafico",
+    ),
+    truncated_markers=(
+        "[texto truncado]",
+        "[truncado]",
+        "...[cortado]",
+    ),
+)

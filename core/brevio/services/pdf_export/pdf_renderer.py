@@ -47,12 +47,26 @@ def _renderer_label() -> str:
         return RENDERER_NAME
 
 
-def build_html_document(inner_html: str, title: str = "Resumen") -> str:
+def build_html_document(
+    inner_html: str,
+    title: str | None = None,
+    lang: str = "en",
+) -> str:
     css = load_pdf_stylesheet()
-    safe_title = html.escape(title or "Resumen", quote=True)
+    resolved_title = title
+    if not resolved_title:
+        try:
+            from core.brevio.constants.linguistic import resolve_linguistic_resource
+
+            res = resolve_linguistic_resource(lang)
+            resolved_title = res.pdf_default_title
+        except Exception:
+            resolved_title = "Summary"
+    safe_title = html.escape(resolved_title, quote=True)
+    safe_lang = html.escape(lang.strip().lower() if lang else "en", quote=True)
     return (
         "<!DOCTYPE html>\n"
-        '<html lang="es">\n'
+        f'<html lang="{safe_lang}">\n'
         "<head>\n"
         '<meta charset="utf-8"/>\n'
         f"<title>{safe_title}</title>\n"
@@ -63,6 +77,7 @@ def build_html_document(inner_html: str, title: str = "Resumen") -> str:
         "</body>\n"
         "</html>\n"
     )
+
 
 
 def _validate_pdf(path: Path) -> int:
@@ -110,7 +125,8 @@ def render_markdown_to_pdf(
     *,
     base_url: str | None = None,
     document_id: str | None = None,
-    title: str = "Resumen",
+    title: str | None = None,
+    lang: str = "en",
     parsed: MarkdownRenderResult | None = None,
 ) -> PdfRenderResult:
     started = time.perf_counter()
@@ -129,7 +145,7 @@ def render_markdown_to_pdf(
         result = parsed or render_markdown_to_html(markdown)
         if not result.html.strip():
             raise PdfExportError("Markdown produced empty HTML")
-        document_html = build_html_document(result.html, title=title)
+        document_html = build_html_document(result.html, title=title, lang=lang)
         resolved_base = base_url
         if resolved_base:
             base_path = Path(resolved_base)
@@ -178,7 +194,8 @@ def export_markdown_file_to_pdf(
     pdf_path: str | Path | None = None,
     *,
     document_id: str | None = None,
-    title: str = "Resumen",
+    title: str | None = None,
+    lang: str = "en",
 ) -> str:
     source = Path(md_path)
     if source.name.endswith(PARTIAL_SUFFIX) or source.suffix == PARTIAL_SUFFIX:
@@ -195,5 +212,6 @@ def export_markdown_file_to_pdf(
         base_url=str(source.resolve().parent),
         document_id=document_id or source.parent.name,
         title=title,
+        lang=lang,
     )
     return result.pdf_path
