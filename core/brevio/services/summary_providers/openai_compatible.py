@@ -54,3 +54,9 @@ class OllamaSummaryProvider(OpenAICompatibleSummaryProvider):
     provider_id = "ollama"
     requires_api_key = False
     is_local = True
+
+
+class RunAISummaryProvider(OpenAICompatibleSummaryProvider):
+    provider_id = "runai"
+    requires_api_key = False
+    is_local = True

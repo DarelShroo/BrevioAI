@@ -13,7 +13,7 @@ class ModelType(str, Enum):
     CLAUDE_SONNET_5 = "claude-sonnet-5"
     CLAUDE_HAIKU_4_5 = "claude-haiku-4-5"
 
-    # Local Models
+    # Local Models (Ollama)
     QWEN3_8B = "qwen3:8b"
     QWEN3_14B_BASE = "qwen3:14b"
     QWEN3_14B = "qwen3:14b-q6"
@@ -21,3 +21,9 @@ class ModelType(str, Enum):
     DEEPSEEK_R1_LOCAL_IQ3_XS = "deepseek-r1-local:iq3-xs"
     GPT_OSS_20B = "gpt-oss:20b"
     GEMMA4_31B_IQ3 = "batiai/gemma4-31b:iq3"
+
+    # Local Models (RunAI — OpenAI-compatible endpoint)
+    # Qwen3-VL-30B-A3B: MoE vision-language, 30.5B total / 3B active.
+    # Context: 256K native; local runs capped at 32K (VRAM budget).
+    # Model ID matches the GGUF filename served by `runai serve`.
+    QWEN3_VL_30B_A3B = "qwen3-vl-30b-a3b"

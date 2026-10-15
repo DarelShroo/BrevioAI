@@ -17,6 +17,9 @@ DEFAULT_PROVIDER_BASE_URLS = {
     "xai": "https://api.x.ai/v1",
     "anthropic": "https://api.anthropic.com",
     "ollama": "http://host.docker.internal:11434/v1",
+    # RunAI serves an OpenAI-compatible API on port 11435.
+    # host.docker.internal resolves to the host from inside Docker containers.
+    "runai": "http://host.docker.internal:11435/v1",
 }
 
 _GOOGLE_NATIVE_MODELS_URL = (
@@ -253,6 +256,12 @@ class XAIAdapter(OpenAIAdapter):
     pass
 
 
+# RunAI exposes the same OpenAI-compatible API as Ollama.
+# No real API key is required; a dummy token is used to satisfy the SDK.
+class RunAIAdapter(OllamaAdapter):
+    pass
+
+
 class AnthropicAdapter(ProviderAdapter):
     async def validate_credential(self, api_key: str, base_url: str) -> bool:
         import httpx
@@ -302,6 +311,7 @@ class ProviderRegistry:
             "xai": XAIAdapter(),
             "anthropic": AnthropicAdapter(),
             "ollama": OllamaAdapter(),
+            "runai": RunAIAdapter(),
         }
 
     def get_adapter(self, provider: str) -> ProviderAdapter:

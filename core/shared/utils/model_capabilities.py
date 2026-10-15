@@ -504,6 +504,42 @@ MODEL_CAPABILITIES: Dict[ModelType, ModelCapabilities] = {
         supports_temperature=True,
         default_temperature=1.0,
     ),
+    # Qwen3-VL-30B-A3B — MoE vision-language model served via RunAI.
+    # Architecture: 30.5B total parameters, 3B active per token (sparse MoE).
+    # Native context: 256K; local runs capped at 32K (VRAM: weights + KV).
+    # Max output: 32K native; Brevio caps at 16K per the summary output policy.
+    # Tokenizer: Qwen family (same byte-pair as Qwen3 text-only series).
+    # Temperature: accepted; 0.7 is the Qwen3 series recommended default.
+    # Thinking/reasoning: NOT enabled — same empty-body failure as R1/Qwen3.
+    # Source: https://huggingface.co/Qwen/Qwen3-VL-30B-A3B
+    ModelType.QWEN3_VL_30B_A3B: ModelCapabilities(
+        model=ModelType.QWEN3_VL_30B_A3B,
+        provider="runai",
+        context_window=32_768,
+        native_max_output_tokens=32_768,
+        max_tokens_per_chunk=3_000,
+        reduce_batch_tokens=8_000,
+        chunk_overlap=250,
+        safe_percent=0.05,
+        tokenizer="qwen",
+        supports_json=True,
+        supports_mermaid=True,
+        supports_chunking=True,
+        reduce_input_token_budget=6_000,
+        reduce_safety_margin=512,
+        reduce_min_batch_tokens=250,
+        output_padding_tokens=500,
+        format_safety_margin=1_500,
+        min_tokens_for_postprocess=2_000,
+        global_map_safety_cap=4_000,
+        overhead=1_000,
+        min_chunk_tokens=80,
+        output_token_param="max_tokens",
+        supports_temperature=True,
+        default_temperature=0.7,
+        status="stable",
+        recommended=True,
+    ),
 }
 
 

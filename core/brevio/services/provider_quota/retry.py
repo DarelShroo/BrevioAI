@@ -37,8 +37,6 @@ class RetryCoordinator:
     def is_daily_quota_exhausted(cls, signals: Optional[RateLimitSignals]) -> bool:
         if signals is None:
             return False
-        if signals.wait_seconds is not None and signals.wait_seconds < 300:
-            return False
         blob = " ".join(
             str(part or "")
             for part in (
@@ -49,9 +47,13 @@ class RetryCoordinator:
             )
         ).lower()
         compact = blob.replace("-", "").replace("_", "").replace(" ", "")
-        return any(
+        if any(
             marker.replace("_", "") in compact for marker in cls._DAILY_QUOTA_MARKERS
-        )
+        ):
+            return True
+        if signals.wait_seconds is not None and signals.wait_seconds >= 3600:
+            return True
+        return False
 
     def should_retry(
         self, exc: BaseException, attempt: int, policy: QuotaPolicy

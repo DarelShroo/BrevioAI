@@ -9,6 +9,7 @@ from core.brevio.services.summary_providers.openai_compatible import (
     OllamaSummaryProvider,
     OpenAISummaryProvider,
     XAISummaryProvider,
+    RunAISummaryProvider,
 )
 from core.brevio.services.summary_providers.provider import SummaryProvider
 
@@ -22,6 +23,7 @@ class SummaryProviderRegistry:
             "xai": XAISummaryProvider(),
             "anthropic": AnthropicSummaryProvider(),
             "ollama": OllamaSummaryProvider(),
+            "runai": RunAISummaryProvider(),
         }
 
     def get(self, provider: str) -> SummaryProvider:

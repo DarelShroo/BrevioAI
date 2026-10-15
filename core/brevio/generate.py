@@ -198,7 +198,7 @@ class _ResultWriter:
             result,
             status=JobStatus.PROCESSING.value,
             phase=phase,
-            success=False,
+            success=None,
         )
 
 
@@ -552,7 +552,7 @@ class Generate:
                 download_location=destination_path,
                 status=JobStatus.PROCESSING.value,
                 phase=JobPhase.QUEUED.value,
-                success=False,
+                success=None,
             )
             writer = _ResultWriter(_create_data_result)
             logger.info(f"Processing document {index} at {destination_path}")

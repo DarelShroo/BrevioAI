@@ -570,7 +570,8 @@ async def test_section_assembly_does_not_run_ten_intermediate_rounds(summary_ser
         is_final = bool(kwargs.get("is_final_reduce"))
         flags.append(is_final)
         tag = "FINAL" if is_final else "INTERMEDIATE"
-        return f"{tag} {len(flags)}: {batch_text[:120]}", 80, "stop"
+        # Return enough tokens to avoid COLLAPSED during intermediate (batch_text itself is large enough)
+        return f"{tag} {len(flags)}: {batch_text[:4000]}", 300, "stop"
 
     with patch.object(
         summary_service, "_execute_reduce_call", side_effect=always_stop
@@ -723,3 +724,53 @@ async def test_chatbot_reduce_keeps_source_instead_of_help_menu(summary_service)
     assert "asyncpg" in result.text
     assert "¿Qué necesitas?" not in result.text
     assert result.finish_reason == "stop"
+
+@pytest.mark.asyncio
+async def test_reduce_collapse_is_rejected_and_recovers(summary_service, caplog):
+    """Test 6: intermediate REDUCE that collapses output below 50% target is rejected and split."""
+    chunks = [
+        "Detail block 1 with lots of information to preserve. " * 30,
+        "Detail block 2 with lots of information to preserve. " * 30,
+    ]
+    attempts = 0
+    call_finishes = []
+
+    async def mock_execute(
+        batch_text,
+        prompt,
+        model,
+        client,
+        target_max_tokens=None,
+        language=None,
+        *args,
+        **kwargs,
+    ):
+        nonlocal attempts
+        attempts += 1
+        # The input is ~500 tokens. r_comp=0.55. Target=275. 50% of target=137.
+        # If output is < 137, it is COLLAPSED.
+        if attempts == 1:
+            call_finishes.append("stop")
+            return "Collapsed summary.", 20, "stop" # 20 is < 137
+        call_finishes.append("stop")
+        return f"OK recovered summary part {attempts}.", 150, "stop"
+
+    with patch.object(
+        summary_service, "_execute_reduce_call", new=AsyncMock(side_effect=mock_execute)
+    ):
+        with caplog.at_level("INFO"):
+            result = await summary_service.run_reduce_phase(
+                mapped_summaries=chunks,
+                reduce_prompt="Synthesize.",
+                model=ModelType.DEEPSEEK_V4_PRO,
+                language=LanguageType.ENGLISH,
+                force_reduce=False,
+                assemble_sections=True,
+            )
+
+    assert isinstance(result, ReduceResult)
+    assert result.source_chunk_indices == [0, 1]
+    assert attempts >= 2
+    assert "status=COLLAPSED" in caplog.text
+    assert "recovery strategy=split" in caplog.text
+    assert "recovered summary" in result.text

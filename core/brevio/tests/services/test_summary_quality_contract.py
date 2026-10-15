@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -118,6 +118,45 @@ def test_short_clip_changelog_artifact_passes_capped_output_min():
     )
     assert decision.output_min_tokens <= 2200
     assert int(decision.output_min_tokens * 0.40) <= 1071
+    assert report.deliverable
+    assert not any(reason.startswith("below_output_min:") for reason in report.reasons)
+
+
+def test_very_concise_artifact_passes_quality_contract_and_does_not_fail_below_output_min():
+    """Regression test for Job 4 (below_output_min:280<895 on VERY_CONCISE with 18.6k tokens)."""
+    policy = AdaptiveSaliencePolicy()
+    decision = policy.budget(
+        ModelType.GEMINI_3_1_FLASH_LITE,
+        SummaryLevel.VERY_CONCISE,
+        18660,
+        LanguageType.ENGLISH,
+    )
+    body = (
+        "Relational database design follows conceptual, logical, and physical modeling. "
+        "Entities map to relations and tables, while attributes define columns and fields. "
+        "Cardinality constraints govern one-to-many and many-to-many relationship mappings. "
+        "Integrity constraints ensure foreign keys match primary keys across normalized schemas. "
+    ) * 6
+    body = body.strip()
+    words = count_words(body)
+    tokens = 280
+    report = evaluate_artifact(
+        body,
+        QualitySignals(
+            source_tokens=18660,
+            source_words=12500,
+            map_tokens=3500,
+            map_words=2100,
+            final_tokens=tokens,
+            final_words=words,
+            output_min_tokens=decision.output_min_tokens,
+            output_target_tokens=decision.output_target_tokens,
+            output_hard_limit=decision.output_hard_limit,
+            summary_level=SummaryLevel.VERY_CONCISE,
+            route="hierarchical",
+        ),
+    )
+    assert decision.output_min_tokens <= 600
     assert report.deliverable
     assert not any(reason.startswith("below_output_min:") for reason in report.reasons)
 
@@ -440,3 +479,68 @@ def test_asyncio_gold_topics_survive_valid_not_chatbot():
     valid_present, _ = match_topics(gold["important_topics"], VALID)
     assert len(valid_present) >= len(chatbot_present)
     assert len(valid_present) >= 3
+
+
+def test_warnings_do_not_contaminate_deliverable_artifact():
+    """Diagnostic warnings (pages_dropped, toc_drop_ratio) must not appear in user artifact."""
+    from core.brevio.services.summary_pipeline import SummaryArtifactManager
+    from core.brevio.services.summary_service import SummaryService
+    from core.shared.models.history_token_model import HistoryTokenModel
+    import tempfile, os
+
+    signals = _asyncio_signals(
+        pages_dropped=5,
+        pages_total=20,
+        toc_drop_ratio=0.45,
+    )
+    report = evaluate_artifact(VALID, signals)
+    assert report.deliverable
+    assert len(report.warnings) >= 2
+    assert any("pages_dropped" in w for w in report.warnings)
+    assert any("toc_drop_ratio" in w for w in report.warnings)
+
+    # Verify that SummaryService does not inject these warnings into the summary text
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        summary_path = os.path.join(tmp_dir, "summary.md")
+        artifacts = SummaryArtifactManager(summary_path)
+        service = SummaryService.__new__(SummaryService)
+        service.history_token_model = HistoryTokenModel()
+        service.directory_manager = MagicMock()
+        service.directory_manager.last_extraction_report = MagicMock(pages_dropped=5, pages_total=20)
+
+        # Candidate selection and gate enforcement
+        import asyncio
+        import tiktoken
+        encoder = tiktoken.encoding_for_model("gpt-4")
+        asyncio.run(artifacts.replace_partial(VALID))
+
+        decision = MagicMock(
+            output_min_tokens=100,
+            output_target_tokens=5000,
+            output_hard_limit=8000,
+            route="hierarchical",
+            requires_section_assembly=False,
+        )
+
+        with patch("core.brevio.services.summary_service.last_toc_strip_stats", return_value={"drop_ratio": 0.45}):
+            asyncio.run(
+                service._enforce_artifact_quality_gate(
+                    artifacts,
+                    encoder=encoder,
+                    file_tokens=signals.source_tokens,
+                    source_words=signals.source_words,
+                    map_words=signals.map_words,
+                    map_tokens=signals.map_tokens,
+                    map_salvage_text="",
+                    decision=decision,
+                    summary_level=signals.summary_level,
+                )
+            )
+
+        final_text = asyncio.run(artifacts.read_partial_text())
+        assert "Advertencias internas" not in final_text
+        assert "pages_dropped" not in final_text
+        assert "toc_drop_ratio" not in final_text
+        assert "[!WARNING]" not in final_text
+        assert service.history_token_model.quality_warnings == report.warnings
+

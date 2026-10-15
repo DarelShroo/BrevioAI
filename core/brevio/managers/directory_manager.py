@@ -153,7 +153,17 @@ class DirectoryManager:
             import tiktoken
 
             lector = pypdf.PdfReader(path)
+            if getattr(lector, "is_encrypted", False):
+                try:
+                    decrypted = lector.decrypt("")
+                    if not decrypted:
+                        raise ValueError("El archivo PDF está protegido con contraseña o encriptado.")
+                except Exception:
+                    raise ValueError("El archivo PDF está protegido con contraseña o encriptado.")
+
             total_paginas = len(lector.pages)
+            if total_paginas == 0:
+                raise ValueError("El archivo PDF está vacío o no contiene páginas.")
             logger.info(f"PDF tiene {total_paginas} páginas")
             encoder = tiktoken.encoding_for_model("gpt-4")
             report = ExtractionReport(
@@ -262,6 +272,13 @@ class DirectoryManager:
         if not fragments:
             raise ValueError("El PDF está vacío o no se pudo extraer texto")
 
+        has_substantive = any(
+            not (f.startswith("[página ") and "texto no extraíble" in f)
+            for f in fragments
+        )
+        if not has_substantive:
+            raise ValueError("El archivo PDF no contiene texto extraíble o procesable.")
+
         logger.info(
             f"PDF leído: {len(fragments)} fragmentos, Total caracteres: {sum(len(f) for f in fragments)} "
             f"(estimation vs generation: generation keeps pages_total="
@@ -277,7 +294,10 @@ class DirectoryManager:
             paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
             total_paragraphs = len(paragraphs)
             logger.info(f"DOCX tiene {total_paragraphs} párrafos")
-            return "\n".join(paragraphs)
+            text = "\n".join(paragraphs).strip()
+            if not text:
+                raise ValueError("El archivo DOCX está vacío o no contiene texto legible.")
+            return text
 
         return await asyncio.to_thread(blocking_read)
 

@@ -16,8 +16,9 @@ class ModelAccess(str, Enum):
     PAY_PER_USE = "pay_per_use"
 
 
-LOCAL_PROVIDERS = frozenset({"ollama"})
+LOCAL_PROVIDERS = frozenset({"ollama", "runai"})
 DEPRECATED_MODELS = frozenset()
+PUBLIC_MODEL_EXCLUSIONS = frozenset({ModelType.QWEN3_VL_30B_A3B})
 
 
 @dataclass(frozen=True)
@@ -92,7 +93,7 @@ def list_model_catalog() -> List[ModelCatalogEntry]:
     entries = [
         catalog_entry_for_model(model)
         for model in MODEL_CAPABILITIES
-        if model not in DEPRECATED_MODELS
+        if model not in DEPRECATED_MODELS and model not in PUBLIC_MODEL_EXCLUSIONS
     ]
     entries.sort(
         key=lambda entry: (
