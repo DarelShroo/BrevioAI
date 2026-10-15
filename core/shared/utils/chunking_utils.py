@@ -13,19 +13,9 @@ _NUMBERED_SECTION = re.compile(
     r"^((?:\d+\.)+\d*|\d+)\s+([A-ZÁÉÍÓÚÑÜ][^\n]{2,120})$",
     re.MULTILINE,
 )
-_TOC_INDEX_MARKERS = (
-    "tabla de contenido",
-    "tabla de contenidos",
-    "table of contents",
-    "tabla de ejemplos",
-    "table of examples",
-    "índice de contenido",
-    "indice de contenido",
-    "índice general",
-    "indice general",
-    "índice detallado",
-    "indice detallado",
-)
+from core.brevio.constants.linguistic import get_all_toc_markers
+
+_TOC_INDEX_MARKERS = get_all_toc_markers()
 _TOC_LEADER = re.compile(r"\.{4,}")
 _TOC_PAGE_LINE = re.compile(r".{8,}(?:\.{3,}|\s{2,})\d+\s*$")
 _TOC_TRAILING_PAGE = re.compile(r"\s{2,}\d{1,4}\s*$")

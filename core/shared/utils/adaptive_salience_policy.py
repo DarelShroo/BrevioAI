@@ -70,19 +70,19 @@ class MapOutputPolicy:
 
 MAP_POLICIES = {
     SummaryLevel.VERY_CONCISE: MapOutputPolicy(
-        max_output_to_input_ratio=0.40,
+        max_output_to_input_ratio=0.20,
     ),
     SummaryLevel.CONCISE: MapOutputPolicy(
-        max_output_to_input_ratio=0.50,
+        max_output_to_input_ratio=0.30,
     ),
     SummaryLevel.MODERATE: MapOutputPolicy(
-        max_output_to_input_ratio=0.70,
+        max_output_to_input_ratio=0.45,
     ),
     SummaryLevel.DETAILED: MapOutputPolicy(
-        max_output_to_input_ratio=1.00,
+        max_output_to_input_ratio=0.65,
     ),
     SummaryLevel.VERY_DETAILED: MapOutputPolicy(
-        max_output_to_input_ratio=1.50,
+        max_output_to_input_ratio=0.85,
     ),
 }
 
@@ -121,8 +121,9 @@ class AdaptiveSaliencePolicy:
         ratio_based_limit = math.ceil(
             chunk_input_tokens * policy.max_output_to_input_ratio
         )
+        effective_limit = max(2000, ratio_based_limit)
         return min(
-            ratio_based_limit,
+            effective_limit,
             summary_max_output_tokens(capabilities),
             capabilities.global_map_safety_cap,
         )
@@ -158,6 +159,13 @@ class AdaptiveSaliencePolicy:
         retention_floor = int(
             document_tokens * _LEVEL_MIN_RETENTION.get(summary_level, 0.28)
         )
+        # Concise modes must not scale retention floor unbounded on long documents
+        _LEVEL_MAX_RETENTION_FLOOR = {
+            SummaryLevel.VERY_CONCISE: 600,
+            SummaryLevel.CONCISE: 1000,
+        }
+        if summary_level in _LEVEL_MAX_RETENTION_FLOOR:
+            retention_floor = min(retention_floor, _LEVEL_MAX_RETENTION_FLOOR[summary_level])
         # Soft absolute floors so short/medium docs still keep usable coverage.
         absolute_floor = {
             SummaryLevel.VERY_CONCISE: 400,

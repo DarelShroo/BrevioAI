@@ -77,6 +77,7 @@ class HistoryTokenModel(BaseModel):
     chunk_id_representation: str = ""
     quality_verdict: str = ""
     salvage_source: str = ""
+    quality_warnings: list[str] = Field(default_factory=list)
     pages_total: int = 0
     pages_extracted: int = 0
     pages_empty: int = 0

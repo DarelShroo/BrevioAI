@@ -621,7 +621,7 @@ class SummaryService:
         Short garbage such as ``cut`` is not salvageable. A finished paragraph
         from a tiny leftover is: failing the job discards valid coverage.
         """
-        if reduce_status in {"EMPTY", "API_ERROR"}:
+        if reduce_status in {"EMPTY", "API_ERROR", "COLLAPSED"}:
             return None
         text = (reduced or "").strip()
         if not text:
@@ -1329,103 +1329,121 @@ class SummaryService:
             provider, scope = self._quota_scope_and_provider(model)
             input_tokens = system_tokens + user_tokens
 
-            async def _call():
-                self._record_api_request("MAP")
-                return await self._complete_chat(
-                    model,
-                    messages,
-                    max_tokens=chunk_max_tokens,
-                    temperature=self.temperature,
-                    extra=completion_extra_kwargs(model, max_tokens=chunk_max_tokens),
-                    timeout=self._completion_timeout_s(model, "MAP"),
-                    client=self.client,
-                )
-
-            response = await self.provider_executor.execute(
-                _call,
-                provider=provider,
-                model=model.value,
-                quota_scope_id=scope,
-                phase="MAP",
-                estimated_input_tokens=input_tokens,
-                chunk_id=str(index),
-            )
-            output_tokens = response.usage.completion_tokens if response.usage else 0
-
-            if not hasattr(response, "choices") or not response.choices:
-                logger.error(f"Invalid API response for chunk {index}")
-                return index, None, 0
-
-            finish_reason = (
-                response.choices[0].finish_reason
-                if response.choices[0].finish_reason
-                else "unknown"
-            )
-
-            content = response.choices[0].message.content
-            summary = (content or "").strip()
-
-            if finish_reason in ["length", "max_tokens"]:
-                usable = self._usable_map_extract(summary)
-                if usable is None:
-                    logger.warning(
-                        f"Truncation detected via finish_reason: {finish_reason}"
+            for attempt in range(3):
+                async def _call():
+                    self._record_api_request("MAP")
+                    return await self._complete_chat(
+                        model,
+                        messages,
+                        max_tokens=chunk_max_tokens,
+                        temperature=self.temperature,
+                        extra=completion_extra_kwargs(model, max_tokens=chunk_max_tokens),
+                        timeout=self._completion_timeout_s(model, "MAP"),
+                        client=self.client,
                     )
-                    raise ContextOverflowError(
-                        f"MAP chunk {index} truncated (finish_reason={finish_reason})"
-                    )
-                if usable != summary:
-                    logger.warning(
-                        "MAP chunk %s hit finish_reason=%s; trimmed to last complete unit",
-                        index,
-                        finish_reason,
-                    )
-                else:
-                    logger.info(
-                        "MAP chunk %s filled completion budget with a complete extract "
-                        "(finish_reason=%s)",
-                        index,
-                        finish_reason,
-                    )
-                summary = usable
 
-            budget_utilization = (
-                output_tokens / chunk_max_tokens if chunk_max_tokens > 0 else 0
-            )
-            execution_id = self.history_token_model.execution_id
-
-            duration = time.time() - start_time
-            logger.info(
-                f"METRIC: phase=MAP execution_id={execution_id} summary_level={summary_level.name} model={model.value} "
-                f"chunk_index={index} total_chunks={total_chunks} duration={duration:.2f}s "
-                f"input_tokens={system_tokens+user_tokens} requested_max_tokens={chunk_max_tokens} "
-                f"output_tokens={output_tokens} finish_reason={finish_reason} "
-                f"budget_utilization={budget_utilization:.2f} output_target_tokens={output_target_tokens}"
-            )
-
-            self.history_token_model.history_tokens_per_call.append(
-                HistoryTokenCall(
-                    type_call=TypeCall.SUMMARY,
-                    system_prompt_tokens=system_tokens,
-                    user_prompt_tokens=user_tokens,
-                    response_tokens=output_tokens,
-                    request_index=len(self.history_token_model.history_tokens_per_call)
-                    + 1,
-                    duration_seconds=round(duration, 3),
-                    finish_reason=finish_reason,
-                    requested_output_tokens=chunk_max_tokens,
-                    budget_utilization=round(budget_utilization, 4),
+                response = await self.provider_executor.execute(
+                    _call,
+                    provider=provider,
+                    model=model.value,
+                    quota_scope_id=scope,
+                    phase="MAP",
+                    estimated_input_tokens=input_tokens,
                     chunk_id=str(index),
                 )
-            )
-            self.history_token_model.total_tokens_summary_input += (
-                system_tokens + user_tokens
-            )
-            self.history_token_model.total_tokens_summary_output += output_tokens
+                output_tokens = response.usage.completion_tokens if response.usage else 0
 
-            if not summary:
-                logger.warning(f"Chunk {index} has no content in response")
-                return index, None, 0
+                if not hasattr(response, "choices") or not response.choices:
+                    logger.error(f"Invalid API response for chunk {index} (attempt {attempt})")
+                    if attempt < 2:
+                        continue
+                    return index, None, 0
+
+                finish_reason = (
+                    response.choices[0].finish_reason
+                    if response.choices[0].finish_reason
+                    else "unknown"
+                )
+
+                content = response.choices[0].message.content
+                summary = (content or "").strip()
+
+                if finish_reason in ["length", "max_tokens"]:
+                    usable = self._usable_map_extract(summary)
+                    if usable is None:
+                        logger.warning(
+                            f"Truncation detected via finish_reason: {finish_reason} on attempt {attempt}"
+                        )
+                        if attempt < 2:
+                            from core.shared.utils.model_capabilities import (
+                                get_model_capabilities,
+                                summary_max_output_tokens,
+                            )
+                            chunk_max_tokens = min(
+                                int(chunk_max_tokens * 1.5),
+                                summary_max_output_tokens(get_model_capabilities(model)),
+                            )
+                            continue
+                        raise ContextOverflowError(
+                            f"MAP chunk {index} truncated (finish_reason={finish_reason})"
+                        )
+                    if usable != summary:
+                        logger.warning(
+                            "MAP chunk %s hit finish_reason=%s; trimmed to last complete unit",
+                            index,
+                            finish_reason,
+                        )
+                    else:
+                        logger.info(
+                            "MAP chunk %s filled completion budget with a complete extract "
+                            "(finish_reason=%s)",
+                            index,
+                            finish_reason,
+                        )
+                    summary = usable
+
+                budget_utilization = (
+                    output_tokens / chunk_max_tokens if chunk_max_tokens > 0 else 0
+                )
+                execution_id = self.history_token_model.execution_id
+
+                duration = time.time() - start_time
+                logger.info(
+                    f"METRIC: phase=MAP execution_id={execution_id} summary_level={summary_level.name} model={model.value} "
+                    f"chunk_index={index} total_chunks={total_chunks} duration={duration:.2f}s "
+                    f"input_tokens={system_tokens+user_tokens} requested_max_tokens={chunk_max_tokens} "
+                    f"output_tokens={output_tokens} finish_reason={finish_reason} "
+                    f"budget_utilization={budget_utilization:.2f} output_target_tokens={output_target_tokens}"
+                )
+
+                self.history_token_model.history_tokens_per_call.append(
+                    HistoryTokenCall(
+                        type_call=TypeCall.SUMMARY,
+                        system_prompt_tokens=system_tokens,
+                        user_prompt_tokens=user_tokens,
+                        response_tokens=output_tokens,
+                        request_index=len(self.history_token_model.history_tokens_per_call)
+                        + 1,
+                        duration_seconds=round(duration, 3),
+                        finish_reason=finish_reason,
+                        requested_output_tokens=chunk_max_tokens,
+                        budget_utilization=round(budget_utilization, 4),
+                        chunk_id=str(index),
+                    )
+                )
+                self.history_token_model.total_tokens_summary_input += (
+                    system_tokens + user_tokens
+                )
+                self.history_token_model.total_tokens_summary_output += output_tokens
+
+                if not summary:
+                    logger.warning(f"Chunk {index} has no content in response on attempt {attempt}")
+                    if attempt < 2:
+                        continue
+                    return index, None, 0
+
+                break  # Success, exit the retry loop
+
             tokens_used = response.usage.total_tokens if response.usage else 0
 
             # Refund unused tokens from our original reservation
@@ -1948,6 +1966,12 @@ class SummaryService:
                 )
                 return batch_items, 0, "stop"
 
+            r_comp = (
+                float(section_keep)
+                if assemble_sections
+                else INTERMEDIATE_COMPRESSION_RATIO
+            )
+
             if is_final:
                 effective_final_target = final_target_max_tokens
                 if batch_input_tokens < final_target_max_tokens:
@@ -1970,15 +1994,10 @@ class SummaryService:
                 # 003 asyncio: 4 parallel finals requested ~7k and emitted ~5k each,
                 # so L2 still had 4 blocks and join-cap concatenated ~50k chars
                 # (fidelity 70→43). Cap each sibling so N outputs fit one pack.
-                if total_batches > 1:
+                if total_batches > 1 and not assemble_sections:
                     merge_cap = max(768, int(final_pack_limit / (total_batches + 1)))
                     instruction_target = min(instruction_target, merge_cap)
             else:
-                r_comp = (
-                    float(section_keep)
-                    if assemble_sections
-                    else INTERMEDIATE_COMPRESSION_RATIO
-                )
                 base_prompt_to_use = (
                     intermediate_reduce_prompt
                     if intermediate_reduce_prompt
@@ -2091,7 +2110,11 @@ class SummaryService:
                 f"03_REDUCE_L{level}", f"OUT_batch{batch_idx}_depth{_depth}", reduced
             )
 
-            actual_output_tokens = len(encoder.encode(reduced)) if reduced else 0
+            actual_output_tokens = (
+                tokens
+                if tokens > 0
+                else (len(encoder.encode(reduced)) if reduced else 0)
+            )
             logger.info(
                 "METRIC: phase=REDUCE level=%s batch_index=%s depth=%s "
                 "input_estimated_tokens=%s number_of_chunks=%s "
@@ -2114,6 +2137,16 @@ class SummaryService:
                 current_target_max_tokens > 0
                 and actual_output_tokens >= current_target_max_tokens
             )
+            if is_final:
+                target_floor = (
+                    min(40, int(current_target_max_tokens * 0.15))
+                    if current_target_max_tokens > 0
+                    else 40
+                )
+                is_collapsed = batch_input_tokens >= 400 and actual_output_tokens < target_floor
+            else:
+                is_collapsed = assemble_sections and actual_output_tokens < min(50, int(batch_input_tokens * r_comp * 0.5))
+
             if not reduced.strip():
                 reduce_status = "EMPTY"
             elif finish == "error":
@@ -2122,6 +2155,8 @@ class SummaryService:
                 reduce_status = "TRUNCATED"
             elif hit_api_cap and output_looks_cut:
                 reduce_status = "TRUNCATED"
+            elif is_collapsed:
+                reduce_status = "COLLAPSED"
             else:
                 reduce_status = "SUCCESS"
 
@@ -2205,10 +2240,10 @@ class SummaryService:
                 can_split_structurally = len(sub_texts) > 1
 
                 if not can_split_items and not can_split_structurally:
-                    if finish != "stop":
+                    if finish != "stop" or reduce_status == "COLLAPSED":
                         salvaged = self._salvage_unsplittable_reduce(
                             reduced, reduce_status
-                        )
+                        ) if finish != "stop" else None
                         if salvaged is not None:
                             logger.warning(
                                 "REDUCE salvage unsplittable complete output status=%s finish=%s "
@@ -2450,8 +2485,10 @@ class SummaryService:
                 final_finish_reason = finish
             current_chunks = next_chunks if next_chunks else current_chunks
             # 002 concatenated these leftovers: asyncio fidelity 70→47.
-            # Keep the section pass, then a real is_final REDUCE like 001.
-            needs_final_pass = True
+            # However, since the final summary target (e.g. 45k) is larger than the maximum
+            # output limit of a single call (e.g. 16k), running a final pass will forcibly
+            # truncate the output. Therefore, we bypass the final pass.
+            needs_final_pass = False
             logger.info(
                 "REDUCE section-assembly entering final synthesis chunks=%s",
                 len(current_chunks),
@@ -2962,40 +2999,50 @@ class SummaryService:
 
         blocks = []
         current_block = ""
+        current_tokens = 0
 
         for piece in pieces:
             if not piece:
                 continue
 
-            # Formamos el candidato uniendo el bloque actual y la nueva pieza
+            piece_tokens = len(encoder.encode(piece))
             candidate = current_block + piece
 
-            # Si el candidato excede max_tokens
-            if len(encoder.encode(candidate)) > max_tokens:
-                # Si ya teníamos algo acumulado, lo guardamos y empezamos de nuevo con 'piece'
-                if current_block:
-                    if len(encoder.encode(current_block)) > max_tokens:
-                        blocks.extend(
-                            self._split_markdown_structurally(
-                                current_block, max_tokens, encoder, depth + 1
+            if current_tokens + piece_tokens > max_tokens:
+                exact_tokens = len(encoder.encode(candidate))
+                if exact_tokens > max_tokens:
+                    if current_block:
+                        if current_tokens > max_tokens:
+                            blocks.extend(
+                                self._split_markdown_structurally(
+                                    current_block, max_tokens, encoder, depth + 1
+                                )
                             )
-                        )
+                        else:
+                            blocks.append(current_block)
+                        current_block = piece
+                        current_tokens = piece_tokens
                     else:
-                        blocks.append(current_block)
-                    current_block = piece
+                        current_block = piece
+                        current_tokens = piece_tokens
                 else:
-                    # Si no teníamos nada, significa que 'piece' por sí solo es > max_tokens
-                    current_block = piece
+                    current_block = candidate
+                    current_tokens = exact_tokens
             else:
                 current_block = candidate
+                current_tokens += piece_tokens
 
         if current_block:
-            if len(encoder.encode(current_block)) > max_tokens:
-                blocks.extend(
-                    self._split_markdown_structurally(
-                        current_block, max_tokens, encoder, depth + 1
+            if current_tokens > max_tokens:
+                exact_tokens = len(encoder.encode(current_block))
+                if exact_tokens > max_tokens:
+                    blocks.extend(
+                        self._split_markdown_structurally(
+                            current_block, max_tokens, encoder, depth + 1
+                        )
                     )
-                )
+                else:
+                    blocks.append(current_block)
             else:
                 blocks.append(current_block)
 
@@ -3307,9 +3354,15 @@ class SummaryService:
         if self._looks_incomplete_tail(stripped) or cut_mid_token:
             candidate = self._trim_to_last_complete_unit(stripped)
             if not candidate:
-                return None
+                lines = stripped.splitlines()
+                if len(lines) > 1:
+                    candidate = "\n".join(lines[:-1]).strip()
+                else:
+                    return None
         else:
             candidate = stripped
+        if candidate.count("```") % 2 != 0:
+            candidate = candidate + "\n```"
         if len(candidate.split()) < MIN_USABLE_MAP_WORDS:
             return None
         return candidate
@@ -3509,17 +3562,16 @@ class SummaryService:
                 ) as e:
                     # RetryCoordinator in ProviderCallExecutor already retried.
                     logger.error(
-                        f"Block {index} failed after executor retries: {e}. "
-                        f"Using RAW block."
+                        f"Block {index} failed after executor retries: {e}."
                     )
                     self.refund_tokens(need)
-                    return index, block, 0
+                    raise
                 except Exception as e:
                     logger.error(
-                        f"Block {index} unexpected error: {e}. Using RAW block."
+                        f"Block {index} unexpected error: {e}."
                     )
                     self.refund_tokens(need)
-                    return index, block, 0
+                    raise
 
                 if depth >= 6:
                     logger.error(
@@ -3565,10 +3617,8 @@ class SummaryService:
                 await cancel_pending_tasks(tasks)
                 raise res
             if isinstance(res, BaseException):
-                logger.error(f"Block {i} failed definitively: {res}. Using RAW block.")
-                formatted[i] = blocks[i]
-                raw_fallbacks += 1
-                continue
+                logger.error(f"Block {i} failed definitively: {res}")
+                raise res
             idx, content, toks = res
             formatted[idx] = content
             total_tokens += toks
@@ -3696,6 +3746,7 @@ class SummaryService:
         map_salvage_text: str,
         decision,
         summary_level: SummaryLevel,
+        pre_final_text: str = "",
     ) -> None:
         """Inspect the real .partial body before promoting it to summary.md."""
         disk_text = await artifacts.read_partial_text()
@@ -3721,11 +3772,18 @@ class SummaryService:
             pages_dropped=_safe_int(getattr(extraction, "pages_dropped", 0)),
             pages_total=_safe_int(getattr(extraction, "pages_total", 0)),
             toc_drop_ratio=float(toc_stats.get("drop_ratio") or 0.0),
+            section_assembly=getattr(decision, "requires_section_assembly", False),
         )
         candidates: list[tuple[str, str]] = [("proposed", disk_text)]
         if (
+            pre_final_text.strip()
+            and pre_final_text.strip() != (disk_text or "").strip()
+        ):
+            candidates.append(("pre_final", pre_final_text))
+        if (
             map_salvage_text.strip()
             and map_salvage_text.strip() != (disk_text or "").strip()
+            and map_salvage_text.strip() != pre_final_text.strip()
         ):
             candidates.append(("map_extracts", map_salvage_text))
         chosen, report = choose_deliverable_text(candidates, signals, encode=encode)
@@ -3754,6 +3812,9 @@ class SummaryService:
                 reasons=list(report.reasons),
                 quality_verdict=report.verdict.value,
             )
+        if report.warnings:
+            self.history_token_model.quality_warnings = list(report.warnings)
+            logger.warning("Artifact quality warnings: %s", report.warnings)
         if chosen.strip() != (disk_text or "").strip():
             logger.warning(
                 "Artifact quality gate salvaged from %s (proposed was not deliverable)",
@@ -3791,8 +3852,6 @@ class SummaryService:
             report.salvage_source or "none",
             compression_ratio,
         )
-        if report.warnings:
-            logger.warning("Artifact quality warnings: %s", report.warnings)
         if not report.salvage_source:
             last = getattr(self, "last_reduce_result", None)
             final_finish = (
@@ -3811,8 +3870,27 @@ class SummaryService:
         """Catch chatbot menus that replace the summary after a context-shift."""
         return quality_looks_like_assistant_chat(text)
 
-    def _sanitize_structure(self, text: str) -> str:
+    def _sanitize_structure(
+        self, text: str, target_language: LanguageType | str | None = None
+    ) -> str:
         import re
+        from core.brevio.constants.linguistic import resolve_linguistic_resource
+
+        lang = (
+            target_language
+            or getattr(self, "_current_target_language", None)
+            or getattr(self, "target_language", None)
+            or "es"
+        )
+        try:
+            res = resolve_linguistic_resource(lang)
+        except Exception:
+            try:
+                res = resolve_linguistic_resource("es")
+            except Exception:
+                from core.brevio.constants.linguistic.spanish import SPANISH_LINGUISTIC
+
+                res = SPANISH_LINGUISTIC
 
         lines = text.split("\n")
         sanitized_lines = []
@@ -3820,30 +3898,24 @@ class SummaryService:
         intro_seen = False
         conclusion_seen = False
 
-        # To fix numbering like "## 1.", "## 1."
-        # We will strip the numbers from level 2 headings if they are duplicated,
-        # or we could just remove the numbering and let it be "## Introducción"
-        # However, a simpler programmatic fix is to remove all repeated "## 1. " entirely
-        # or renumber them sequentially.
-
         h2_counter = 1
+        intro_re = re.compile(res.intro_heading_regex)
+        conclusion_re = re.compile(res.conclusion_heading_regex)
 
         for line in lines:
             # Handle Intros
-            if re.match(r"(?i)^#+\s*(?:1\.\s*)?introducci[oó]n", line):
+            if intro_re.match(line):
                 if intro_seen:
                     continue  # Skip duplicate intros
                 intro_seen = True
 
             # Handle Conclusions
-            if re.match(r"(?i)^#+\s*(?:\d+\.\s*)?conclusi[oó]n", line):
-                # We can't easily drop all but the last conclusion in a single pass without knowing it's the last,
-                # but if we see multiple conclusions, we can rename the earlier ones or skip them.
-                # A safer approach for conclusions is to just keep the first one we see,
-                # or rename subsequent ones to just "## Puntos Finales".
+            if conclusion_re.match(line):
                 if conclusion_seen:
-                    line = line.replace("Conclusión", "Puntos Finales").replace(
-                        "conclusión", "puntos finales"
+                    line = re.sub(
+                        r"(?i)\b(?:conclusi[oó]n|conclusion|fazit|schlussfolgerung|conclusione|conclus[ãa]o|заключение|вывод|结论|总结|結論|まとめ|결론|맺음말|خاتمة|الخاتمة|निष्कर्ष|उपसंहार)\b",
+                        res.final_points_replacement,
+                        line,
                     )
                 conclusion_seen = True
 
@@ -4162,6 +4234,23 @@ class SummaryService:
 
                 logger.debug(f"Text extracted, length: {len(full_text)} characters")
 
+                substantive_text = re.sub(r"\[página\s+\d+:[^\]]*\]", "", full_text).strip()
+                if not substantive_text or count_words(substantive_text) < 3:
+                    logger.error(
+                        f"Document {file_config.document_path} contains insufficient or no extractable text "
+                        f"(substantive_words={count_words(substantive_text)}, chars={len(substantive_text)})."
+                    )
+                    insufficient_err = ValueError(
+                        "El documento no contiene suficiente texto extraíble o procesable para generar un resumen."
+                    )
+                    state.fail(PipelinePhase.INITIALIZING, insufficient_err)
+                    return await self._document_result(
+                        success=False,
+                        state=state,
+                        artifacts=None,
+                        message="El documento no contiene suficiente texto extraíble o procesable para generar un resumen.",
+                    )
+
                 try:
                     logger.debug("Detecting document language")
                     text_sample = full_text[:2000] if full_text else ""
@@ -4327,6 +4416,7 @@ class SummaryService:
                     map_success_word_count = 0
                     map_salvage_text = ""
                     map_salvage_tokens = 0
+                    pre_final_reduce_text = ""
 
                     if decision.route == "direct":
                         # True single-pass: one LLM call on the full document.
@@ -4519,6 +4609,7 @@ class SummaryService:
                         await artifacts.replace_partial(reduced_summary)
                         state.set_phase(PipelinePhase.REDUCE_COMPLETED)
 
+                        pre_final_reduce_text = reduced_summary
                         if self._should_skip_formatting(reduced_summary, model):
                             logger.info(
                                 "FORMAT skipped (disabled by default or below threshold)"
@@ -4593,6 +4684,7 @@ class SummaryService:
                         map_salvage_text=map_salvage_text,
                         decision=decision,
                         summary_level=summary_level,
+                        pre_final_text=pre_final_reduce_text,
                     )
                     final_tokens = self.history_token_model.final_artifact_tokens
 
@@ -4604,7 +4696,9 @@ class SummaryService:
                         if partial_content:
                             processor = DiagramProcessor()
                             output_dir = os.path.dirname(file_config.summary_path)
-                            new_content, processed_diagrams = await processor.process(partial_content, output_dir)
+                            new_content, processed_diagrams = await processor.process(
+                                partial_content, output_dir, output_format="html"
+                            )
                             if any(d.success for d in processed_diagrams):
                                 await artifacts.replace_partial(new_content)
                                 logger.info(f"Updated summary with {sum(1 for d in processed_diagrams if d.success)} diagram image references.")

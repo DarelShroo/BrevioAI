@@ -53,39 +53,16 @@ _ABSOLUTE_MIN_WORDS = {
     SummaryLevel.VERY_DETAILED: 340,
 }
 
-_HELP_PHRASES = (
-    "¿qué necesitas?",
-    "que necesitas?",
-    "qué necesitas?",
-    "what do you need?",
-    "how can i help",
-    "cómo puedo ayudarte",
-    "como puedo ayudarte",
-    "en qué puedo ayudarte",
-    "en que puedo ayudarte",
-    "estoy aquí para ayudarte",
-    "estoy aqui para ayudarte",
-    "i'm here to help",
-    "i am here to help",
-    "opciones para ayudarte",
-    "please tell me which",
-    "especifica una",
-    "dime qué necesitas",
-    "dime que necesitas",
-    "¿en qué puedo ayudarte?",
-    "gracias por compartir",
-    "basado en los fragmentos proporcionados",
-    "aquí tienes una síntesis estructurada de lo que podría estar buscando",
-    "estoy aquí para ayudarte",
+from core.brevio.constants.linguistic import (
+    get_all_caption_markers,
+    get_all_chatbot_markers,
+    get_all_menu_headings,
+    get_all_truncated_markers,
+    resolve_linguistic_resource,
 )
 
-_MENU_HEADINGS = (
-    "opciones para ayudarte",
-    "options to help you",
-    "how can i assist",
-    "menú de opciones",
-    "option menu",
-)
+MAX_REQUIRED_SOURCE_WORDS = 5000
+MAX_REQUIRED_MAP_WORDS = 4000
 
 _CODE_EXT = re.compile(
     r"\.(py|js|ts|jsx|tsx|java|go|rs|c|h|cpp|hpp|rb|php|sh|md|txt|json|yml|yaml|toml)\s*$",
@@ -94,12 +71,28 @@ _CODE_EXT = re.compile(
 _CITATION_YEAR = re.compile(r"\((?:19|20)\d{2}\)")
 _PAGE_CITE = re.compile(r"\bp\.\s*\d+", re.IGNORECASE)
 _INITIAL_NAME = re.compile(r"^[A-ZÁÉÍÓÚÑ]\.\s+[A-ZÁÉÍÓÚÑ]")
-_CAPTION = re.compile(
-    r"(?i)^(ilustraci[oó]n|figure|figura|table|tabla|photo|image|imagen)\b"
-)
+
+
+def _build_caption_pattern() -> re.Pattern:
+    markers = "|".join(re.escape(m) for m in get_all_caption_markers())
+    return re.compile(rf"(?i)^({markers})\b")
+
+
+_CAPTION = _build_caption_pattern()
 _RUNNING_HEADER = re.compile(
     r"(?i)^(aula mentor|isbn\b|www\.|http|\d+\s+mario bunge)\b"
 )
+_PLACEHOLDER_NO_CONTENT = re.compile(
+    r"(?i)\b("
+    r"no hay contenido|no contiene texto|no contiene información|no se puede resumir|"
+    r"no es posible resumir|no hay suficiente información|el documento está vacío|"
+    r"documento vacío|sin contenido|no se encontró texto|no hay texto extraíble|"
+    r"resumen muy breve|"
+    r"no content available|there is no content|no text found|cannot be summarized|"
+    r"insufficient content|insufficient text|document appears to be empty|empty document"
+    r")\b"
+)
+
 
 
 def count_words(text: str) -> int:
@@ -124,46 +117,62 @@ def approximate_tokens(text: str, encode: Optional[EncodeFn] = None) -> int:
     return max(0, len(text or "") // 4)
 
 
-def assistant_chat_score(text: str) -> float:
+def assistant_chat_score(text: str, target_language: Any = None) -> float:
     """Structural score in [0, 1]. High means help-desk / menu, not a summary."""
     if not text or not text.strip():
         return 0.0
     sample = text.lower()
     score = 0.0
-    phrase_hits = sum(1 for marker in _HELP_PHRASES if marker in sample)
+
+    if target_language is not None:
+        try:
+            res = resolve_linguistic_resource(target_language)
+            help_phrases = res.help_phrases
+            menu_headings = res.menu_headings
+            greetings = res.greeting_prefixes
+        except Exception:
+            help_phrases = get_all_chatbot_markers()
+            menu_headings = get_all_menu_headings()
+            greetings = ("hi", "hello", "hey", "hola", "bonjour", "hallo")
+    else:
+        help_phrases = get_all_chatbot_markers()
+        menu_headings = get_all_menu_headings()
+        greetings = ("hi", "hello", "hey", "hola", "bonjour", "hallo")
+
+    phrase_hits = sum(1 for marker in help_phrases if marker in sample)
     if phrase_hits:
         score += min(0.55, 0.22 * phrase_hits)
-    if any(heading in sample for heading in _MENU_HEADINGS):
+    if any(heading in sample for heading in menu_headings):
         score += 0.25
     questions = sample.count("?")
     words = max(1, count_words(text))
     if questions >= 3 and words < 800:
         score += 0.15
     if questions >= 2 and re.search(
-        r"(?i)(opción|option|elige|choose|especifica|tell me which)", sample
+        r"(?i)(opción|option|opt|choix|wahl|scelta|escolha|выбор|选择|選択|선택|विकल्प|خيارات)", sample
     ):
         score += 0.2
     numbered_options = len(re.findall(r"(?m)^\s*(?:\d+[\.\)]\s+|\*\*\d+\.)", text))
     if numbered_options >= 3 and words < 600:
         score += 0.2
-    if re.search(
-        r"(?i)\b(estoy aqu[ií] para|i can help you|what do you need)\b", sample
-    ):
+    if any(marker in sample for marker in help_phrases if len(marker) > 10):
         score += 0.15
-    if re.search(r"(?i)^(hi|hola|hello|hey)\b", sample.strip()[:40]):
+    greeting_pattern = r"(?i)^(" + "|".join(re.escape(g) for g in greetings) + r")\b"
+    if re.search(greeting_pattern, sample.strip()[:40]):
         score += 0.1
     return min(1.0, score)
 
 
-def looks_like_assistant_chat(text: str) -> bool:
-    return assistant_chat_score(text) >= 0.35
+def looks_like_assistant_chat(text: str, target_language: Any = None) -> bool:
+    return assistant_chat_score(text, target_language=target_language) >= 0.35
 
 
-def looks_truncated(text: str) -> bool:
+def looks_truncated(text: str, target_language: Any = None) -> bool:
     stripped = (text or "").rstrip()
     if not stripped:
         return True
-    if stripped.endswith(("[texto truncado]", "[truncated]", "...[cut]")):
+    truncated_markers = get_all_truncated_markers()
+    if stripped.endswith(truncated_markers):
         return True
     last = next(
         (line.strip() for line in reversed(stripped.splitlines()) if line.strip()), ""
@@ -230,6 +239,7 @@ class QualitySignals:
     pages_dropped: int = 0
     pages_total: int = 0
     toc_drop_ratio: float = 0.0
+    section_assembly: bool = False
 
 
 @dataclass
@@ -293,6 +303,9 @@ def evaluate_artifact(
 
     if not body.strip():
         reasons.append("empty_artifact")
+    elif _PLACEHOLDER_NO_CONTENT.search(body) and words < 120:
+        reasons.append("placeholder_no_content")
+
     if chatbot >= 0.35:
         reasons.append("assistant_chat")
     if truncated and words < max(_ABSOLUTE_MIN_WORDS[level] * 3, 400):
@@ -306,19 +319,25 @@ def evaluate_artifact(
 
         if map_words >= 400 and signals.route != "direct":
             floor = _MAP_KEEP_FLOOR[level]
-            if map_ratio < floor:
-                reasons.append(f"map_collapse:{map_ratio:.3f}<{floor}")
+            required_words = min(map_words * floor, MAX_REQUIRED_MAP_WORDS)
+            if words < required_words:
+                reasons.append(f"map_collapse:{words}<{int(required_words)}")
         if source_words >= 1500:
             floor = _SOURCE_KEEP_FLOOR[level]
-            if source_ratio < floor:
-                reasons.append(f"source_collapse:{source_ratio:.3f}<{floor}")
+            required_words = min(source_words * floor, MAX_REQUIRED_SOURCE_WORDS)
+            if words < required_words:
+                reasons.append(f"source_collapse:{words}<{int(required_words)}")
         if min_tokens >= 400:
-            cap = _safe_int(signals.output_hard_limit) or min_tokens
+            if getattr(signals, "section_assembly", False):
+                cap = max(_safe_int(signals.output_target_tokens), min_tokens)
+            else:
+                cap = _safe_int(signals.output_hard_limit) or min_tokens
             enforce_min = min(min_tokens, cap)
             if tokens < int(enforce_min * _OUTPUT_MIN_FRACTION):
-                reasons.append(
-                    f"below_output_min:{tokens}<{int(enforce_min * _OUTPUT_MIN_FRACTION)}"
-                )
+                if words < _ABSOLUTE_MIN_WORDS[level]:
+                    reasons.append(
+                        f"below_output_min:{tokens}<{int(enforce_min * _OUTPUT_MIN_FRACTION)}"
+                    )
 
     if signals.pages_total and signals.pages_dropped:
         dropped_ratio = signals.pages_dropped / max(1, signals.pages_total)
