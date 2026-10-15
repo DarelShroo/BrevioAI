@@ -186,6 +186,16 @@ MODEL_PRICING_REGISTRY: Dict[ModelType, PricingSnapshot] = {
         currency="USD",
         **_commercial_fields(),
     ),
+    # Qwen3-VL-30B-A3B via RunAI: local inference, no API billing.
+    ModelType.QWEN3_VL_30B_A3B: PricingSnapshot(
+        provider="runai",
+        model=ModelType.QWEN3_VL_30B_A3B.value,
+        input_price_per_million=0.0,
+        output_price_per_million=0.0,
+        cached_input_price_per_million=0.0,
+        currency="USD",
+        **_commercial_fields(minimum_credits=1),
+    ),
 }
 
 

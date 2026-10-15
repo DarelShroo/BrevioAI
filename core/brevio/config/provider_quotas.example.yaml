@@ -183,3 +183,29 @@ policies:
     backoff_base_seconds: 1.0
     backoff_max_seconds: 60.0
     jitter_ratio: 0.25
+  # Local RunAI 30B MoE saturates a single GPU. Long lease: generation is slow.
+  - provider: runai
+    model: qwen3-vl-30b-a3b
+    max_in_flight: 1
+    lease_ttl_ms: 600000
+    acquire_timeout_ms: 600000
+    cooldown_on_429_seconds: 10
+    rate_limit_safety_margin: 0.0
+    degraded_max_in_flight: 1
+    allow_map_original_text_fallback: false
+    max_attempts: 3
+    backoff_base_seconds: 2.0
+    backoff_max_seconds: 60.0
+    jitter_ratio: 0.25
+  - provider: runai
+    model: "*"
+    max_in_flight: 1
+    lease_ttl_ms: 300000
+    acquire_timeout_ms: 300000
+    cooldown_on_429_seconds: 5
+    rate_limit_safety_margin: 0.0
+    degraded_max_in_flight: 1
+    max_attempts: 3
+    backoff_base_seconds: 1.0
+    backoff_max_seconds: 60.0
+    jitter_ratio: 0.25
