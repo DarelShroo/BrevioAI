@@ -185,9 +185,10 @@ async def provider_error_exception_handler(
         status_code = 401
         message = "Esta solicitud requiere una credencial de API en tu perfil o créditos de pago por uso."
     elif exc.kind == ProviderErrorKind.PLATFORM_CREDENTIAL_UNAVAILABLE:
-        status_code = 503
+        status_code = 400
         message = (
-            "El servicio no está disponible temporalmente para procesar esta solicitud."
+            "La aplicación no dispone de credenciales configuradas para este proveedor. "
+            "Por favor, configure su propia API Key en su perfil para utilizarlo."
         )
     elif exc.kind == ProviderErrorKind.CREDENTIAL_UNAVAILABLE:
         status_code = 400
@@ -215,7 +216,10 @@ async def provider_error_exception_handler(
         message = "Límite de peticiones alcanzado. Inténtelo más tarde."
     elif exc.kind == ProviderErrorKind.PROVIDER_ERROR:
         status_code = 502
-        message = "Error de comunicación con el proveedor del servicio."
+        message = (
+            getattr(exc, "message", None)
+            or "Error de comunicación con el proveedor del servicio."
+        )
     else:
         status_code = 500
         message = "Error en la gestión de credenciales."

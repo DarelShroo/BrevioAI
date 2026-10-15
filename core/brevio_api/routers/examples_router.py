@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import FileResponse, PlainTextResponse
 
 from core.brevio.constants.constants import Constants
+from core.brevio_api.models.errors.api_codes import ApiErrorCode, CodedHTTPException
 
 SAFE_ID = re.compile(r"^[a-fA-F0-9]{24}$")
 
@@ -51,7 +52,10 @@ def _load_manifest() -> dict[str, Any]:
 def _find_entry(slug_or_id: str) -> dict[str, Any]:
     key = (slug_or_id or "").strip()
     if not key:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Example not found")
+        raise CodedHTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code=ApiErrorCode.EXAMPLE_NOT_FOUND,
+        )
 
     manifest = _load_manifest()
     for entry in manifest["entries"]:
@@ -64,13 +68,19 @@ def _find_entry(slug_or_id: str) -> dict[str, Any]:
     if re.fullmatch(r"[a-fA-F0-9]{6}", key):
         return _find_entry(f"summary_{key}")
 
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Example not found")
+    raise CodedHTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        code=ApiErrorCode.EXAMPLE_NOT_FOUND,
+    )
 
 
 def _entry_dir(entry: dict[str, Any]) -> Path:
     entry_id = str(entry.get("id") or "")
     if not SAFE_ID.match(entry_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Example not found")
+        raise CodedHTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code=ApiErrorCode.EXAMPLE_NOT_FOUND,
+        )
     return _ensure_under_example(example_root() / entry_id / "0")
 
 
@@ -144,10 +154,16 @@ async def get_example_summary(slug_or_id: str) -> PlainTextResponse:
     entry = _find_entry(slug_or_id)
     summary_name = str(entry.get("summary_file") or "summary.md")
     if "/" in summary_name or "\\" in summary_name or summary_name.startswith("."):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Example not found")
+        raise CodedHTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code=ApiErrorCode.EXAMPLE_NOT_FOUND,
+        )
     path = _ensure_under_example(_entry_dir(entry) / summary_name)
     if not path.is_file():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Summary not found")
+        raise CodedHTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code=ApiErrorCode.SUMMARY_NOT_FOUND,
+        )
     return PlainTextResponse(path.read_text(encoding="utf-8"), media_type="text/markdown; charset=utf-8")
 
 
@@ -156,12 +172,21 @@ async def get_example_pdf(slug_or_id: str) -> FileResponse:
     entry = _find_entry(slug_or_id)
     pdf_name = str(entry.get("pdf_file") or entry.get("document_name") or "")
     if not pdf_name or "/" in pdf_name or "\\" in pdf_name or pdf_name.startswith("."):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="PDF not found")
+        raise CodedHTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code=ApiErrorCode.PDF_NOT_FOUND,
+        )
     if not pdf_name.lower().endswith(".pdf"):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="PDF not found")
+        raise CodedHTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code=ApiErrorCode.PDF_NOT_FOUND,
+        )
     path = _ensure_under_example(_entry_dir(entry) / pdf_name)
     if not path.is_file():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="PDF not found")
+        raise CodedHTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code=ApiErrorCode.PDF_NOT_FOUND,
+        )
     return FileResponse(
         path,
         media_type="application/pdf",
